@@ -22,7 +22,7 @@
 - [x] 3.3 Activate a valid loaded world pack atomically through the existing picker/drop/paste workflow and display its world name; add browser tests proving invalid files leave the current board and pack untouched and valid files replace them under the local-file-compatible path.
 - [x] 3.4 Allow direct selection of every validated level in a loaded world pack by display name while retaining return-to-Prologue behavior; add browser tests selecting an uncleared later level and returning to the Prologue.
 - [x] 3.5 Namespace stored level identity by stable world ID and migrate existing Prologue progress without losing best scores or completions; add store tests for two packs sharing `level_1` and for migration.
-- [ ] 3.6 Document the canonical per-world YAML shape, top-first grid convention, `world_id`, `num_level`, level naming, IDs, and `file://` loading limitations; verify the documented sample parses and validates.
+- [x] 3.6 Document the canonical per-world YAML shape, top-first grid convention, `world_id`, `num_level`, level naming, IDs, and `file://` loading limitations; verify the documented sample parses and validates.
 
 ## 4. World 1 levels 1–4
 

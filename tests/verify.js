@@ -18,7 +18,8 @@ const FILES = [
   'src/js/tiles.js',
   'src/js/levels.default.js',
   'src/js/levels.js',
-  'src/js/sm-rules.js'
+  'src/js/sm-rules.js',
+  'src/js/sm-store.js'
 ];
 
 for (const f of FILES) {
@@ -865,6 +866,12 @@ function checkLevels() {
   }, { solve: false });
   ok(malformedIdentity.problems.some(p => /world_id.*lowercase slug/i.test(p.message)),
     'PACK  malformed world identity is rejected');
+  const reservedIdentity = SM.LEVELS.validate({
+    name: 'Reserved identity', world_id: 'prologue', num_level: 1,
+    levels: { level_1: smallLevel }
+  }, { solve: false });
+  ok(reservedIdentity.problems.some(p => /reserved for the built-in Prologue/.test(p.message)),
+    'PACK  external packs cannot collide with the built-in Prologue identity');
 
   const wrongCount = SM.LEVELS.validate({
     name: 'Count mismatch', world_id: 'count-mismatch', num_level: 2,
@@ -913,6 +920,18 @@ function checkLevels() {
   ok(dimensionMismatch.problems.some(p => /width is declared as 2 but the rows are 3/.test(p.message)),
     'PACK  declared dimensions must match grid dimensions');
 
+  const packGuide = fs.readFileSync(path.join(ROOT, 'docs/world-level-packs.md'), 'utf8');
+  const sampleMatch = packGuide.match(/```yaml\n([\s\S]*?)```/);
+  ok(!!sampleMatch, 'PACK DOC  authoring guide contains a YAML sample');
+  if (sampleMatch) {
+    const sample = SM.LEVELS.load(sampleMatch[1], { solve: true });
+    ok(sample.ok, 'PACK DOC  documented sample parses and validates through the game loader',
+      sample.problems.map(p => p.message).join(' | '));
+    eq(sample.levels[0].worldId, 'sample-world', 'PACK DOC  sample stable identity is retained');
+    eq(sample.levels[0].solve.optimal, sample.levels[0].par,
+      'PACK DOC  sample par matches its solver-proven optimum');
+  }
+
   const unsupportedColour = {
     name: 'unsupported color', world_id: 'unsupported-color', num_level: 1,
     levels: { level_1: { name: 'test', width: 3, height: 1, golf_score: 1,
@@ -948,6 +967,51 @@ function checkLevels() {
   return res;
 }
 
+function checkStore() {
+  const store = SM.STORE;
+  store.reset();
+  store.complete('level_1', null, 8, 12, 'world-alpha');
+  store.noteTiles('level_1', [1, 70], 'world-alpha');
+  store.setLastLevel('level_1', 'world-alpha');
+  store.complete('level_1', null, 5, 9, 'world-beta');
+  store.noteTiles('level_1', [1, 23], 'world-beta');
+  store.setLastLevel('level_2', 'world-beta');
+  eq(store.entry('level_1', 'world-alpha').best.strokes, 8,
+    'STORE  same level key keeps independent best score in world alpha');
+  eq(store.entry('level_1', 'world-beta').best.strokes, 5,
+    'STORE  same level key keeps independent best score in world beta');
+  eq(store.entry('level_1', 'world-alpha').seenTiles, [1, 70],
+    'STORE  seen tiles stay scoped to world alpha');
+  eq(store.entry('level_1', 'world-beta').seenTiles, [1, 23],
+    'STORE  seen tiles stay scoped to world beta');
+  eq(store.entry('level_1', 'world-alpha').cleared, true,
+    'STORE  completion is kept for world alpha');
+  eq(store.entry('level_1', 'world-beta').cleared, true,
+    'STORE  completion is kept for world beta');
+  eq(store.lastLevel('world-alpha'), 'level_1',
+    'STORE  last selection for world alpha is retained independently');
+  eq(store.lastLevel('world-beta'), 'level_2',
+    'STORE  last selection for world beta does not overwrite alpha');
+
+  store.importText(JSON.stringify({
+    schema: 1,
+    levels: { level_1: { unlocked: true, cleared: true,
+      best: { strokes: 7, turns: 11 }, seenTiles: [1, 70] } },
+    lastLevel: 'level_1'
+  }));
+  eq(store.all().schema, 2, 'STORE  legacy progress migrates to the namespaced schema');
+  eq(store.entry('level_1', 'prologue').cleared, true,
+    'STORE  Prologue completion survives migration');
+  eq(store.entry('level_1', 'prologue').best, { strokes: 7, turns: 11 },
+    'STORE  Prologue best score survives migration');
+  eq(store.entry('level_1', 'prologue').seenTiles, [1, 70],
+    'STORE  Prologue codex progress survives migration');
+  eq(store.lastLevel('prologue'), 'level_1',
+    'STORE  legacy last-level selection migrates to Prologue identity');
+  eq(store.entry('level_1', 'world-alpha').cleared, undefined,
+    'STORE  migrated Prologue state does not collide with world packs');
+}
+
 /* ---------------------------------------------------------------------- */
 
 console.log('--- Streuph\'s Maze: verification ---');
@@ -955,6 +1019,7 @@ checkTileRegistry();
 checkYaml();
 checkRules();
 const res = checkLevels();
+checkStore();
 try { checkRulesPurity(); }
 catch (e) { ok(false, 'A2  purity check ran', e.message); }
 

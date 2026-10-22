@@ -30,6 +30,9 @@ starting entities over ordinary floor; when pushed away, their source cells
 remain walkable floor. To put a crate on a target, author the crate and target
 in separate cells and push the crate onto the target during play.
 
+See [the world-pack authoring guide](docs/world-level-packs.md) for the
+canonical YAML shape, grid orientation, tile IDs, and local-file loading rules.
+
 ## Verify
 
 ```sh

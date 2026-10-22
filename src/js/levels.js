@@ -122,6 +122,9 @@
     } else if (typeof doc.world_id !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(doc.world_id)) {
       problems.push(diag('(document)', 1,
         '"world_id" is required for world packs and must be a lowercase slug (letters, digits, hyphens)'));
+    } else if (doc.world_id === 'prologue') {
+      problems.push(diag('(document)', 1,
+        '"prologue" is reserved for the built-in Prologue; choose a different stable world_id'));
     } else {
       worldId = doc.world_id;
     }
