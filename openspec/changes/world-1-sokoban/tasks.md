@@ -18,7 +18,7 @@
 ## 3. World-pack loading, selection, and progress
 
 - [x] 3.1 Extend pack validation to accept and validate stable `world_id` metadata while retaining the existing Prologue document shape; add tests for missing identity, duplicate/invalid level keys, count mismatch, grid bounds, and dimension mismatch.
-- [ ] 3.2 Improve pack validation diagnostics to include world, level, tile ID/coordinate, and actionable messages while preserving parser syntax line/column data; add malformed and semantic-error tests that assert useful locations/context.
+- [x] 3.2 Improve pack validation diagnostics to include world, level, tile ID/coordinate, and actionable messages while preserving parser syntax line/column data; add malformed and semantic-error tests that assert useful locations/context.
 - [ ] 3.3 Activate a valid loaded world pack atomically through the existing picker/drop/paste workflow and display its world name; add browser tests proving invalid files leave the current board and pack untouched and valid files replace them under the local-file-compatible path.
 - [ ] 3.4 Allow direct selection of every validated level in a loaded world pack by display name while retaining return-to-Prologue behavior; add browser tests selecting an uncleared later level and returning to the Prologue.
 - [ ] 3.5 Namespace stored level identity by stable world ID and migrate existing Prologue progress without losing best scores or completions; add store tests for two packs sharing `level_1` and for migration.
