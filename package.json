@@ -1,0 +1,17 @@
+{
+  "name": "streuphs-maze",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first, configurable JavaScript puzzle game",
+  "author": "Julien Fistre <julien.fistre@gmail.com> (https://github.com/Streuphy)",
+  "homepage": "https://github.com/Streuphy",
+  "scripts": {
+    "test": "node tests/verify.js && node tests/browser-test.js",
+    "test:rules": "node tests/verify.js",
+    "test:browser": "node tests/browser-test.js",
+    "levels:emit": "node scripts/emit-levels-yaml.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3"
+  }
+}

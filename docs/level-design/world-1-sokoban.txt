@@ -1,0 +1,95 @@
+📦 World 1: Sokoban (Sokoban-Style Lock & Exit)
+In traditional Sokoban, the primary mechanics revolve around maneuvering heavy crates across restricted pathways. In Streuph's Maze, the Sokoban paradigm is adapted into an Escape / Way-Clearing Puzzle:
+	•	The player's goal is always to reach the Exit ($).
+	•	Crates (C) and Walls (#) block access to key corridors or the exit.
+	•	Target Receptors (T) act as pressure-plate locks. Placing a Crate onto a Target Receptor unlocks/drops the corresponding Gate (X), clearing the path to the Exit.
+📐 Level Design Principles for World 1
+	1.	Space Management & Unilateral Moves: Crates can only be pushed, never pulled. Pushing a crate into a corner or against a wall without a pathway creates a permanent deadlock (softlock).
+	2.	Clearance Sequence: Solving a level requires clearing pathways in a specific order: first clearing room to maneuver crates, then aligning crates with target receptors to unseal exit gates.
+	3.	Escalating Scale: Expanded grid dimensions (up to 16 \times 9) allow for room dividers, choke points, and complex spatial puzzles.
+🗺️ LLM-Optimized Level Registry: World 1 (Sokoban Paradigm)
+# =====================================================================
+# STREUPH'S MAZE: WORLD 1 - SOKOBAN (WAY-CLEARING PARADIGM)
+# =====================================================================
+# SCHEMA VERSION: 4.1-SOKOBAN-REVISED
+# GRID CONVENTION: Row 1 = Bottom, Row N = Top. A = Col 1.
+# LEGEND:
+#   # = Wall (3)
+#   . = Floor / Path (0)
+#   @ = Start (1)
+#   $ = Exit (2)
+#   C = Movable Crate (4)
+#   T = Target / Receptor Plate (30)
+#   X = Locked Gate (Drops when T has Crate C) (8)
+# =====================================================================
+
+WORLD_1_SOKOBAN:
+  desc: "Clear the way to the Exit by placing Crates on Target Plates to drop Locked Gates."
+  levels:
+    # -----------------------------------------------------------------
+    # LEVEL 1: TUTORIAL (The Single Gate Unlocking)
+    # Grid: 8x6 | Golf Score: 6 moves
+    # Concept: Push Crate C onto Target T to open Gate X blocking Exit $.
+    # -----------------------------------------------------------------
+    - [L1, 8x6, G6]: |
+        ########
+        #$X..#.#
+        ####.#.#
+        #....C.T
+        #@...#.#
+        ########
+
+    # -----------------------------------------------------------------
+    # LEVEL 2: TUTORIAL EXTENDED (Corner Trapping & Two Gates)
+    # Grid: 10x7 | Golf Score: 14 moves
+    # Concept: Introduce two crates and two target plates. Moving a crate
+    #          into an outer corner prevents it from reaching its target.
+    # -----------------------------------------------------------------
+    - [L2, 10x7, G14]: |
+        ##########
+        #$X...#..#
+        #####.#.T#
+        #...X...T#
+        #..C..C..#
+        #@.......#
+        ##########
+
+    # -----------------------------------------------------------------
+    # LEVEL 3: INTERMEDIATE (Order of Execution & Choke Points)
+    # Grid: 12x8 | Golf Score: 24 moves
+    # Concept: Crates block each other in narrow aisles. The player must
+    #          push Crate 1 into a side alcove before pushing Crate 2 to
+    #          its target receptor, avoiding deadlocks.
+    # -----------------------------------------------------------------
+    - [L3, 12x8, G24]: |
+        ############
+        #$X........#
+        ######.###.#
+        #..T...#...#
+        #..#...C.T.#
+        #..#.C.#.X.#
+        #@...#...#.#
+        ############
+
+    # -----------------------------------------------------------------
+    # LEVEL 4: INTERMEDIATE ADVANCED (The Great Storage Depot)
+    # Grid: 16x9 | Golf Score: 38 moves
+    # Concept: A large 16x9 multi-chamber warehouse. Requires precise 4-crate
+    #          shaffling across a central hallway to lower 3 sequential gates
+    #          guarding the final Exit path.
+    # -----------------------------------------------------------------
+    - [L4, 16x9, G38]: |
+        ################
+        #$X............#
+        ######.#######.#
+        #....#.#...T.#.#
+        #.C..#.X.C.#.#.#
+        #..C.#.#...#.#.#
+        #.T..#.###.C.T.#
+        #@...#...C...#.#
+        ################
+🎮 Key Design Highlights of the Revised Levels
+	•	Level 1 (8x6): Teaches the fundamental loop: Player (\text{@}) pushes Crate (\text{C}) rightward onto Target Receptor (\text{T}), which triggers Gate (\text{X}) to open, unlocking the Exit (\text{\$}).
+	•	Level 2 (10x7): Demonstrates deadlock avoidance. Shoving a crate into the upper corner ruins the puzzle, teaching spatial foresight.
+	•	Level 3 (12x8): Introduces alcove parking and multi-gate dependency chain in a divided layout.
+	•	Level 4 (16x9): Full-sized warehouse environment with multiple chambers and interlocking gate dependencies.

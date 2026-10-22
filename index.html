@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streuph's Maze</title>
+<link rel="stylesheet" href="src/css/sm.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header>
+    <h1>Streuph<span class="apos">'</span>s Maze</h1>
+    <div id="carriers">
+      <span class="chip"><span class="swatch" id="swatch-P"></span>you</span>
+      <span class="chip"><span class="swatch" id="swatch-W"></span>world</span>
+    </div>
+    <div id="hud">
+      <span class="stat"><b id="v-strokes">0</b><span>entries</span></span>
+      <span class="stat"><b id="v-par">0</b><span>par</span></span>
+      <span class="stat"><b id="v-best">—</b><span>best</span></span>
+      <span class="stat"><b id="v-turns">0</b><span>attempts</span></span>
+    </div>
+  </header>
+
+  <main>
+    <div id="board-wrap">
+      <div id="board-frame">
+        <div id="ruler-y" aria-hidden="true"></div>
+        <div id="board-col">
+          <div id="ruler-x" aria-hidden="true"></div>
+          <div id="board" role="grid" aria-label="maze board">
+            <div id="player" aria-hidden="true"><div class="aura"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="dpad">
+        <span></span><button class="btn" data-act="north" aria-label="north">▲</button><span></span>
+        <button class="btn" data-act="west" aria-label="west">◀</button>
+        <button class="btn" data-act="act" aria-label="press">●</button>
+        <button class="btn" data-act="east" aria-label="east">▶</button>
+      </div>
+
+      <div class="row-btns">
+        <button class="btn" id="btn-act" type="button">Press (ACT)</button>
+        <button class="btn" id="btn-undo" type="button">Undo</button>
+        <button class="btn" id="btn-reset" type="button">Restart</button>
+        <button class="btn" id="btn-next" type="button">Next level</button>
+      </div>
+
+      <p id="banner"></p>
+    </div>
+  </main>
+
+  <aside>
+
+    <section class="panel" data-open="true">
+      <h2>Now playing</h2>
+      <div class="body" id="tutorial"></div>
+    </section>
+
+    <section class="panel" id="win-picture-panel" hidden>
+      <h2>Level complete</h2>
+      <div class="body win-picture-body">
+        <img id="win-picture" width="250" height="250" alt="PASS">
+      </div>
+    </section>
+
+    <section class="panel" data-open="true">
+      <h2>Levels</h2>
+      <div class="body"><ul id="levels"></ul></div>
+    </section>
+
+    <section class="panel" data-open="false">
+      <h2>Codex</h2>
+      <div class="body"><div id="codex"></div></div>
+    </section>
+
+    <section class="panel" data-open="false">
+      <h2>levels.yaml</h2>
+      <div class="body">
+        <p style="margin:0 0 .5rem;font-size:.76rem;color:var(--mute)">
+          A <code>file://</code> page cannot fetch a sibling file, so drop
+          <code>levels.yaml</code> onto this window, pick it, or paste it below.
+          A file that fails validation changes nothing — the levels you are
+          already playing stay loaded.
+        </p>
+        <div class="dropzone" id="dropzone">
+          <div class="row-btns" style="margin-bottom:.5rem">
+            <input type="file" id="file" accept=".yaml,.yml,.txt,text/plain">
+          </div>
+          <textarea class="io" id="yaml" spellcheck="false"
+            placeholder="name: &quot;Streuph's Maze&quot;&#10;num_level: 1&#10;levels:&#10;  level_1: ..."></textarea>
+          <div class="row-btns" style="margin-top:.5rem">
+            <button class="btn" id="btn-fill" type="button">Show current</button>
+            <button class="btn" id="btn-apply" type="button">Load &amp; validate</button>
+            <button class="btn" id="btn-reset-levels" type="button">Back to built-in</button>
+            <button class="btn" id="btn-save" type="button">Save levels.yaml</button>
+          </div>
+          <label class="check" style="margin-top:.5rem">
+            <input type="checkbox" id="save-par">
+            On save, replace every <code>golf_score</code> with the computed minimum
+          </label>
+        </div>
+        <div id="diag" style="margin-top:.6rem"></div>
+      </div>
+    </section>
+
+    <section class="panel" data-open="false">
+      <h2>Progress</h2>
+      <div class="body">
+        <p id="storage-note" style="margin:0 0 .5rem;font-size:.76rem;color:var(--mute)"></p>
+        <textarea class="io" id="io-text" spellcheck="false" placeholder="export / import payload"></textarea>
+        <div class="row-btns" style="margin-top:.5rem">
+          <button class="btn" id="btn-export" type="button">Export</button>
+          <button class="btn" id="btn-import" type="button">Import</button>
+          <button class="btn" id="btn-wipe" type="button">Clear progress</button>
+        </div>
+      </div>
+    </section>
+
+  </aside>
+</div>
+
+<div id="win">
+  <div class="card">
+    <h2 id="win-title">Solved</h2>
+    <div class="score" id="win-score">0</div>
+    <div class="par" id="win-par"></div>
+    <div class="row-btns">
+      <button class="btn" id="btn-again" type="button">Play again</button>
+      <button class="btn" id="btn-win-next" type="button">Next level</button>
+    </div>
+  </div>
+</div>
+
+<!-- Classic scripts, in dependency order. No modules, no fetch: both are
+     blocked under file://. PRODUCT-DESIGN.md §12.1. -->
+<script src="src/js/sm-yaml.js"></script>
+<script src="src/js/tiles.js"></script>
+<script src="src/js/levels.default.js"></script>
+<script src="src/js/levels.js"></script>
+<script src="src/js/sm-rules.js"></script>
+<script src="src/js/sm-store.js"></script>
+<script src="src/js/sm-io.js"></script>
+<script src="src/js/sm-render.js"></script>
+<script src="src/js/sm-ui.js"></script>
+<script>
+/* Boot. Any validation ERROR here is fatal and is reported on the page
+   rather than in the console, because the player has no console. */
+(function () {
+  'use strict';
+  var SM = globalThis.SM;
+  var res = SM.LEVELS.boot({ solve: true });
+
+  function fatal(list) {
+    document.body.innerHTML =
+      '<pre style="color:#E23D28;background:#0B0B0C;padding:1.5rem;margin:0;' +
+      'font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap">Streuph\u2019s Maze could not start.\n\n' +
+      list.map(function (d) {
+        return '  ' + d.level + (d.line ? ' line ' + d.line : '') + '\n    ' + d.message;
+      }).join('\n\n') + '</pre>';
+  }
+
+  if (res.problems.length) { fatal(res.problems); return; }
+
+  SM.diagnostics = res.diagnostics;
+
+  var game = new SM.Game(document.getElementById('app'));
+  game.levels = res.levels;
+  game.startLevel = 0;
+  SM.game = game;
+  SM.io = new SM.IO(game);
+  game.boot();
+  SM.io.bind();
+
+  // Warnings are worth surfacing even though the game still starts.
+  if (res.diagnostics.length) {
+    SM.io.report(res.diagnostics, false);
+    var warn = res.diagnostics.filter(function (d) {
+      return /V10|§13|soft-lock|UNKNOWN/i.test(d.message);
+    });
+    if (warn.length) {
+      game.r.say('Loaded, but ' + warn.length + ' level(s) raised a warning — see levels.yaml → Diagnostics.', 'warn');
+    }
+  }
+
+  var last = SM.STORE.lastLevel();
+  if (last) {
+    var i = game.indexOfKey(last);
+    if (i > 0 && game.unlocked(i)) game.load(i);
+  }
+})();
+</script>
+</body>
+</html>

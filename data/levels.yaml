@@ -1,0 +1,201 @@
+# STREUPH'S MAZE — levels
+#
+# CONVENTIONS (read before editing):
+#   * Columns are A..P left-to-right.  Rows are 1..9 bottom-to-top.
+#   * grid[0] is the TOP row (the row with the HIGHEST row number).
+#     Rows are therefore listed top-down.
+#   * So the cell at grid row 0, column 0 is A<height> (top-left corner).
+#     A cell commented "C3" is at grid row (height-3), column 2.
+#   * Every cell is an integer tile id. See src/js/tiles.js for what each id means.
+#   * Level keys MUST be level_1, level_2, ... contiguous and in file order
+#     (the gating order).
+#   * num_level MUST equal the number of level_ keys. The loader enforces it.
+#   * golf_score is PAR: the minimum number of entries to finish.
+#   * overrides supplies per-instance tile parameters, keyed by the integer
+#     tile id used in this level's grid.
+
+name: "Streuph's Maze"
+num_level: 12
+levels:
+  level_1:
+    name: "First steps"
+    goal: "Arrow keys or WASD to move. Reach the goal. You and the world are both white, so you match."
+    width: 5
+    height: 5
+    golf_score: 8
+    grid:
+      - [0, 0, 0, 0, 2]
+      - [0, 3, 0, 3, 0]
+      - [0, 3, 0, 3, 0]
+      - [0, 0, 0, 0, 0]
+      - [1, 0, 0, 0, 0]
+  level_2:
+    name: "Two colours"
+    goal: "A prism sets YOUR colour. A dial sets the WORLD colour. The goal only opens when the two match."
+    width: 5
+    height: 5
+    golf_score: 8
+    win_picture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAD6CAIAAAAHjs1qAAAFeElEQVR42u3dwW3bQBCGUd+pXlJKCvEtVaWv3AKkhwTwNbZlidydmf8B3zGIyOHzmpIp8uU4bu/1+vrjXx/8A6lUn4p9wV244y7cJdwl3CXcJdwl3KXzuL/9Cykh3JXE3cmMnLvjLtwl3CXcJdwl3CXcJdwl3IU77sIdd+GOu3CXcJdwl3CXcJdwl3CXcBfuuAt33IU77sJdwl3CXcJdwl3CXcJdwl3CXbjjLtxxF+64C3cJdwl3CXcJ9zl9+/n9gcwN97G4/QDgjjj6uAcr5x73ROXc456onHvcy0Gv/4q4417oM0TocS8E3bbhPhy6rcUddFuO+wjodgT3COv2CHfQ7R3uUzTYTdwjrKf9bOM+lnvsSW3OjuMeuqhnTgB31oPmgPsN9JyBpHNnPWos0dxZTxtOLnfWA0cUyh30zFklcmc9dmJx3FlPnlsWd9bDpxfEnXUzTOdOcNQYU7hb2k0yhTvr5pnCnXVTTefe7orzLtuMu0PyoO+mt7LB3S/c05S32B3co9eewTf4xZ311dAL7iPuWccg51buuLN+vk7icb93+gWh13+VLjOP5r7xqK/3V0d8iwU+gvv4vxMVQY97xNJeeX3dPgfcRy0wLT4W3DgN3OesLmX/yL9rw4ov8MO5Z1qvJh739utKi0sX67xvxr3xojLjUWSBCzzu868ExH0a95WHs+MXeRZvc9n5jOXOejXxuA/hXt96hd+BuLNOPO4lxzrmdgbLdgR33HHHvfzBS3hqdsLQBnLv6+PP71//zQKP+7qBXo3jPeWXut+1wOOey/1+6Kejx70f977H7DHo56IPPH2fxr3FAXve+iniAxd43Fe/xFnWLxKPO+6nvcS51p8XjzvuV/26v8L6k+K33BoE9zbcqy3t9Rd43Nu862+xtJ++wA/+cGYU98ovEcu91AKP+4qXuNr6M+Jxx73Z0t7ufAZ33HHHvf9BWmO98vkM7rjjjjvuuOOOO+6444477rjjjjvuuOOOO+64+zMT7rjjjrtLxFwihjvuLgDG3dc7fL0Dd1/e8+U93H0121ezcW963unGG7hnHS23VcK909Fy0zzcx344c7gl6pSPZQ43vN57zNzwGve4JcrjDHCvNVAPq8Hdo8huTfMosq7cDw+atLTjjjvuuKeL95D49tyJZx33dWJaiF+85biPXbfqi99uHffGy0kv8eu3tuxkcD8TUEHxWzYV91HnM13EF7GO+4RFpbj4XZtX+ed/OPdY8XWs4z5qafkA1pYjvXd7ir+Zmc99u/hlh3z7ZtR/7z6N+64F5lNqu9437x1CNRsR3Ousr2tuDVJn33G/zV5m7vH3/CateZVhS3sQ98XTv5/j/dt2xf+ZduXcTO4dxZ8b67iX+1iwO3Tcid+GPnzIuJf7e+cY5U2vhZ7MvfLa01p53+92Defe5ZB08d39e4yh3FvfJcZUcSfePHEn3iQDuR/jbnxnjLhb4M0Qd+JNL5A78eFzi+NOfPLEErkTHzurUO5Hq1sjGRHuDqfh4O6gGgvuxBsI7nddkAj6mDngTnzQBHD/wkXnmdAn7Tju6ct81P7inrvaBf42w/1BCvOemp1w5oZ7FotY6Lif5qP1gyajPoPC/UwrTe9xkPNhK+5j6YCO+1JGM+48jHs098dgXcer703IcI9A/wy7GXfbwz0a/eBbBOPOPeW4c0857txTjjv6iOPu00zhLuEu3HEX7rgLd9yFu4S7hLuEu4S7hLuEu4S7cMdduOMu3HEX7hLuEu4S7hLuEu4S7hLuwh134Y67cMdduEu4S7hLuEu4S7hLuEu4C3fchTvuwh134S7hLnXi/vYvpIRwVxJ3JzNy7o67cJdwl3CXcJdwl3CXcJe+LvYvrW0htayzk+wAAAAASUVORK5CYII="
+    grid:
+      - [0, 3, 3, 34, 2]
+      - [0, 3, 11, 0, 3]
+      - [0, 3, 0, 3, 0]
+      - [0, 3, 20, 3, 0]
+      - [1, 0, 0, 0, 3]
+  level_3:
+    name: "Conveyor"
+    goal: "Belts carry you one tile per stroke, for free. Chains of belts are free travel."
+    width: 5
+    height: 5
+    golf_score: 6
+    grid:
+      - [0, 0, 0, 0, 2]
+      - [3, 3, 3, 3, 0]
+      - [0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0]
+      - [1, 0, 64, 64, 0]
+  level_4:
+    name: "Loader"
+    goal: "Walk into a crate to push it. A receiver lights while a crate of its colour touches it from any side."
+    width: 6
+    height: 4
+    golf_score: 8
+    overrides:
+      "30":
+        link: 1
+        colour: "wht"
+      "50":
+        link: 1
+        colour: "red"
+    grid:
+      - [3, 3, 3, 3, 3, 2]
+      - [3, 0, 0, 3, 3, 0]
+      - [3, 0, 0, 0, 50, 30]
+      - [1, 71, 0, 0, 0, 3]
+  level_5:
+    name: "Keys and masters"
+    goal: "A key latches the link it names. A master lock overrides every link at once — and it latches too."
+    width: 8
+    height: 5
+    golf_score: 9
+    overrides:
+      "30":
+        link: 1
+    grid:
+      - [0, 0, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0]
+      - [0, 44, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 41, 0, 0, 0, 0, 30]
+      - [1, 0, 0, 0, 0, 0, 3, 2]
+  level_6:
+    name: "Hold and release"
+    goal: "A plate is live only while you stand on it. A key stays live. Walk back through a plate gate and watch it seal."
+    width: 8
+    height: 5
+    golf_score: 11
+    overrides:
+      "30":
+        link: 2
+      "42":
+        link: 2
+    grid:
+      - [3, 0, 0, 0, 0, 0, 3, 2]
+      - [3, 0, 0, 0, 0, 0, 10, 0]
+      - [3, 0, 0, 0, 0, 0, 42, 30]
+      - [0, 0, 41, 0, 0, 0, 0, 3]
+      - [1, 0, 0, 0, 0, 0, 3, 0]
+  level_7:
+    name: "Hinges"
+    goal: "A phase wall is solid only while its link is unsatisfied. Same lock law, no colour test."
+    width: 8
+    height: 5
+    golf_score: 11
+    grid:
+      - [0, 0, 0, 0, 0, 0, 3, 2]
+      - [0, 0, 0, 0, 0, 0, 0, 10]
+      - [0, 0, 0, 0, 0, 0, 3, 3]
+      - [0, 41, 0, 0, 0, 0, 0, 0]
+      - [1, 0, 0, 0, 0, 0, 0, 0]
+  level_8:
+    name: "Short cuts"
+    goal: "Portals are always paired. Walking into one exits from its twin."
+    width: 8
+    height: 6
+    golf_score: 12
+    overrides:
+      "80":
+        link: 1
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 2]
+      - [3, 3, 3, 3, 3, 3, 3, 34]
+      - [3, 3, 0, 0, 0, 0, 0, 0]
+      - [3, 80, 20, 11, 0, 0, 0, 0]
+      - [0, 0, 3, 3, 3, 3, 3, 0]
+      - [1, 0, 0, 80, 0, 0, 0, 0]
+  level_9:
+    name: "Push chain"
+    goal: "A crate belt shoves whatever sits in front of it, one tile, for free — then carries you along."
+    width: 8
+    height: 5
+    golf_score: 12
+    overrides:
+      "30":
+        link: 1
+      "50":
+        link: 1
+        colour: "red"
+    grid:
+      - [0, 0, 0, 0, 0, 0, 3, 2]
+      - [0, 0, 0, 0, 0, 0, 0, 30]
+      - [0, 0, 71, 60, 0, 50, 3, 3]
+      - [0, 0, 0, 0, 0, 0, 0, 3]
+      - [1, 0, 0, 0, 0, 0, 0, 0]
+  level_10:
+    name: "The long way round"
+    goal: "Walls never move. Crates do — push one down a corridor to open a route, or walk around it."
+    width: 16
+    height: 9
+    golf_score: 27
+    overrides:
+      "71":
+        colour: "wht"
+    grid:
+      - [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+      - [3, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
+      - [3, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 3]
+      - [3, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [3, 0, 3, 0, 3, 3, 3, 3, 3, 0, 0, 0, 0, 3, 0, 3]
+      - [3, 0, 0, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0, 3, 0, 3]
+      - [3, 3, 3, 0, 71, 0, 3, 0, 0, 0, 3, 3, 3, 3, 0, 3]
+      - [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+  level_11:
+    name: "Corridor"
+    goal: "Two rows, sixteen columns, one obstruction. The long way round is sometimes the only way."
+    width: 16
+    height: 2
+    golf_score: 16
+    overrides:
+      "30":
+        link: 1
+      "41":
+        link: 1
+    grid:
+      - [0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 30, 0, 0, 2]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 0, 0, 0]
+  level_12:
+    name: "Colophon"
+    goal: "Everything at once: a set dial instead of a cycling one, two links, and a master lock that can undo your work."
+    width: 16
+    height: 9
+    golf_score: 27
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 3, 0, 0]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 3, 34, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 44, 0, 0, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [70, 0, 3, 11, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [0, 0, 3, 22, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [1, 41, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 3]

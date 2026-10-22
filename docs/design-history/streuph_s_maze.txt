@@ -1,0 +1,284 @@
+Planifier le code pour un jeu en JavaScript. Le jeu consiste en un fichier JavaScript et une inclusion d'un fichier qui s'appelle level.yaml. Le fichier level.yaml contient un nombre de niveaux. Il est déterminé par un en-tête name, qui est son nom, puis par une liste de n_level, donc il y aura aussi dans l'en-tête num_level qui est égal au nombre de level qu'il y a dans le fichier. Puis en dessous, une section level_1 qui contient un tableau de 5x5 entrées, donc 5 listes de 5 items. Chaque item codifie un niveau, donc il est considéré comme en fait un carré de 5x5. Et bien évidemment, ce carré de 5x5 va avoir des tuiles, donc chaque tuile va être référencée par son index, donc A B C D E F pour les colonnes, 1 2 3 4 5 pour les lignes. Et donc à chaque entrée, il y a un numéro de tile, donc qui est après dans une liste dans le fichier principal JSON qui définit les différents types de tuiles et chaque tuile bien évidemment aura une action particulière. L'idée étant dans le jeu systématiquement de partir d'une tuile de début et d'arriver à une tuile de fin. De nombreux items permettent ou pas de se téléporter, de déplacer, de bouger ou pas des blocs en fonction de leur catégorie. Donc ces catégories sont à définir dans un deuxième temps. Donc c'est le fichier level.yaml qui doit être constitué de cette manière et donc appelé par le code principal pour charger les niveaux. Dans chaque level.yaml, il y a un en-tête qu'il faudra mettre à jour qui est le score golf, qui est le nombre minimal d'entrées qu'il y aura eu pour finir ce niveau. Donc le score golf est le meilleur score qu'un joueur a pu faire pour aller du début à la fin en utilisant le moins de déplacements, donc d'entrées au bas possible, ainsi que éventuellement une touche action qui sera définie plus tard. Donc voilà pour la présentation de ce fichier-là et donc le moteur de jeu en fait fera des actions en fonction du type de tuile et décidera si le joueur peut passer de la tuile du début à la fin, calculera le nombre de coups et mettra à jour donc ce fichier en ayant chargé préalablement. Voilà la base du jeu. Maintenant, fais un plan de définition de code autour de ça pour des agents de manière à ce que l'on puisse l'utiliser plus tard pour exécuter le code.
+
+
+## 🎮 Planification de l'Architecture du Jeu JavaScript
+
+---
+
+### 📂 1. Définition des Formats de Données (`level.yaml` & `tiles.json`)
+
+Le système repose sur une séparation stricte entre la définition des niveaux (YAML) et la configuration comportementale des tuiles (JSON/JS).
+
+#### Fichier `level.yaml`
+
+```yaml
+name: "Labyrinthe 5x5 Tactique"
+num_level: 2
+levels:
+  level_1:
+    golf_score: 4
+    grid:
+      - [1, 0, 0, 0, 2] # Ligne 1 (Colonnes A, B, C, D, E)
+      - [0, 5, 0, 4, 0] # Ligne 2
+      - [0, 0, 3, 0, 0] # Ligne 3
+      - [0, 4, 0, 5, 0] # Ligne 4
+      - [0, 0, 0, 0, 9] # Ligne 5
+
+```
+
+#### Fichier de Configuration des Tuiles (`tiles.json`)
+
+Chaque ID numérique de la grille correspond à un comportement modulaire :
+
+* **0** : Tuile vide (Passage libre)
+* **1** : Tuile de départ (`Start`)
+* **2** : Tuile d'arrivée (`End`)
+* **3** : Mur infranchissable (`Wall`)
+* **4** : Bloc déplaçable (`MovableBlock` - catégorie A)
+* **5** : Téléporteur (`Teleporter`)
+
+---
+
+### ⚙️ 2. Architecture Logicielle & Design Patterns
+
+Pour structurer ce moteur de jeu de manière robuste et extensible, nous appliquons les patrons de conception (Design Patterns) suivants :
+
+| Composant Principal | Rôle et Responsabilité | Pattern Recommandé |
+| --- | --- | --- |
+| **Loader** | Parse les fichiers YAML (`js-yaml`) et JSON pour initialiser les niveaux en mémoire. | *Facade Pattern* |
+| **GameEngine** | Gère la machine à états du jeu, la position du joueur, le compteur de coups et la condition de victoire. | *State Pattern* / *Mediator* |
+| **TileRegistry** | Associe chaque ID de tuile à une stratégie d'action spécifique (déplacement, téléportation, poussée). | *Strategy Pattern* |
+| **InputController** | Écoute les événements clavier (flèches + touche action) et abstrait les commandes. | *Command Pattern* |
+
+---
+
+### 🛠️ 3. Plan d'Implémentation par Modules (Pour Agents)
+
+Ce plan découpe le développement en modules autonomes exécutables séquentiellement par des agents de codage :
+
+#### 🔹 Module A : Chargement et Parsing (`levelLoader.js`)
+
+* **Objectif** : Importer `level.yaml` à l'aide d'une bibliothèque comme `js-yaml` et valider la structure 5x5.
+* **Fonctions clés** :
+* `loadLevelData(url)` : Charge et retourne l'objet JavaScript parsé.
+* `getGrid(levelIndex)` : Extrait la matrice 5x5 correspondante aux coordonnées de colonnes (`A`-`E`) et lignes (`1`-`5`).
+
+
+
+#### 🔹 Module B : Moteur de Jeu et Règles (`GameEngine.js`)
+
+* **Objectif** : Gérer la logique de déplacement et l'interaction avec les tuiles.
+* **Fonctions clés** :
+* `movePlayer(direction)` : Calcule la nouvelle position `{x, y}`, vérifie les collisions via le registre de tuiles.
+* `checkWinCondition()` : Vérifie si la position actuelle correspond à la tuile `End`.
+* `updateGolfScore()` : Compare le nombre de coups actuel avec le `golf_score` du YAML et met à jour si un nouveau record est atteint.
+
+
+
+#### 🔹 Module C : Contrôleurs et Interface (`uiRenderer.js`)
+
+* **Objectif** : Afficher la grille 5x5 dans le DOM ou sur un Canvas HTML et réagir aux entrées utilisateur.
+* **Fonctions clés** :
+* `renderGrid()` : Génère l'affichage visuel basé sur les coordonnées A1-E5.
+* `updateHUD()` : Affiche en temps réel le nombre de coups et le score golf cible.
+
+
+
+---
+
+### 📝 Résumé de l'Architecture
+
+Ce plan pose les bases d'un moteur de jeu JavaScript modulaire piloté par un fichier de configuration YAML (`level.yaml`) et un registre de tuiles. Il sépare clairement la structure des données (grilles 5x5, scores golf), la logique de déplacement par patrons de conception, et l'interface utilisateur pour faciliter l'exécution par des agents.
+
+
+
+
+
+
+
+
+
+
+Parfait. Pose des questions pour définir une v1 de tiles.json. Je peux te décrire un niveau tutoriel simple pour implémenter la logique sur une base de quelques tuiles. Idéalement la définition de chaque tuile est maintenue dans un fichier de fichier de conf sous forme de méthodes associée à chaque comportement ou à tribut, détaille un plan pour permettre l’exentisibilité , customization des comportements de tuiles (par id, de manière à rendre le fichier levels.yaml indépendant des comportements propres des tuiles, dont l’ID (réf dans les levels yaml) est linkée à un fichier de conf qui décrit le comportement de l’id est qui est chargé des les départ (un rechargement du fichier en cours d’exécution ajouté dans une to-do list que tu maintiens au cours de notre échange).
+Decrit la chaîne d’interdépendance de ressources qui donne le contexte d’exécution du moteur - décrit technique mtn comment tu les charges depuis le script principal).
+Crée une page html qui charge le script si chargé localement depuis file système local). Arch Linux - chromium
+
+
+
+Je vais créer une application HTML interactive complète intégrant le moteur de jeu 5x5 modulaire, le parser de niveaux, le registre de tuiles extensible par comportement, le HUD avec score golf et le système de sauvegarde/rechargement local.
+
+Ici se trouve l'implémentation complète prête pour un test direct dans Chromium sous Arch Linux :
+
+---
+
+### Summary of Architectural Components & Features
+
+1. **Chain of Interdependencies & Engine Execution Context:**
+* **`index.html`** acts as the root host initializing the module execution stack.
+* **Libraries loaded via CDN:** `js-yaml` for parsing YAML grids and `Tailwind CSS` for dynamic styling.
+* **Local Executable Architecture:**
+1. **`TileRegistry`** initialized first to build the dynamic ID-to-behavior mapping (`tilesConfig.json`).
+2. **`GameEngine`** receives the registry instance and parses `level.yaml` to construct the 5x5 board state.
+3. **UI Renderer** draws grid cells mapped from `A1` to `E5` coordinates and attaches Keyboard/Touch event handlers.
+
+
+
+
+2. **Extensibility & Tile Configuration Plan:**
+* Level configurations (`level.yaml`) strictly reference numerical tile IDs (0-9).
+* Dynamic behaviors (`teleport`, `pushable`, `solid`, `interactive`) are bound in `TileRegistry` via strategy hooks (`onEnter`, `onInteract`). Adding new mechanics requires zero changes to the grid definitions.
+
+
+3. **Chromium / Arch Linux Direct Local Playability:**
+* The document includes fallbacks for local execution directly via `file://` protocol without requiring CORS setup or local Node servers.
+
+Explique combien de types de tuiles et quel type de parcours et de tuiles sur le niveau 1 ?
+
+Quelle est la to do list ?
+
+
+*Résumé de la sortie précédente :* Proposition d’une architecture logicielle modulaire pour le moteur de jeu 5x5, structurant le chargement YAML/JSON, le registre de comportements de tuiles et l'exécution locale sous Linux/Chromium.
+
+---
+
+## 🗺️ Analyse du Niveau 1 (Tutoriel)
+
+Pour cette version 1 de démonstration, le Niveau 1 met en scène un parcours d'initiation sur une grille de 5x5 cases (colonnes de **A** à **E**, lignes de **1** à **5**).
+
+### 🧩 Types de tuiles utilisés (6 types)
+
+1. **`0` - Tuile vide (Sol libre) :** Espace de circulation standard sans contrainte.
+2. **`1` - Tuile de Départ (`Start`) :** Position initiale obligatoire du joueur (située en **A1**).
+3. **`2` - Tuile d'Arrivée (`End`) :** Objectif final du niveau (situé en **E5**).
+4. **`3` - Mur (`Wall`) :** Obstacle infranchissable (placé en **C3** au centre) obligeant à contourner la zone.
+5. **`4` - Bloc Déplaçable (`MovableBlock`) :** Élément interactif qui peut être poussé si le joueur dispose de l'action adéquate.
+6. **`5` - Téléporteur (`Teleporter`) :** Permet un saut instantané d'une coordonnée à une autre.
+
+### 🛤️ Type de parcours
+
+* **Parcours tactique linéaire avec embranchement :** Le joueur part de **A1**, se déplace le long des couloirs dégagés, doit gérer l'obstacle central (**C3**) en contournant par les côtés ou en interagissant avec le bloc déplaçable (**4**), puis utilise le téléporteur (**5**) ou le chemin libre pour atteindre la case d'arrivée en **E5**. Le score golf optimal est fixé à 4 ou 6 mouvements selon la stratégie choisie.
+
+---
+
+## 📝 To-Do List du Projet (Maintenue)
+
+Voici la feuille de route actualisée pour le développement du moteur, incluant la fonctionnalité de rechargement à chaud demandée :
+
+* [ ] **1. Parser YAML/JSON :** Finaliser le chargement synchrone/asynchrone de `level.yaml` et `tilesConfig.json` dans le script principal.
+* [ ] **2. Registre de Comportements (`TileRegistry`) :** Associer dynamiquement chaque ID numérique (`0` à `5`) à une méthode de callback (`onEnter`, `onInteract`, `isSolid`).
+* [ ] **3. Hot-Reloading des Configurations :** Mettre en place un écouteur ou une fonction de rechargement à chaud en cours d'exécution pour recharger les fichiers de configuration des tuiles sans redémarrer la partie.
+* [ ] **4. Moteur de Déplacement & Règles :** Implémenter la gestion des collisions, le calcul des coordonnées (A1-E5 vers axes X/Y), et la vérification des conditions de victoire.
+* [ ] **5. Interface UI & HUD :** Rendre la grille interactive dans le DOM (HTML/CSS), afficher en temps réel le compteur de coups et le score golf.
+* [ ] **6. Tests Locaux (Arch Linux / Chromium) :** Valider l'exécution fluide via le protocole `file://` sans erreur CORS.
+
+
+Je vais générer le fichier HTML unique complet pour le jeu de puzzle abstrait 5x5 avec la nouvelle Direction Artistique V2 "Bauhaus & Zen", le moteur JS V2, la gestion des états binaires/interrupteurs, les animations d'impulsion CSS, les 2 niveaux YAML et la documentation intégrée.
+
+Voici le code complet du jeu :
+
+---
+
+### 📋 Résumé des fonctionnalités intégrées dans cette V2 :
+
+1. **Direction Artistique Bauhaus / Zen V2 :**
+* Palette sombre `#0a0a0c`, grille 5x5 avec espacement de 6px et bordures fines `#27272a`.
+* Repères cartésiens **A1 en bas à gauche** jusqu'à **E5 en haut à droite**.
+* Formes géométriques pures (cercles concentriques, carrés inscrits, anneaux, flèches vectorielles) et cycles d'impulsion lumineuse CSS non-fatigants (`anim-pulse-glow`, `anim-pulse-scale`).
+
+
+2. **Nouveaux Comportements & États Binaires (64 Tuiles Pures) :**
+* **ID 6 & 7** : Flèches à sens unique (Est ▶ & Nord ▲).
+* **ID 8 & 9** : Interrupteur Binaire (ON/OFF) contrôlant l'ouverture/fermeture des Portes Rouges.
+* **IDs 10–18** : Tuiles pleines unies couvrant toute la palette de couleurs.
+
+
+3. **Deux Niveaux Inclus (Format YAML) :**
+* **Niveau 1** (Origine) : Parcours avec téléporteurs quantiques (Score Golf: 5).
+* **Niveau 2** (Commutateur) : Énigme à commutateur binaire et flèches monoridirectionnelles (Score Golf: 8).
+
+
+4. **Inspecteur d'État Introspectif & Hot-Reload à Chaud** :
+* Sélection à la souris de chaque case pour inspecter les états dynamiques (`binaryState`, `gateStatus`, `direction`).
+* Onglets YAML/JSON permettant d'appliquer les modifications en direct sans redémarrage.
+
+
+5. **Documentation Exhaustive :**
+* JSDoc intégrée en fin de fichier HTML.
+
+
+index.html [generated with web_code_canvas tool]
+
+---
+
+### 🌟 Résumé des nouveautés de la Version 3 (MVP)
+
+1. **🎨 Tutoriels intéractifs intégrés pour chaque mécanique :**
+* Un panneau **Tutoriel & Codex** liste dynamiquement toutes les règles du jeu : les couleurs d'aura, les commutateurs globaux, les convoyeurs, les portes chromatiques et les boîtes amovibles.
+
+
+2. **🔴🟢🔵 Système de Couleurs Dynamiques & Auramétrie du Joueur :**
+* Le joueur possède désormais un état chromatique (`WHT` Blanc par défaut, `RED` Rouge, `GRE` Vert, `BLU` Bleu, etc.).
+* Passer sur une tuile **Prisme Chromatique** modifie la couleur de l'aura du joueur.
+* Les **Portes Chromatiques** et la **Case de Sortie (End)** ne s'ouvrent que si le joueur possède exactement la couleur requise !
+
+
+3. **🔁 Commutateurs d'État Globaux & Cycles de Couleurs :**
+* **Commutateur de Phased Void / Pass :** Inverse la matrice globale du niveau. Les blocs vides deviennent franchissables/infranchissables selon l'état global.
+* **Commutateur de Couleur du Niveau :** Alterne la couleur d'ambiance du monde (HUD + fond) et influence l'accessibilité des obstacles synchronisés.
+
+
+4. **📦 Convoyeurs (`Conveyor Belt`) & Caisses Amovibles Colorées :**
+* **Tapis roulants vectoriels :** Déplacent automatiquement le joueur ou les caisses dans la direction indiquée (Nord, Sud, Est, Ouest).
+* **Caisses Amovibles Poussables :**
+* Les caisses peuvent être poussées sur la grille et acheminées par les convoyeurs.
+* Les **Caisses Colorées** bloquent le passage sauf si elles correspondent à la porte ou à la cible chromatique.
+
+
+
+
+5. **🎮 4 Niveaux de Difficulté Croissante en YAML :**
+* **Niveau 1 (Éveil Chromatique)** : Apprentissage des teintes et de la couleur de sortie (`End`).
+* **Niveau 2 (Séquenceur de Flux)** : Utilisation des tapis roulants et convoyeurs.
+* **Niveau 3 (Transmutation & Caisses)** : Poussée de caisses colorées à travers des portes sécurisées.
+* **Niveau 4 (Symphonie Binaire & Cycles)** : Combinaison complexe de commutateurs de couleur, de téléporteurs et de blocs *Phased Void*.
+
+V4 - renommer le jeu « streuph’s maze »
+
+Ajouter le support pour les levels non carrés 5x5
+
+Garder le tuto et l’étendre avec un niveau couloir (combinatoire pour avancer le long du couloir de 2 x 16 cases
+
+Les nivaux ont une longueur et largeur max fixée dans cette version à 16 colonnes et 9 lignes.
+
+Ajouter un simple labyrinthe de 16x9 en tuto. Juste avec des murs inamovibles et amovibles mais bloqués.
+
+Ajouter une notion de coloration des caisses et de commutateur qui ne s’active que au contact d’une caisse de couleur et de désactive si aucune caisse de la couleur en Nord Sud est ou ouest
+
+index.html [generated with web_code_canvas tool]
+
+Voici l'application **Streuph's Maze V4** mise à jour avec l'ensemble des **`TODO` structurés et placés stratégiquement** dans le code source HTML/JS.
+
+Ces marqueurs ciblent :
+
+1. **L'implémentation de Design Patterns** (*Flyweight* pour l'allocation des 64 tuiles, *Strategy/Command* pour la gestion d'actions, *Observer/PubSub* pour le découplage UI/Moteur, *Composite/Chain of Responsibility* pour les vérifications de règles/collisions).
+2. **La factorisation du code** (unification des pipelines d'événements, modularisation des vérifications de proximité N/S/E/O).
+3. **L'exploitation poussée des primitives Web/JS de Chromium** (`CSS Grid`, `Custom Elements / Web Components`, `OffscreenCanvas / CSS Paint API`, `AudioContext / Web Audio API`, `Structured Clone` et `Pointer Events API`).
+
+index.html [generated with web_code_canvas tool]
+
+---
+
+### 📌 Synthèse de l'Emplacement des `TODO` dans le Code
+
+| Module / Composant | Design Pattern / Factorisation / Primitive JS | Emplacement & Description du TODO |
+| --- | --- | --- |
+| **Styles / Layout** | `CSS Grid` & `CSS Custom Properties` | Optimisation du recalcul des tailles de tuiles via variables CSS dynamiques. |
+| **`TileRegistry`** | **Flyweight Pattern** | Instanciation unique et partage des objets de configuration de tuiles pour éviter les allocations répétitives. |
+| **`TileRegistry`** | **Strategy Pattern** | Isolation des stratégies d'action (`onEnter`, `onInteract`, `onProximityCheck`) dans des modules dédiés. |
+| **`TileRegistry`** | **Chain of Responsibility** | Chaînage des règles de franchissement et d'interaction (ex: Couleur + État Binaire + Type de Caisse). |
+| **`GameEngine`** | **Observer / EventBus Pattern** | Découplage strict entre la boucle logique et l'UI/DOM via l'émission/réception d'événements personnalisés (`EventTarget` / `CustomEvent`). |
+| **`GameEngine`** | **Command Pattern** | Enregistrement de chaque coup sous forme d'objet commande `MoveCommand` pour activer le *Undo/Redo* natif. |
+| **`GameEngine`** | *Primitive Web* : `AudioContext` | Remplacement des retours visuels passifs par des synthétiseurs audio bips/fréquences Zen générés via Web Audio API. |
+| **`GameEngine`** | *Factorisation Proximité* | Factorisation des algorithmes de balayage adjaçants (N/S/E/O) pour les interrupteurs et convoyeurs. |
+| **`UI / Renderer`** | *Primitive Web* : `Web Components` | Encapsulation de la grille de jeu dans un Shadow DOM `<streuph-board>` personnalisé. |
+| **`UI / Renderer`** | *Primitive Web* : `Pointer Events` | Support unifié des événements Tactiles, Souris et Stylet via `PointerEvents API`. |
