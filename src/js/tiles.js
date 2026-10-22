@@ -12,9 +12,9 @@
  *   * The glyph renderer branches on inst.family, NEVER on tile id
  *     directly (S7, §9.1).
  *   * Every catalogue entry includes a `family` string from the closed set:
- *       terrain | barrier | aura | gate | switch | sensor | flow | crate | portal | actuator
- *     plus an `implemented` boolean. ID 45 (`master_void`) is `implemented:false`
- *     so the loader raises a clear error if encountered (V5, §12.2).
+ *       terrain | barrier | aura | gate | switch | sensor | target | flow | crate | portal | hazard | actuator
+ *     plus an `implemented` boolean. Deferred entries are refused by the
+ *     loader rather than assigned guessed behaviour.
  *   * Colours are restricted to the gameplay palette: wht red gre blu.
  *     `blk` is chrome only (B1, §3.1).
  * ========================================================================= */
@@ -65,8 +65,8 @@
   add({ id:  2, family: 'terrain', name: 'goal',   glyph: 'goal',   solid: false, walkable: true,
        behavior: 'goal' });
   add({ id:  3, family: 'terrain', name: 'wall',   glyph: 'wall',   solid: true,  walkable: false });
-  add({ id:  4, family: 'terrain', name: 'void',   glyph: 'void',   solid: false, walkable: true });
-  // 5 reserved (terrain variants)
+  add({ id:  4, family: 'terrain', name: 'void',   glyph: 'void',   solid: 'phaseVoid', walkable: 'phaseVoid' });
+  add({ id:  5, family: 'terrain', name: 'ice',    glyph: 'ice',    solid: false, walkable: true });
   // 6,7 retired (V4 one-way arrows)
   // 8,9 reserved
 
@@ -74,9 +74,15 @@
   // §7.1: solid iff locked. Lock driven by `link`.
   // Ships CLOSED on link 1, which is the link `link_key` drives by default.
 
-  add({ id: 10, family: 'barrier', name: 'phase_wall', glyph: 'phaseWall',
-       solid: 'locked', walkable: 'unlocked',
-       params: { link: 1, defaultLocked: true } });
+   add({ id: 10, family: 'barrier', name: 'phase_wall', glyph: 'phaseWall',
+        solid: 'locked', walkable: 'unlocked',
+        params: { link: 1, defaultLocked: true } });
+   add({ id: 26, family: 'barrier', name: 'phase_wall_link_2', glyph: 'phaseWall',
+        solid: 'locked', walkable: 'unlocked',
+        params: { link: 2, defaultLocked: true } });
+   add({ id: 27, family: 'barrier', name: 'phase_wall_link_3', glyph: 'phaseWall',
+        solid: 'locked', walkable: 'unlocked',
+        params: { link: 3, defaultLocked: true } });
 
   /* ===== AURA (prism) ==================================================== */
   // §7.2: sets P on contact. colour ∈ {red,gre,blu}.
@@ -142,10 +148,10 @@
        solid: false, walkable: true, behavior: 'toggleLatched',
        params: { mode: 'toggle',    scope: 'global', key: 'master_lock' } });
   // 43 = receiver (sensor family, see below)
-  // 45 = master_void — DEFERRED
-  add({ id: 45, family: 'barrier', name: 'master_void', glyph: 'master',
-       solid: 'deferred', walkable: 'deferred',
-       params: { scope: 'global', key: 'master_void' }, implemented: false });
+  // A latched global switch flips ordinary void tiles between floor and wall.
+  add({ id: 45, family: 'switch', name: 'master_void', glyph: 'master',
+       solid: false, walkable: true, behavior: 'toggleLatched',
+       params: { mode: 'toggle', scope: 'global', key: 'master_void' } });
 
   /* ===== SENSORS (crate-adjacency) ======================================= */
   // §8.3.  family='sensor' so the resolver knows to query crate adjacency.
@@ -158,6 +164,18 @@
   //  is driven by overrides.colour. See §10.2 and the loader V1.)
 
   // 51–59 reserved
+
+  /* ===== TARGETS (crate-occupancy) ======================================= */
+  // A target is momentary and uses crate occupancy, unlike ID 50's adjacency.
+  add({ id: 23, family: 'target', name: 'target_link_1', glyph: 'target',
+       solid: false, walkable: true,
+       params: { mode: 'momentary', scope: 'tagged', link: 1 } });
+  add({ id: 24, family: 'target', name: 'target_link_2', glyph: 'target',
+       solid: false, walkable: true,
+       params: { mode: 'momentary', scope: 'tagged', link: 2 } });
+  add({ id: 25, family: 'target', name: 'target_link_3', glyph: 'target',
+       solid: false, walkable: true,
+       params: { mode: 'momentary', scope: 'tagged', link: 3 } });
 
   /* ===== FLOW (belts) ==================================================== */
   // §7.6.  All belts are one-way; cycles are constructed by chaining.
@@ -209,7 +227,20 @@
        solid: false, walkable: true, behavior: 'teleport',
        params: { link: 0 } });
 
-  // 81–89 reserved
+  // 81–84 — World 2 static cardinal ray emitters. Their immutable direction
+  // is tile data; the rules layer traces the ray through the settled board.
+  add({ id: 81, family: 'hazard', name: 'ray_north', glyph: 'rayNorth',
+       solid: false, walkable: true, params: { dir: { x: 0, y: 1 } },
+       presentation: { motion: 'static', direction: 'north' } });
+  add({ id: 82, family: 'hazard', name: 'ray_east', glyph: 'rayEast',
+       solid: false, walkable: true, params: { dir: { x: 1, y: 0 } },
+       presentation: { motion: 'static', direction: 'east' } });
+  add({ id: 83, family: 'hazard', name: 'ray_south', glyph: 'raySouth',
+       solid: false, walkable: true, params: { dir: { x: 0, y: -1 } },
+       presentation: { motion: 'static', direction: 'south' } });
+  add({ id: 84, family: 'hazard', name: 'ray_west', glyph: 'rayWest',
+       solid: false, walkable: true, params: { dir: { x: -1, y: 0 } },
+       presentation: { motion: 'static', direction: 'west' } });
 
   /* ===== ACTUATORS (colour-changing tiles) =============================== */
   // §7.9.  cycle_dial and cycle_reset drive W (T1).
@@ -226,7 +257,7 @@
        solid: false, walkable: true, behavior: 'setWorldIfLinked',
        params: { link: 1, colour: 'red' } });
 
-  // 23–29 reserved
+  // 28–29 reserved
 
   /* ===== ID reservations beyond the catalogue ============================ */
   // (none — gaps above are intentional for future expansion)
@@ -347,6 +378,9 @@
           case 'start':
             return '<rect x="9.5" y="9.5" width="5" height="5" fill="none" ' +
                    'stroke="' + SM.PALETTE.mute + '" stroke-width="1" stroke-opacity="0.6"/>';
+          case 'ice':
+            return '<path d="M4 18 L18 4 M8 21 L21 8 M3 12 L12 3" fill="none" ' +
+                   'stroke="' + SM.PALETTE.blu + '" stroke-width="1.5" stroke-opacity="0.75"/>';
           case 'void':
             return '';  // transparent — only the player avatar is drawn
           case 'floor':
@@ -355,13 +389,7 @@
         }
 
       case 'barrier': {
-        // 10 phase_wall — solid square, filled while locked
-        if (inst.name === 'master_void') {
-          return '<rect x="2" y="2" width="20" height="20" fill="none" ' +
-                 'stroke="' + SM.PALETTE.mute + '" stroke-width="1" stroke-dasharray="3 3"/>' +
-                 '<text x="12" y="16" text-anchor="middle" font-size="10" ' +
-                 'fill="' + SM.PALETTE.mute + '">v2</text>';
-        }
+        // 10 phase_wall — solid square, filled while locked.
         var locked = !!s.locked;
         return squareBacking(SM.PALETTE.wht, locked);
       }
@@ -382,14 +410,13 @@
       }
 
       case 'switch': {
-        if (inst.name === 'master_lock') {
-          // Master lock: ring with keyhole notch
+        if (inst.name === 'master_lock' || inst.name === 'master_void') {
+          var masterMark = inst.name === 'master_lock'
+            ? '<circle cx="12" cy="10" r="2" fill="' + SM.PALETTE.wht + '" fill-opacity="' + (s.latched ? 1 : 0.4) + '"/>' +
+              '<rect x="11" y="11" width="2" height="5" fill="' + SM.PALETTE.wht + '" fill-opacity="' + (s.latched ? 1 : 0.4) + '"/>'
+            : '<path d="M7 12 H17 M12 7 V17" stroke="' + SM.PALETTE.wht + '" stroke-width="2" stroke-opacity="' + (s.latched ? 1 : 0.4) + '"/>';
           return '<path d="' + hexPath(0) + '" fill="none" stroke="' + SM.PALETTE.wht +
-                 '" stroke-width="2" stroke-opacity="' + (s.latched ? 1 : 0.4) + '"/>' +
-                 '<circle cx="12" cy="10" r="2" fill="' + SM.PALETTE.wht +
-                 '" fill-opacity="' + (s.latched ? 1 : 0.4) + '"/>' +
-                 '<rect x="11" y="11" width="2" height="5" fill="' + SM.PALETTE.wht +
-                 '" fill-opacity="' + (s.latched ? 1 : 0.4) + '"/>';
+                 '" stroke-width="2" stroke-opacity="' + (s.latched ? 1 : 0.4) + '"/>' + masterMark;
         }
         var on = !!s.active;
         var opacity = on ? 1 : 0.4;
@@ -411,9 +438,37 @@
                '<circle cx="22"  cy="12" r="' + dotR + '" fill="' +
                (lit.e ? colHex : SM.PALETTE.mute) + '"/>' +
                '<circle cx="12"  cy="22" r="' + dotR + '" fill="' +
-               (lit.s ? colHex : SM.PALETTE.mute) + '"/>' +
-               '<circle cx="2"   cy="12" r="' + dotR + '" fill="' +
-               (lit.w ? colHex : SM.PALETTE.mute) + '"/>';
+                 (lit.s ? colHex : SM.PALETTE.mute) + '"/>' +
+                '<circle cx="2"   cy="12" r="' + dotR + '" fill="' +
+                 (lit.w ? colHex : SM.PALETTE.mute) + '"/>';
+      }
+
+      case 'target': {
+        // Static target layer; the crate entity is composed above it by the
+        // renderer, keeping the floor feature visible while occupied.
+        var targetOn = !!s.active;
+        return '<circle cx="12" cy="12" r="9" fill="none" stroke="' +
+               SM.PALETTE.wht + '" stroke-width="2" stroke-opacity="' +
+               (targetOn ? 1 : 0.45) + '"/>' +
+               '<circle cx="12" cy="12" r="3" fill="' + SM.PALETTE.wht +
+               '" fill-opacity="' + (targetOn ? 0.8 : 0) + '" stroke="' +
+               SM.PALETTE.wht + '" stroke-width="1.5" stroke-opacity="' +
+               (targetOn ? 1 : 0.45) + '"/>';
+      }
+
+      case 'hazard': {
+        var dir = params.dir || { x: 1, y: 0 };
+        var arrow = dir.y > 0
+          ? 'M12 17 V6 M8 10 L12 6 L16 10'
+          : dir.x > 0
+            ? 'M7 12 H18 M14 8 L18 12 L14 16'
+            : dir.y < 0
+              ? 'M12 7 V18 M8 14 L12 18 L16 14'
+              : 'M17 12 H6 M10 8 L6 12 L10 16';
+        return '<circle cx="12" cy="12" r="9" fill="none" stroke="' +
+               SM.PALETTE.red + '" stroke-width="2"/>' +
+               '<path d="' + arrow + '" fill="none" stroke="' +
+               SM.PALETTE.red + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
       }
 
       case 'flow': {

@@ -85,7 +85,7 @@ function key(k) {
   /* ---- shell ---------------------------------------------------------- */
   ok(consoleErrors.length === 0, 'the page boots with no script errors', consoleErrors.join(' | '));
   ok(!doc.querySelector('pre'), 'no fatal banner was rendered');
-  ok(SM.game.levels.length === 12, 'all 12 built-in levels loaded', String(SM.game.levels.length));
+  ok(SM.game.levels.length === 13, 'all 13 built-in levels loaded', String(SM.game.levels.length));
 
   const cells = doc.querySelectorAll('#board .cell');
   const lv1 = SM.game.levels[0];
@@ -109,7 +109,7 @@ function key(k) {
   ok(!doc.querySelector('#win-picture').hasAttribute('src'), 'win picture is not loaded before victory');
   ok(/eight display frames/.test(doc.querySelector('#tutorial').textContent), 'tutorial explains the eight-frame player animation');
   ok(/win_picture/.test(doc.querySelector('#tutorial').textContent), 'tutorial documents custom win pictures');
-  ok(doc.querySelectorAll('#levels li').length === 12, 'the level list has 12 entries');
+  ok(doc.querySelectorAll('#levels li').length === 13, 'the level list has 13 entries');
   ok(doc.querySelectorAll('#levels button')[1].disabled, 'level 2 starts locked');
 
   /* ---- the codex is generated from SM.TILES ---------------------------- */
@@ -158,6 +158,20 @@ function key(k) {
   g().restart();
   ok(doc.querySelector('#win-picture-panel').hidden, 'restart hides and clears the previous win picture');
 
+  // The final tutorial level proves the Void/Pass state reaches the renderer.
+  g().load(12);
+  const voidCell = doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
+  ok(!voidCell.classList.contains('wall'), 'Void begins passable');
+  key('ArrowRight');
+  ok(voidCell.classList.contains('wall'), 'master_void renders Void as a wall while latched');
+  key('ArrowRight');
+  eq(g().state.player.x, 1, 'active Void prevents the player entering the tile');
+  key(' ');
+  ok(!voidCell.classList.contains('wall'), 'ACT restores passable Void in the renderer');
+  key('ArrowRight'); key('ArrowRight');
+  await new Promise(r => setTimeout(r, 300));
+  ok(g().state.won, 'the Void/Pass tutorial is solvable');
+
   /* ---- blocked moves are free ------------------------------------------ */
   g().load(0);
   await new Promise(r => setTimeout(r, 60));
@@ -194,11 +208,11 @@ function key(k) {
   /* ---- the YAML round trip through the UI ------------------------------ */
   const yaml = SM.io.currentText();
   ok(yaml.indexOf('# STREUPH') === 0 || yaml.indexOf('#') === 0, 'emitted YAML keeps a header comment');
-  ok(yaml.indexOf('num_level: 12') !== -1, 'emitted YAML keeps the header fields');
+  ok(yaml.indexOf('num_level: 13') !== -1, 'emitted YAML keeps the header fields');
   const reloaded = SM.LEVELS.load(yaml, { solve: true });
   eq(reloaded.problems.length, 0, 'the emitted YAML re-validates cleanly',
     reloaded.problems.map(p => p.level + ': ' + p.message).join(' | '));
-  eq(reloaded.levels.length, 12, 'the emitted YAML round-trips all 12 levels');
+  eq(reloaded.levels.length, 13, 'the emitted YAML round-trips all 13 levels');
 
   /* ---- a bad file changes nothing -------------------------------------- */
   const before = SM.game.levels.map(l => l.key).join(',');
@@ -232,7 +246,93 @@ function key(k) {
   eq(SM.game.levels.length, 1, 'the level set was replaced');
   eq(doc.querySelectorAll('#board .cell').length, 4, 'the board was rebuilt to 2x2');
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
-  eq(SM.game.levels.length, 12, 'back to the built-in set');
+  eq(SM.game.levels.length, 13, 'back to the built-in set');
+
+  /* ---- Sokoban crate/terrain composition ------------------------------- */
+  const sokoban = [
+    'name: "Sokoban overlay test"',
+    'world_id: world-01-sokoban',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Crate on target"',
+    '    width: 6',
+    '    height: 2',
+    '    golf_score: 7',
+    '    grid:',
+    '      - [0, 0, 0, 0, 3, 3]',
+    '      - [1, 70, 23, 0, 10, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(sokoban), 'a Sokoban crate/target test pack loads');
+  await waitFor(() => doc.querySelectorAll('#board .cell').length === 12);
+  const crateSource = doc.querySelector('#board .cell[data-x="1"][data-y="0"]');
+  const crateTarget = doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
+  const linkedGate = doc.querySelector('#board .cell[data-x="4"][data-y="0"]');
+  const inactiveTargetMark = crateTarget.dataset.mark;
+  const closedGateMark = linkedGate.dataset.mark;
+  const initialTargetView = SM.RULES.describeTile(g().state, 2, 0);
+  eq(initialTargetView.active, false, 'the unoccupied target is inactive in its read-only description');
+  ok(!/fill-opacity="0\.8"/.test(inactiveTargetMark), 'the inactive target has an unfilled center');
+  ok(linkedGate.classList.contains('wall'), 'the linked gate renders as closed initially');
+  key('ArrowRight');
+  await new Promise(r => setTimeout(r, 250));
+  eq(g().state.crates[0][2].id, 70, 'the crate moved onto the target');
+  const sourceView = SM.RULES.describeTile(g().state, 1, 0);
+  eq(sourceView.inst.name, 'floor', 'the crate source is described as floor');
+  eq(sourceView.crate, null, 'the crate source has no remaining crate entity');
+  ok(crateSource.innerHTML.trim() === '', 'the moved crate exposes its source floor visually');
+  const targetView = SM.RULES.describeTile(g().state, 2, 0);
+  eq(targetView.inst.family, 'target', 'the occupied cell retains its target terrain');
+  eq(targetView.crate.id, 70, 'the read-only tile description exposes the crate overlay');
+  eq(targetView.active, true, 'the occupied target is active in its read-only description');
+  ok(crateTarget.dataset.mark !== inactiveTargetMark && /fill-opacity="0\.8"/.test(crateTarget.dataset.mark),
+    'the occupied target has a visibly active glyph');
+  const gateView = SM.RULES.describeTile(g().state, 4, 0);
+  eq(gateView.locked, false, 'the target opens its linked phase wall in the rules state');
+  ok(!linkedGate.classList.contains('wall') && linkedGate.dataset.mark !== closedGateMark,
+    'the linked gate renders open after target occupancy');
+  ok(/<circle/.test(crateTarget.innerHTML) && /<rect/.test(crateTarget.innerHTML) &&
+     /<path/.test(crateTarget.innerHTML),
+    'the occupied target renders both the target marks and crate glyph');
+
+  g().load(0);
+  ['ArrowRight', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowRight']
+    .forEach(key);
+  await new Promise(r => setTimeout(r, 900));
+  ok(g().state.won, 'the World 1 sample route reaches its exit');
+  ok(!doc.querySelector('#win-picture-panel').hidden, 'the generated World 1 picture appears after victory');
+  eq(doc.querySelector('#win-picture').alt, 'Solved World 1 board',
+    'the generated picture has descriptive alternative text');
+  const generatedSource = doc.querySelector('#win-picture').getAttribute('src') || '';
+  ok(generatedSource.indexOf('data:image/svg+xml;charset=utf-8,') === 0,
+    'a World 1 level without custom art uses an offline SVG snapshot');
+  const generatedSvg = decodeURIComponent(generatedSource.split(',')[1] || '');
+  ok(generatedSvg.indexOf('<circle cx="12" cy="12" r="9"') !== -1 &&
+     generatedSvg.indexOf('M2 2 L22 22') !== -1,
+    'the solved snapshot contains the target and final crate glyphs');
+  g().restart();
+  ok(doc.querySelector('#win-picture-panel').hidden && !doc.querySelector('#win-picture').hasAttribute('src'),
+    'restart clears the generated snapshot');
+  g().load(0);
+  ok(doc.querySelector('#win-picture-panel').hidden && !doc.querySelector('#win-picture').hasAttribute('src'),
+    'loading a level clears any previous victory snapshot');
+
+  const customWorldPicture = SM.DEFAULT_LEVELS.levels.level_2.win_picture;
+  const customSokoban = sokoban.replace('    golf_score: 7',
+    '    golf_score: 7\n    win_picture: "' + customWorldPicture + '"');
+  ok(SM.io.applyText(customSokoban), 'a World 1 level with custom PNG art loads');
+  await waitFor(() => doc.querySelectorAll('#board .cell').length === 12);
+  ['ArrowRight', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowRight']
+    .forEach(key);
+  await new Promise(r => setTimeout(r, 900));
+  ok(g().state.won, 'the custom-art World 1 sample route reaches its exit');
+  eq(doc.querySelector('#win-picture').getAttribute('src'), customWorldPicture,
+    'custom PNG art takes precedence over the generated World 1 snapshot');
+  eq(doc.querySelector('#win-picture').alt, 'Custom level victory picture',
+    'custom World 1 art retains its descriptive alternative text');
+
+  SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
+  await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
 
   /* ---- levels.yaml on disk --------------------------------------------- */
   const onDisk = path.join(ROOT, 'data', 'levels.yaml');
@@ -241,7 +341,7 @@ function key(k) {
     const fromDisk = SM.LEVELS.load(fs.readFileSync(onDisk, 'utf8'), { solve: true });
     eq(fromDisk.problems.length, 0, 'the shipped levels.yaml validates',
       fromDisk.problems.map(p => p.level + ': ' + p.message).join(' | '));
-    eq(fromDisk.levels.length, 12, 'the shipped levels.yaml has all 12 levels');
+    eq(fromDisk.levels.length, 13, 'the shipped levels.yaml has all 13 levels');
   }
 
   /* ---- summary --------------------------------------------------------- */

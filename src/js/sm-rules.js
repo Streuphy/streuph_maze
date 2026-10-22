@@ -34,7 +34,7 @@
   var ACTION_KEYS = ['north', 'east', 'south', 'west'];
   RULES.ACTION_KEYS = ACTION_KEYS;
 
-  var BELT_CHAIN_CAP = 64;   // §5.2 step 8: hard cap on belt chaining
+  var FORCE_CHAIN_STATES_PER_CELL = 4;
   var TELEPORT_HOP_CAP = 1;  // §5.2 step 7.4: a teleport ends the move
 
   /* ---------------------------------------------------------------------- */
@@ -109,9 +109,26 @@
             ov.defaultLocked === undefined) {
           inst.params.defaultLocked = true;
         }
+        if (inst.family === 'crate') {
+          // Crate IDs in authored grids are entity markers, not terrain. Keep
+          // the crate instance in its movable layer and expose ordinary floor
+          // beneath it so pushing it away never leaves a solid crate tile.
+          crates[ry][rx] = inst;
+          var floorDef = SM.getTile(0);
+          inst = {
+            id: floorDef.id,
+            family: floorDef.family,
+            name: floorDef.name,
+            glyph: floorDef.glyph,
+            solid: floorDef.solid,
+            walkable: floorDef.walkable,
+            pushable: !!floorDef.pushable,
+            behavior: floorDef.behavior,
+            params: mergeParams(floorDef.params, null)
+          };
+        }
         tiles[ry][rx] = inst;
 
-        if (inst.family === 'crate') crates[ry][rx] = inst;
         if (inst.name === 'start') { if (start) throw LevelError(key, 'more than one start tile'); start = { x: rx, y: ry }; }
         if (inst.name === 'goal')  { if (goal)  throw LevelError(key, 'more than one goal tile');  goal  = { x: rx, y: ry }; }
 
@@ -119,7 +136,7 @@
           var pk = String(inst.params.link);
           (portals[pk] || (portals[pk] = [])).push({ x: rx, y: ry });
         }
-        if (inst.family === 'switch' || inst.family === 'sensor') {
+        if (inst.family === 'switch' || inst.family === 'sensor' || inst.family === 'target') {
           switches.push({ x: rx, y: ry, inst: inst, latched: false });
         }
       }
@@ -229,7 +246,9 @@
       strokes: s.strokes, turns: s.turns, won: s.won,
       latched: s.switches.map(function (sw) { return sw.latched; }),
       crates: s.crates.map(function (row) {
-        return row.map(function (c) { return c ? c.id : 0; });
+        // Crate instances are immutable level data; retaining their reference
+        // preserves ID and parameter overrides without putting terrain back.
+        return row.slice();
       })
     };
   };
@@ -241,9 +260,7 @@
     for (var i = 0; i < s.switches.length; i++) s.switches[i].latched = snap.latched[i];
     for (var y = 0; y < s.height; y++) {
       for (var x = 0; x < s.width; x++) {
-        s.crates[y][x] = snap.crates[y][x] ? s.grid[y][x] : null;
-        // A crate can only ever be on a crate tile, so grid[y][x] IS the
-        // instance. This keeps restore O(cells) with no id lookup table.
+        s.crates[y][x] = snap.crates[y][x] || null;
       }
     }
     rebuildLocks(s);
@@ -270,6 +287,7 @@
     if (!inst) return true;
     if (inst.solid === true) return true;
     if (inst.solid === 'locked') return isLocked(s, x, y);
+    if (inst.solid === 'phaseVoid') return masterVoidActive(s);
     if (inst.solid === 'deferred') {
       throw LevelError(s.key, 'tile ' + inst.id + ' (' + inst.name + ') has no implemented solidity rule');
     }
@@ -326,11 +344,22 @@
   function switchActive(s, sw) {
     var p = sw.inst.params;
     if (p.scope === 'global') return !!sw.latched;
+    if (sw.inst.family === 'target') return !!crateAt(s, sw.x, sw.y);
     if (sw.inst.family === 'sensor') return sensorLit(s, sw).any;
     if (p.mode === 'momentary') return s.player.x === sw.x && s.player.y === sw.y;
     return !!sw.latched;
   }
   RULES.switchActive = switchActive;
+
+  function masterVoidActive(s) {
+    for (var i = 0; i < s.switches.length; i++) {
+      var sw = s.switches[i];
+      if (sw.inst.params.scope === 'global' &&
+          sw.inst.params.key === 'master_void' && sw.latched) return true;
+    }
+    return false;
+  }
+  RULES.masterVoidActive = masterVoidActive;
 
   /* ---------------------------------------------------------------------- */
   /* Lock resolution (R11, §5.4)                                            */
@@ -339,7 +368,6 @@
   /*   2. every LATCHED tagged toggle whose link matches flips it          */
   /*   3. any ACTIVE momentary or sensor switch whose link matches clears it*/
   /*   4. a latched global master_lock forces it locked (always wins)      */
-  /*   5. a latched master_void would do the same — deferred to v2         */
   /* ---------------------------------------------------------------------- */
 
   function rebuildLocks(s) {
@@ -467,26 +495,39 @@
   RULES.partnerPortal = partnerPortal;
 
   /* ---------------------------------------------------------------------- */
-  /* Belt chains (R6-R9, §5.2 steps 8-9)                                   */
+  /* Player force chains (conveyors and ice)                               */
   /*                                                                        */
-  /*  player_* belts : carry the player. A crate ahead STOPS the chain.     */
-  /*  crate_*  belts : shove the crate one tile (free), then carry the       */
-  /*                  player into the vacated cell.                         */
-  /* Chaining is capped at BELT_CHAIN_CAP hops (R9).                        */
+  /*  Player belts carry in their declared direction. Ice carries the      */
+  /*  incoming direction. Crate belts retain their explicit one-cell shove. */
+  /*  Repeated directed positions stop loops; a board-derived cap is a      */
+  /*  final guard for malformed or dynamically changing chains.             */
   /* ---------------------------------------------------------------------- */
 
-  function runBeltChain(s, steps) {
+  function runPlayerForceChain(s, incoming, steps) {
     var hops = 0;
-    while (hops < BELT_CHAIN_CAP) {
+    var cap = s.width * s.height * FORCE_CHAIN_STATES_PER_CELL;
+    var seen = {};
+    var d = incoming;
+    while (hops < cap) {
       var inst = tileAt(s, s.player.x, s.player.y);
-      if (!inst || inst.family !== 'flow') break;
-      var d = inst.params.dir || { x: 1, y: 0 };
+      if (!inst) break;
+      if (inst.family === 'flow') d = inst.params.dir || { x: 1, y: 0 };
+      else if (inst.name !== 'ice') break;
+
+      var stateKey = s.player.x + ',' + s.player.y + ',' + d.x + ',' + d.y;
+      if (seen[stateKey]) {
+        steps.push({ type: 'force-loop', x: s.player.x, y: s.player.y,
+                     dir: { x: d.x, y: d.y } });
+        break;
+      }
+      seen[stateKey] = true;
+
       var tx = s.player.x + d.x, ty = s.player.y + d.y;
-      if (!inBounds(s, tx, ty)) break;
+      if (!inBounds(s, tx, ty) || isSolid(s, tx, ty)) break;
 
       var c = crateAt(s, tx, ty);
       if (c) {
-        if ((inst.params.kind || 'player') !== 'crate') break;   // blocked by a crate
+        if (inst.family !== 'flow' || (inst.params.kind || 'player') !== 'crate') break;
         var bx = tx + d.x, by = ty + d.y;
         if (!inBounds(s, bx, by)) break;
         if (crateAt(s, bx, by)) break;
@@ -494,8 +535,12 @@
         s.crates[ty][tx] = null;
         s.crates[by][bx] = c;
         steps.push({ type: 'push', crate: { x: tx, y: ty }, to: { x: bx, y: by } });
-      } else if (isSolid(s, tx, ty)) {
-        break;
+      } else {
+        var target = tileAt(s, tx, ty);
+        if (target.family === 'gate') {
+          var carrier = target.params.carrier === 'W' ? s.W : s.P;
+          if (carrier !== target.params.colour) break;
+        }
       }
 
       var from = { x: s.player.x, y: s.player.y };
@@ -503,8 +548,8 @@
       steps.push({ type: 'move', from: from, to: { x: tx, y: ty } });
       hops++;
     }
-    if (hops >= BELT_CHAIN_CAP) {
-      steps.push({ type: 'belt-cap', cap: BELT_CHAIN_CAP, x: s.player.x, y: s.player.y });
+    if (hops >= cap) {
+      steps.push({ type: 'belt-cap', cap: cap, x: s.player.x, y: s.player.y });
     }
   }
 
@@ -582,7 +627,7 @@
       var from = { x: s.player.x, y: s.player.y };
       s.player.x = tx; s.player.y = ty;
       steps.push({ type: 'move', from: from, to: { x: tx, y: ty } });
-    } else if (target.solid === true || (target.solid === 'locked' && isLocked(s, tx, ty))) {
+    } else if (isSolid(s, tx, ty)) {
       steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'wall' });
       return;
     } else if (target.family === 'gate') {
@@ -601,8 +646,8 @@
       steps.push({ type: 'move', from: f2, to: { x: tx, y: ty } });
     }
 
-    // Belt chain, then the single on_enter pass of the FINAL resting tile.
-    runBeltChain(s, steps);
+    // Forced movement, then the single on_enter pass of the FINAL resting tile.
+    runPlayerForceChain(s, d, steps);
 
     var rest = tileAt(s, s.player.x, s.player.y);
     if (rest && rest.behavior) {
@@ -624,7 +669,10 @@
     var sig = s.player.x + ',' + s.player.y + '|' + s.P + '|' + s.W;
     for (var i = 0; i < s.switches.length; i++) sig += '|' + (s.switches[i].latched ? 1 : 0);
     for (var y = 0; y < s.height; y++) {
-      for (var x = 0; x < s.width; x++) sig += s.crates[y][x] ? '1' : '0';
+      for (var x = 0; x < s.width; x++) {
+        var crate = s.crates[y][x];
+        sig += crate ? '[' + crate.id + ':' + (crate.params.colour || '') + ']' : '[]';
+      }
     }
     return sig;
   }
@@ -640,7 +688,9 @@
     var sw = findSwitch(s, inst, x, y);
     var view = {
       inst: inst,
+      crate: crateAt(s, x, y),
       locked: isLocked(s, x, y),
+      solid: isSolid(s, x, y),
       active: sw ? switchActive(s, sw) : false,
       latched: sw ? sw.latched : false,
       W: s.W,

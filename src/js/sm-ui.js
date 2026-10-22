@@ -197,6 +197,55 @@
     this.el.winPicture.alt = 'PASS';
   };
 
+  function isWorldOneLevel(level) {
+    if (level.worldId) return level.worldId === 'world-01-sokoban';
+    // Before packs carry normalized world identity, target tiles are the
+    // authoritative signature of the World 1 mechanic in its level data.
+    for (var y = 0; y < level.tiles.length; y++) {
+      for (var x = 0; x < level.tiles[y].length; x++) {
+        if (level.tiles[y][x].family === 'target') return true;
+      }
+    }
+    return false;
+  }
+
+  function solvedBoardDataUri(state) {
+    var level = state.level;
+    var cell = Math.min(24, 210 / level.width, 210 / level.height);
+    var left = (250 - level.width * cell) / 2;
+    var top = (250 - level.height * cell) / 2;
+    var parts = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="250" height="250" viewBox="0 0 250 250">',
+      '<rect width="250" height="250" fill="#0B0B0C"/>'
+    ];
+
+    for (var y = 0; y < level.height; y++) {
+      for (var x = 0; x < level.width; x++) {
+        var px = left + x * cell;
+        var py = top + (level.height - 1 - y) * cell;
+        var ctx = SM.RULES.describeTile(state, x, y);
+        var marks = SM.glyph(ctx.inst, ctx);
+        if (ctx.crate) marks += SM.glyph(ctx.crate, ctx);
+        parts.push('<rect x="' + px + '" y="' + py + '" width="' + cell +
+          '" height="' + cell + '" fill="#141418" stroke="#45454B" stroke-width="0.7"/>');
+        if (marks) {
+          parts.push('<g transform="translate(' + px + ' ' + py + ') scale(' +
+            (cell / 24) + ')">' + marks + '</g>');
+        }
+      }
+    }
+
+    var playerX = left + (state.player.x + 0.5) * cell;
+    var playerY = top + (level.height - state.player.y - 0.5) * cell;
+    var radius = cell * 0.27;
+    parts.push('<circle cx="' + playerX + '" cy="' + playerY + '" r="' + radius +
+      '" fill="' + (SM.PALETTE[state.P] || SM.PALETTE.wht) + '" stroke="' +
+      (SM.PALETTE[state.W] || SM.PALETTE.wht) + '" stroke-width="' +
+      Math.max(1, cell * 0.07) + '"/>');
+    parts.push('</svg>');
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(parts.join(''));
+  }
+
   Game.prototype.showWinPicture = function (level) {
     var image = this.el.winPicture;
     var panel = this.el.winPicturePanel;
@@ -208,14 +257,15 @@
       '<rect x="9" y="9" width="232" height="232" fill="none" stroke="#2FA84F" stroke-width="3"/>' +
       '<text x="125" y="145" text-anchor="middle" font-family="Arial,sans-serif" font-size="58" font-weight="700" fill="#EDEAE3">PASS</text>' +
       '</svg>');
-    image.alt = level.winPicture ? 'Custom level victory picture' : 'PASS';
+    var generated = !level.winPicture && isWorldOneLevel(level);
+    image.alt = level.winPicture ? 'Custom level victory picture' : generated ? 'Solved World 1 board' : 'PASS';
     image.onerror = function () {
       if (token !== this.imageLoadToken) return;
       image.onerror = null;
       image.src = fallback;
       image.alt = 'PASS';
     }.bind(this);
-    image.src = level.winPicture || fallback;
+    image.src = level.winPicture || (generated ? solvedBoardDataUri(this.state) : fallback);
     panel.hidden = false;
   };
 

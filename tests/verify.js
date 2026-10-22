@@ -50,6 +50,70 @@ function throws(fn, label) {
   return ok(false, label, 'did not throw');
 }
 
+function checkTileRegistry() {
+  const ice = SM.TILES[5];
+  ok(!!ice, 'REG  ice ID 5 is registered');
+  if (ice) {
+    eq([ice.family, ice.name, ice.glyph, ice.solid, ice.walkable],
+      ['terrain', 'ice', 'ice', false, true], 'REG  ice is walkable terrain');
+    ok(SM.glyph(ice).length > 0, 'REG  ice has a rendered glyph');
+  }
+
+  const targets = [
+    { id: 23, link: 1 },
+    { id: 24, link: 2 },
+    { id: 25, link: 3 }
+  ];
+  for (const item of targets) {
+    const tile = SM.TILES[item.id];
+    ok(!!tile, 'REG  target ID ' + item.id + ' is registered');
+    if (!tile) continue;
+    eq(tile.family, 'target', 'REG  target ID ' + item.id + ' has target family');
+    eq(tile.params, { mode: 'momentary', scope: 'tagged', link: item.link },
+      'REG  target ID ' + item.id + ' resolves to momentary link ' + item.link);
+    eq(tile.glyph, 'target', 'REG  target ID ' + item.id + ' selects target glyph');
+    eq([tile.solid, tile.walkable], [false, true],
+      'REG  target ID ' + item.id + ' is walkable terrain');
+  }
+
+  const rays = [
+    { id: 81, name: 'ray_north', glyph: 'rayNorth', direction: 'north', dir: { x: 0, y: 1 } },
+    { id: 82, name: 'ray_east', glyph: 'rayEast', direction: 'east', dir: { x: 1, y: 0 } },
+    { id: 83, name: 'ray_south', glyph: 'raySouth', direction: 'south', dir: { x: 0, y: -1 } },
+    { id: 84, name: 'ray_west', glyph: 'rayWest', direction: 'west', dir: { x: -1, y: 0 } }
+  ];
+  for (const item of rays) {
+    const tile = SM.TILES[item.id];
+    ok(!!tile, 'REG  ray emitter ID ' + item.id + ' is registered');
+    if (!tile) continue;
+    eq([tile.id, tile.family, tile.name, tile.glyph],
+      [item.id, 'hazard', item.name, item.glyph],
+      'REG  ray emitter ID ' + item.id + ' has its unique directional definition');
+    eq(tile.params, { dir: item.dir },
+      'REG  ray emitter ID ' + item.id + ' resolves to the intended cardinal direction');
+    eq(tile.presentation, { motion: 'static', direction: item.direction },
+      'REG  ray emitter ID ' + item.id + ' has static directional presentation metadata');
+    ok(SM.glyph(tile).length > 0,
+      'REG  ray emitter ID ' + item.id + ' has a rendered directional glyph');
+    ok(Object.keys(SM.TILES).filter(id => SM.TILES[id].name === item.name).length === 1,
+      'REG  ray emitter ' + item.name + ' has a unique registry entry');
+  }
+  eq(new Set(rays.map(item => SM.TILES[item.id].glyph)).size, 4,
+    'REG  cardinal ray emitters use four distinct glyph keys');
+
+  for (const item of [{ id: 10, link: 1 }, { id: 26, link: 2 }, { id: 27, link: 3 }]) {
+    const tile = SM.TILES[item.id];
+    ok(!!tile, 'REG  phase-wall ID ' + item.id + ' is registered');
+    if (!tile) continue;
+    eq(tile.family, 'barrier', 'REG  phase-wall ID ' + item.id + ' has barrier family');
+    eq(tile.params, { link: item.link, defaultLocked: true },
+      'REG  phase-wall ID ' + item.id + ' resolves to locked link ' + item.link);
+    eq(tile.glyph, 'phaseWall', 'REG  phase-wall ID ' + item.id + ' selects phase-wall glyph');
+    eq(SM.glyph(tile, { locked: true }), SM.glyph(SM.TILES[10], { locked: true }),
+      'REG  phase-wall ID ' + item.id + ' renders with the shared phase-wall glyph');
+  }
+}
+
 /* ---------------------------------------------------------------------- */
 /* A2 — sm-rules.js must be free of timers, DOM and async                   */
 /* ---------------------------------------------------------------------- */
@@ -203,7 +267,7 @@ function checkRules() {
     eq(s.player, { x: 1, y: 0 }, 'R2  the player moved');
   }
 
-  /* R6-R9 — belts are free. */
+  /* R6-R9 — belts are free and chains terminate deterministically. */
   {
     const L = mkLevel([[2, 0, 0, 0], [0, 0, 0, 0], [1, 64, 64, 64]]);
     const s = st(L);
@@ -229,15 +293,61 @@ function checkRules() {
     eq(s.crates[0][3].id, 71, 'R8  the crate was shoved one tile forward');
   }
   {
-    /* Belt chaining is capped (R9). */
+    /* A long belt run reaches its natural endpoint rather than an arbitrary
+       fixed 64-hop cutoff. */
     const row = [1];
     for (let i = 0; i < 70; i++) row.push(64);
     row.push(2);
     const L = mkLevel([row]);
     const s = st(L);
     const r = go(s, 'east');
-    eq(s.player.x, 65, 'R9  the belt chain stopped at the 64-hop cap');
-    ok(r.steps.some(x => x.type === 'belt-cap'), 'R9  the view is told the chain hit its cap');
+    eq(s.player.x, 71, 'R9  the belt chain reaches its natural stopping tile');
+    eq(s.strokes, 1, 'R9  a long forced chain still costs one stroke');
+    ok(!r.steps.some(x => x.type === 'belt-cap'), 'R9  the natural chain does not hit its safety cap');
+  }
+  {
+    const L = mkLevel([[1, 5, 5, 0, 2]]);
+    const s = st(L);
+    const r = go(s, 'east');
+    eq(s.player, { x: 3, y: 0 }, 'ICE  player slides over ice and stops on the first floor tile');
+    eq(r.steps.filter(x => x.type === 'move').length, 3, 'ICE  each committed slide hop is returned');
+    eq(s.strokes, 1, 'ICE  forced slide hops cost no additional strokes');
+  }
+  {
+    const L = mkLevel([[1, 5, 5, 3, 2]]);
+    const s = st(L);
+    go(s, 'east');
+    eq(s.player, { x: 2, y: 0 }, 'ICE  a wall stops the slide on its last valid ice cell');
+  }
+  {
+    const L = mkLevel([[1, 64, 31, 2]]);
+    const s = st(L);
+    go(s, 'east');
+    eq(s.player, { x: 1, y: 0 }, 'FORCE  a colour-blocked gate stops a conveyor hop safely');
+  }
+  {
+    const L = mkLevel([
+      [0, 0, 2],
+      [0, 0, 0],
+      [1, 5, 66]
+    ]);
+    const s = st(L);
+    go(s, 'east');
+    eq(s.player, { x: 2, y: 1 }, 'ICE  entering a north belt redirects the slide north');
+  }
+  {
+    /* The directed belt loop returns to the same cell and direction. */
+    const L = mkLevel([
+      [0, 67, 65, 2],
+      [1, 64, 66, 0]
+    ]);
+    const s = st(L);
+    const r = go(s, 'east');
+    eq(s.player, { x: 1, y: 0 }, 'R9  a conveyor loop terminates at its repeated state');
+    ok(r.steps.some(x => x.type === 'force-loop'), 'R9  loop termination is reported in the step list');
+    ok(r.steps.filter(x => x.type === 'move').length <= s.width * s.height * 4 + 1,
+      'R9  returned movement stays within the board-derived hop bound');
+    eq(s.strokes, 1, 'R9  loop termination keeps the initiating move to one stroke');
   }
 
   /* R10/R14 — pushing. */
@@ -249,10 +359,44 @@ function checkRules() {
     eq(s.crates[0][3].id, 71, 'R10  the crate advanced one tile');
   }
   {
+    const L = mkLevel([[2, 0, 0], [1, 71, 0]]);
+    const s = st(L);
+    eq(s.grid[0][1].name, 'floor', 'SOKO  an authored crate marker normalizes to floor terrain');
+    eq(s.crates[0][1].id, 71, 'SOKO  the crate remains in the movable entity layer');
+    go(s, 'east');
+    eq(s.crates[0][2].id, 71, 'SOKO  pushing moves the crate off its authored cell');
+    eq(s.grid[0][1].name, 'floor', 'SOKO  the vacated crate cell exposes floor');
+    go(s, 'west');
+    const reenter = go(s, 'east');
+    eq(reenter.stroke, true, 'SOKO  the player can traverse the crate\'s vacated cell');
+    eq(s.player, { x: 1, y: 0 }, 'SOKO  traversal ends in the vacated cell');
+  }
+  {
     const L = mkLevel([[2, 0], [1, 71]]);
     const s = st(L);
+    const before = {
+      player: { x: s.player.x, y: s.player.y },
+      crates: s.crates.map(row => row.map(crate => crate && crate.id)),
+      strokes: s.strokes
+    };
     const r = go(s, 'east');
     eq(r.stroke, false, 'R10  a crate with nowhere to go blocks the move');
+    eq(r.changed, false, 'SOKO  blocked push reports no state change');
+    eq(s.player, before.player, 'SOKO  blocked push leaves the player unchanged');
+    eq(s.crates.map(row => row.map(crate => crate && crate.id)), before.crates,
+      'SOKO  blocked push leaves every crate unchanged');
+    eq(s.strokes, before.strokes, 'SOKO  blocked push costs no stroke');
+  }
+  {
+    const L = mkLevel([[2, 0, 0], [1, 71, 3]]);
+    const s = st(L);
+    const beforeCrates = s.crates.map(row => row.map(crate => crate && crate.id));
+    const r = go(s, 'east');
+    eq(r.stroke, false, 'SOKO  a wall blocks a crate push');
+    eq(s.player, { x: 0, y: 0 }, 'SOKO  wall-blocked push leaves player in place');
+    eq(s.crates.map(row => row.map(crate => crate && crate.id)), beforeCrates,
+      'SOKO  wall-blocked push leaves crate in place');
+    eq(s.strokes, 0, 'SOKO  wall-blocked push costs no stroke');
   }
 
   /* T1 — the colour ring. */
@@ -300,23 +444,28 @@ function checkRules() {
     go(s, 'east');
     eq(s.P, 'gre', 'T3  a prism sets the player colour');
     eq(s.W, 'wht', 'T3  a prism does not touch the world colour');
+    go(s, 'west');
+    eq(s.P, 'gre', 'T3  walking away from a prism preserves player colour');
+    eq(s.W, 'wht', 'T3  walking away from a prism leaves world colour unchanged');
   }
 
   /* The win rule: P === W. */
   {
-    /* A level where the goal is reachable both matched and mismatched. */
+    /* A level where the goal is reached mismatched, then matched. */
     const L = mkLevel([
-      [2, 0, 0],
-      [0, 0, 0],
-      [1, 20, 11]
+      [0, 2],
+      [1, 11]
     ]);
     const s = st(L);
-    go(s, 'east'); eq(s.W, 'red', 'WIN  the dial fired');
-    eq(s.P, 'wht', 'WIN  the prism has not been touched yet');
     go(s, 'east'); eq(s.P, 'red', 'WIN  the prism fired');
-    eq(s.P, s.W, 'WIN  P and W match');
-    go(s, 'north'); go(s, 'north'); go(s, 'west'); go(s, 'west');
-    eq(s.won, true, 'WIN  standing on the goal with P === W wins');
+    go(s, 'north');
+    eq(s.player, { x: 1, y: 1 }, 'WIN  the player reached the goal');
+    eq(s.P, 'red', 'WIN  the player aura is red at the goal');
+    eq(s.W, 'wht', 'WIN  world colour is still white at the goal');
+    eq(s.won, false, 'WIN  a mismatched P/W pair on the goal does not clear it');
+    s.W = 'red';
+    act(s);
+    eq(s.won, true, 'WIN  matching P/W at the goal clears it');
   }
   {
     /* Only the colour should decide, not the route. */
@@ -398,6 +547,30 @@ function checkRules() {
     eq(s.player, { x: 2, y: 0 }, 'R11  the player walks through an unlocked phase wall');
   }
   {
+    /* Crate occupancy is a momentary target signal, distinct from receiver
+       ID 50's orthogonal crate-adjacency signal. */
+    const L = mkLevel([
+      [0, 0, 0, 0, 0, 0, 2],
+      [1, 70, 23, 24, 10, 26, 0]
+    ]);
+    const s = st(L);
+    const target1 = s.switches.find(sw => sw.inst.id === 23);
+    const target2 = s.switches.find(sw => sw.inst.id === 24);
+    eq(s.locked[0][4], true, 'TARGET  link-1 gate starts locked');
+    eq(s.locked[0][5], true, 'TARGET  link-2 gate starts locked');
+    eq(R.switchActive(s, target1), false, 'TARGET  adjacent crate does not activate a target');
+    go(s, 'east'); // push crate onto link-1 target
+    eq(R.switchActive(s, target1), true, 'TARGET  crate on target activates it');
+    eq(R.switchActive(s, target2), false, 'TARGET  crate beside another target does not activate it');
+    eq(s.locked[0][4], false, 'TARGET  occupied link-1 target opens its gate');
+    eq(s.locked[0][5], true, 'TARGET  link-1 occupancy does not open link-2 gate');
+    go(s, 'east'); // push onto link-2 target; player now stands on target 1
+    eq(R.switchActive(s, target1), false, 'TARGET  player occupancy does not activate a target');
+    eq(R.switchActive(s, target2), true, 'TARGET  crate on second target activates link 2');
+    eq(s.locked[0][4], true, 'TARGET  vacated momentary target relocks its gate');
+    eq(s.locked[0][5], false, 'TARGET  target activity opens only its matching link');
+  }
+  {
     /* defaultLocked:false inverts the default even when wired. */
     const L = mkLevel([[2, 0, 0], [1, 41, 10]], { 10: { link: 1, defaultLocked: false } });
     const s = st(L);
@@ -419,13 +592,17 @@ function checkRules() {
     /* row 1: start | white aura gate | red aura gate | goal */
     const L = mkLevel([[2, 0, 0, 0], [1, 30, 31, 0]]);
     const s = st(L);
+    s.W = 'red';
     go(s, 'east');
-    eq(s.player.x, 1, 'GATE  a white aura gate admits a white player');
+    eq(s.player.x, 1, 'GATE  a white aura gate admits a white player despite W=red');
     const r2 = go(s, 'east');
     eq(r2.stroke, false, 'GATE  the red aura gate refuses a white player');
     ok(r2.steps[0].reason === 'colour', 'GATE  the view is told it was a colour block');
     ok(r2.steps[0].need === 'red' && r2.steps[0].have === 'wht', 'GATE  the block reports what was needed');
-    go(s, 'east');   // still on the white gate; this would also be blocked
+    eq(s.player.x, 1, 'GATE  a rejected aura gate leaves player position unchanged');
+    eq(s.P, 'wht', 'GATE  a rejected aura gate leaves player aura unchanged');
+    eq(s.W, 'red', 'GATE  a rejected aura gate leaves world colour unchanged');
+    eq(s.strokes, 1, 'GATE  a rejected aura gate costs no stroke');
   }
   {
     /* A world gate reads W, not P. */
@@ -436,6 +613,21 @@ function checkRules() {
     const r = go(s, 'east');
     eq(r.stroke, false, 'GATE  the world gate refuses because W is white, even though P is red');
     ok(r.steps[0].have === 'wht', 'GATE  and it reports the world colour, not the player colour');
+    eq(s.player.x, 1, 'GATE  rejected world gate leaves player position unchanged');
+    eq(s.P, 'red', 'GATE  rejected world gate leaves player aura unchanged');
+    eq(s.W, 'wht', 'GATE  rejected world gate leaves world colour unchanged');
+    eq(s.strokes, 1, 'GATE  rejected world gate costs no stroke');
+  }
+  {
+    /* A matching world colour passes even when the player aura differs. */
+    const L = mkLevel([[2, 0, 0], [1, 20, 34]]);
+    const s = st(L);
+    s.P = 'gre';
+    go(s, 'east');
+    eq(s.W, 'red', 'GATE  the cycle dial sets W to red');
+    eq(s.P, 'gre', 'GATE  the cycle dial leaves the player aura green');
+    go(s, 'east');
+    eq(s.player.x, 2, 'GATE  a red world gate admits W=red despite P=gre');
   }
   {
     /* A wired gate is solid regardless of colour until its link is satisfied. */
@@ -551,6 +743,52 @@ function checkRules() {
     eq(s.switches[0].latched, false, 'R19  undo un-latches');
     eq(s.locked[0][2], true, 'R19  undo re-locks');
   }
+  {
+    const L = mkLevel([
+      [0, 0, 0, 0, 3, 3],
+      [1, 70, 23, 0, 10, 2]
+    ]);
+    const s = st(L);
+    const target = s.switches.find(sw => sw.inst.id === 23);
+    const beforePush = R.snapshot(s);
+    go(s, 'east');
+    const onTarget = R.snapshot(s);
+    eq(R.switchActive(s, target), true, 'TARGET UNDO  pushing onto target activates it');
+    eq(s.locked[0][4], false, 'TARGET UNDO  occupied target opens linked gate');
+
+    const clone = R.cloneState(s);
+    eq(R.switchActive(clone, clone.switches.find(sw => sw.inst.id === 23)), true,
+      'TARGET UNDO  clone retains crate-derived target activity');
+    eq(clone.locked[0][4], false, 'TARGET UNDO  clone retains derived gate state');
+    go(clone, 'east');
+    eq(R.switchActive(s, target), true, 'TARGET UNDO  moving cloned crate does not affect source state');
+
+    go(s, 'east');
+    eq(R.switchActive(s, target), false, 'TARGET UNDO  pushing off target deactivates it');
+    eq(s.locked[0][4], true, 'TARGET UNDO  vacated target closes linked gate');
+    R.restore(s, onTarget);
+    eq(s.crates[0][2].id, 70, 'TARGET UNDO  undoing off-target push restores crate onto target');
+    eq(R.switchActive(s, target), true, 'TARGET UNDO  restore derives active target again');
+    eq(s.locked[0][4], false, 'TARGET UNDO  restore reopens linked gate');
+    R.restore(s, beforePush);
+    eq(s.crates[0][1].id, 70, 'TARGET UNDO  undoing onto-target push restores crate start');
+    eq(R.switchActive(s, target), false, 'TARGET UNDO  restored empty target is inactive');
+    eq(s.locked[0][4], true, 'TARGET UNDO  restored initial gate is closed');
+
+    const search = SM.LEVELS.solve(L, { maxStates: 10000, maxDepth: 30 });
+    eq(search.status, 'solvable', 'TARGET BFS  solver finds route through target-controlled gate');
+    const solved = st(L);
+    let crossedOpenGate = false;
+    for (const action of search.path || []) {
+      R.resolveTurn(solved, action);
+      if (solved.player.x === 4 && solved.player.y === 0) {
+        crossedOpenGate = true;
+        eq(solved.locked[0][4], false, 'TARGET BFS  solver crosses gate while target is active');
+      }
+    }
+    eq(crossedOpenGate, true, 'TARGET BFS  solver path enters the linked gate');
+    eq(solved.won, true, 'TARGET BFS  replay reaches the level goal');
+  }
 
   /* Clone independence — the solver depends on this. */
   {
@@ -562,11 +800,27 @@ function checkRules() {
     eq(c.strokes, 0, 'R21  mutating the source does not touch the clone');
   }
 
-  /* master_void must be refused, not guessed. */
+  /* Master void toggles ID 4 between passage and a solid wall. */
   {
-    let msg = '';
-    try { mkLevel([[2, 0], [1, 45]]); } catch (e) { msg = e.message; }
-    ok(/NOT YET IMPLEMENTED/.test(msg), 'V5  master_void (45) raises a clear not-implemented error', msg);
+    const L = mkLevel([[1, 45, 4, 2]]);
+    const s = st(L);
+    eq(R.masterVoidActive(s), false, 'MASTER VOID  starts in passage mode');
+    go(s, 'east');
+    eq(R.masterVoidActive(s), true, 'MASTER VOID  entering tile 45 latches it on');
+    eq(R.isSolid(s, 2, 0), true, 'MASTER VOID  ID 4 is solid while the switch is on');
+    const clone = R.cloneState(s);
+    eq(R.masterVoidActive(clone), true, 'MASTER VOID  cloned state retains its switch state');
+    const blocked = go(s, 'east');
+    eq(blocked.stroke, false, 'MASTER VOID  active Void blocks movement at no stroke cost');
+    const snap = R.snapshot(s);
+    act(s);
+    eq(R.masterVoidActive(s), false, 'MASTER VOID  ACT switches passage back on');
+    eq(R.isSolid(s, 2, 0), false, 'MASTER VOID  ID 4 becomes passable again');
+    R.restore(s, snap);
+    eq(R.masterVoidActive(s), true, 'MASTER VOID  restoring a snapshot restores Void mode');
+    act(s); go(s, 'east'); go(s, 'east');
+    eq(s.won, true, 'MASTER VOID  passage can be restored to reach the goal');
+    eq(s.strokes, 4, 'MASTER VOID  the tutorial solution includes one ACT stroke');
   }
 }
 
@@ -575,10 +829,20 @@ function checkRules() {
 /* ---------------------------------------------------------------------- */
 
 function checkLevels() {
+  eq(SM.P_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  player palette remains the four existing colors');
+  eq(SM.W_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  world palette remains the four existing colors');
+  const unsupportedColour = {
+    name: 'unsupported color', num_level: 1,
+    levels: { level_1: { name: 'test', width: 3, height: 1, golf_score: 1,
+      overrides: { 11: { colour: 'yellow' } }, grid: [[1, 11, 2]] } }
+  };
+  ok(SM.LEVELS.validate(unsupportedColour, { solve: false }).problems.some(p => /yellow.*not a gameplay colour/i.test(p.message)),
+    'CHROMA  validator rejects yellow as a new gameplay color');
+
   const res = SM.LEVELS.boot({ solve: true });
   ok(res.problems.length === 0, 'V1-V11  the boot levels validate',
     res.problems.map(p => p.level + ': ' + p.message).join('\n      '));
-  ok(res.levels.length === 12, 'V3  twelve boot levels loaded, got ' + res.levels.length);
+  ok(res.levels.length === 13, 'V3  thirteen boot levels loaded, got ' + res.levels.length);
   ok(typeof res.levels[0].goalText === 'string', 'LEVEL  tutorial text stays distinct from the goal coordinate');
   ok(res.levels[0].goal && typeof res.levels[0].goal.x === 'number', 'LEVEL  goal coordinate remains available to the rules');
 
@@ -604,6 +868,7 @@ function checkLevels() {
 /* ---------------------------------------------------------------------- */
 
 console.log('--- Streuph\'s Maze: verification ---');
+checkTileRegistry();
 checkYaml();
 checkRules();
 const res = checkLevels();

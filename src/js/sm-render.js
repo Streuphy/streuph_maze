@@ -149,11 +149,12 @@
         var cell = this.board.children[y * w + x];
         var ctx = SM.RULES.describeTile(view, x, y);
         var html = SM.glyph(ctx.inst, ctx);
+        if (ctx.crate) html += SM.glyph(ctx.crate, ctx);
         if (cell.dataset.mark !== html) {
           cell.innerHTML = html ? wrapSvg(html) : '';
           cell.dataset.mark = html;
         }
-        var cls = 'cell' + (inst.solid === true || (inst.solid === 'locked' && ctx.locked) ? ' wall' : '');
+        var cls = 'cell' + (ctx.solid ? ' wall' : '');
         if (cell.className !== cls) cell.className = cls;
       }
     }

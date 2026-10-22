@@ -15,7 +15,7 @@
 #     tile id used in this level's grid.
 
 name: "Streuph's Maze"
-num_level: 12
+num_level: 13
 levels:
   level_1:
     name: "First steps"
@@ -199,3 +199,11 @@ levels:
       - [70, 0, 3, 11, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 3]
       - [0, 0, 3, 22, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 3]
       - [1, 41, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 3]
+  level_13:
+    name: "Void and passage"
+    goal: "Entering the master void switch makes Void tiles solid. Press ACT on the switch to restore passage, then reach the goal."
+    width: 4
+    height: 1
+    golf_score: 4
+    grid:
+      - [1, 45, 4, 2]

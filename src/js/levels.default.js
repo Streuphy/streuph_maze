@@ -35,7 +35,7 @@
 
   SM.DEFAULT_LEVELS = {
     name: "Streuph's Maze",
-    num_level: 12,
+    num_level: 13,
     levels: {
 
       /* ================================================================ */
@@ -262,6 +262,16 @@
           // row 1  A1 start
           [1, 41, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 3] // B1 link_key(1) | H1 phase_wall(1)
         ]
+      },
+
+      /* ================================================================ */
+      /* BAND 13 — the global Void / Pass switch                          */
+      /* ================================================================ */
+      level_13: {
+        name: 'Void and passage',
+        goal: 'Entering the master void switch makes Void tiles solid. Press ACT on the switch to restore passage, then reach the goal.',
+        width: 4, height: 1, golf_score: 4,
+        grid: [[1, 45, 4, 2]] // A1 start, B1 master_void, C1 void, D1 goal
       }
 
     }
