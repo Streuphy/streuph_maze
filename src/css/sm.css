@@ -241,6 +241,7 @@ aside {
 #tutorial .goal-name { font-weight: 600; letter-spacing: .04em; }
 
 /* Level list */
+.world-name { margin: 0 0 .35rem; color: var(--mute); font-size: .72rem; letter-spacing: .04em; }
 #levels { list-style: none; margin: 0; padding: 0; }
 #levels li { display: flex; }
 #levels button {

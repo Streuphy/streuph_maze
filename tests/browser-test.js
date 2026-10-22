@@ -110,6 +110,8 @@ function key(k) {
   ok(/eight display frames/.test(doc.querySelector('#tutorial').textContent), 'tutorial explains the eight-frame player animation');
   ok(/win_picture/.test(doc.querySelector('#tutorial').textContent), 'tutorial documents custom win pictures');
   ok(doc.querySelectorAll('#levels li').length === 13, 'the level list has 13 entries');
+  eq(doc.querySelector('#world-name').textContent, "Streuph's Maze",
+    'the built-in Prologue display name is shown');
   ok(doc.querySelectorAll('#levels button')[1].disabled, 'level 2 starts locked');
 
   /* ---- the codex is generated from SM.TILES ---------------------------- */
@@ -256,9 +258,91 @@ function key(k) {
   ].join('\n');
   ok(SM.io.applyText(mini), 'a valid pasted document is accepted');
   eq(SM.game.levels.length, 1, 'the level set was replaced');
+  eq(doc.querySelector('#world-name').textContent, 'Mini',
+    'the active world display name refreshes after paste');
   eq(doc.querySelectorAll('#board .cell').length, 4, 'the board was rebuilt to 2x2');
+
+  const beforeBadFile = {
+    keys: g().levels.map(l => l.key).join(','),
+    world: doc.querySelector('#world-name').textContent,
+    player: { x: g().state.player.x, y: g().state.player.y },
+    strokes: g().state.strokes,
+    cells: doc.querySelectorAll('#board .cell').length
+  };
+  const fileInput = doc.querySelector('#file');
+  function selectPackFile(text, filename) {
+    const file = new window.File([text], filename || 'world.levels.yaml', { type: 'text/plain' });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    fileInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  }
+  selectPackFile('name: "Broken upload"\nworld_id: broken-upload\nnum_level: 1\nlevels:\n' +
+    '  level_1:\n    name: "Bad tile"\n    width: 2\n    height: 2\n' +
+    '    grid:\n      - [1, 99]\n      - [0, 2]\n', 'broken.yaml');
+  await waitFor(() => /unknown tile id 99/.test(doc.querySelector('#diag').textContent));
+  eq(g().levels.map(l => l.key).join(','), beforeBadFile.keys,
+    'invalid picker file leaves the active level pack untouched');
+  eq(doc.querySelector('#world-name').textContent, beforeBadFile.world,
+    'invalid picker file leaves the active world name untouched');
+  eq(g().state.player, beforeBadFile.player, 'invalid picker file leaves the current board state untouched');
+  eq(g().state.strokes, beforeBadFile.strokes, 'invalid picker file leaves current strokes untouched');
+  eq(doc.querySelectorAll('#board .cell').length, beforeBadFile.cells,
+    'invalid picker file leaves board dimensions untouched');
+
+  const pickerPack = mini.replace('Mini', 'Picker World').replace('mini-pack', 'picker-world');
+  selectPackFile(pickerPack, 'picker-world.levels.yaml');
+  await waitFor(() => doc.querySelector('#world-name').textContent === 'Picker World');
+  eq(g().levels.length, 1, 'a valid picker file atomically replaces the loaded pack');
+  const droppedPack = pickerPack.replace('Picker World', 'Dropped World').replace('picker-world', 'dropped-world');
+  const dropEvent = new window.Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(dropEvent, 'dataTransfer', {
+    value: { files: [new window.File([droppedPack], 'dropped-world.yaml', { type: 'text/plain' })] }
+  });
+  doc.dispatchEvent(dropEvent);
+  await waitFor(() => doc.querySelector('#world-name').textContent === 'Dropped World');
+  eq(g().levels.length, 1, 'a valid drag-and-drop file replaces the active pack');
+
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   eq(SM.game.levels.length, 13, 'back to the built-in set');
+  eq(doc.querySelector('#world-name').textContent, "Streuph's Maze",
+    'returning to built-in levels restores the Prologue name');
+
+  SM.STORE.reset();
+  const directPack = [
+    'name: "Direct Selection World"',
+    'world_id: direct-selection-world',
+    'num_level: 2',
+    'levels:',
+    '  level_1:',
+    '    name: "First"',
+    '    width: 2',
+    '    height: 2',
+    '    golf_score: 2',
+    '    grid:',
+    '      - [0, 2]',
+    '      - [1, 0]',
+    '  level_2:',
+    '    name: "Uncleared Later Level"',
+    '    width: 2',
+    '    height: 2',
+    '    golf_score: 1',
+    '    grid:',
+    '      - [2, 0]',
+    '      - [1, 0]'
+  ].join('\n');
+  ok(SM.io.applyText(directPack), 'the two-level world pack is accepted');
+  eq(SM.STORE.entry('level_2').cleared, undefined, 'the later test level has no completion record');
+  const laterLevelButton = doc.querySelectorAll('#levels button')[1];
+  ok(!laterLevelButton.disabled, 'an uncleared world-pack level is directly selectable');
+  ok(/Uncleared Later Level/.test(laterLevelButton.textContent),
+    'world-pack selector uses the level display name');
+  laterLevelButton.click();
+  eq(g().state.key, 'level_2', 'direct selection loads the uncleared later level');
+  eq(doc.querySelector('#world-name').textContent, 'Direct Selection World',
+    'the selected level remains under its active world name');
+  doc.querySelector('#btn-reset-levels').click();
+  eq(g().levels.length, 13, 'the built-in Prologue remains available after a world pack');
+  eq(doc.querySelector('#world-name').textContent, "Streuph's Maze",
+    'the built-in button returns from the world pack to the Prologue');
 
   /* ---- Sokoban crate/terrain composition ------------------------------- */
   const sokoban = [

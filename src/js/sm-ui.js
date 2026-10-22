@@ -44,6 +44,7 @@
     this.levels = SM.game.levels;
     this.el = {
       levels:   this.root.querySelector('#levels'),
+      worldName: this.root.querySelector('#world-name'),
       tutorial: this.root.querySelector('#tutorial'),
       codex:    this.root.querySelector('#codex'),
       hud:      this.root.querySelector('#hud'),
@@ -79,6 +80,7 @@
   /* ------------------------------------------------------------------ */
 
   Game.prototype.unlocked = function (i) {
+    if (this.levels[i] && this.levels[i].worldId !== 'prologue') return true;
     if (i === 0) return true;
     var entry = SM.STORE.entry(this.levels[i - 1].key);
     return !!entry.cleared;
@@ -440,6 +442,10 @@
   Game.prototype.syncLevels = function () {
     var self = this;
     var ul = this.el.levels;
+    if (this.el.worldName) {
+      this.el.worldName.textContent = this.levels[0] && this.levels[0].worldName
+        ? this.levels[0].worldName : SM.DEFAULT_LEVELS.name;
+    }
     ul.textContent = '';
     this.levels.forEach(function (lv, i) {
       var li = document.createElement('li');
