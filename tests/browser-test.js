@@ -221,15 +221,27 @@ function key(k) {
     'a document with too few levels is rejected and the live levels survive');
   ok(doc.querySelector('#diag').textContent.length > 0, 'the diagnostic panel explains the rejection');
 
-  SM.io.applyText('name: "x"\nnum_level: 1\nlevels:\n  level_1:\n    name: "y"\n    width: 2\n    height: 2\n    grid:\n      - [1, 99]\n      - [0, 2]\n');
+  SM.io.applyText('name: "x"\nworld_id: invalid-test\nnum_level: 1\nlevels:\n  level_1:\n    name: "y"\n    width: 2\n    height: 2\n    grid:\n      - [1, 99]\n      - [0, 2]\n');
   eq(SM.game.levels.map(l => l.key).join(','), before,
     'an unknown tile id is rejected and the live levels survive');
   ok(/unknown tile id 99/.test(doc.querySelector('#diag').textContent),
     'the diagnostic names the offending id', doc.querySelector('#diag').textContent.slice(0, 200));
+  ok(/invalid-test/.test(doc.querySelector('#diag').textContent) &&
+     /level_1/.test(doc.querySelector('#diag').textContent) &&
+     /tile id 99 at B2/.test(doc.querySelector('#diag').textContent) &&
+     /registered, implemented tile ID/.test(doc.querySelector('#diag').textContent),
+    'semantic pack errors identify world, level, cell and a correction');
+
+  SM.io.applyText('name: "Malformed"\nworld_id: malformed\nnum_level: 1\nlevels:\n  level_1:\n    name: "bad"\n    width: [1\n');
+  ok(/line 7, column \d+/.test(doc.querySelector('#diag .where').textContent),
+    'YAML syntax diagnostics preserve line and column');
+  eq(SM.game.levels.map(l => l.key).join(','), before,
+    'malformed YAML leaves the active levels untouched');
 
   /* ---- hot reload that DOES work --------------------------------------- */
   const mini = [
     'name: "Mini"',
+    'world_id: mini-pack',
     'num_level: 1',
     'levels:',
     '  level_1:',

@@ -176,6 +176,10 @@ function checkYaml() {
   throws(() => Y('---\na: 1\n'), 'P7  multi-document streams rejected');
   throws(() => Y('a: 1\n\tb: 2\n'), 'P4  tab indentation rejected');
   throws(() => Y('a: [1, 2\n'), 'P2  unterminated flow seq rejected');
+  let syntaxError = null;
+  try { Y('a: [1, 2\n'); } catch (e) { syntaxError = e; }
+  ok(!!syntaxError && syntaxError.line === 1 && syntaxError.column > 0,
+    'P2  YAML syntax errors retain line and column coordinates');
   throws(() => Y('a: 1\n  b: 2\n'), 'P4  bad indentation rejected');
   throws(() => Y('- a: 1\n'), 'P2  inline mapping in a seq rejected with guidance');
 
@@ -197,14 +201,14 @@ function checkYaml() {
   ok(pictureResult.ok, 'WIN  built-in levels accept the 250x250 picture');
   eq(pictureResult.levels[1].winPicture, winPicture, 'WIN  validated image is retained on normalized level');
   const invalidPictureDoc = {
-    name: 'invalid picture', num_level: 1,
+    name: 'invalid picture', world_id: 'invalid-picture', num_level: 1,
     levels: { level_1: { name: 'test', width: 2, height: 1, golf_score: 1,
       win_picture: 'data:image/png;base64,AAAA', grid: [[1, 2]] } }
   };
   ok(SM.LEVELS.validate(invalidPictureDoc, { solve: false }).problems.some(p => /not a PNG/.test(p.message)),
     'WIN  invalid PNG signature is rejected');
   const wrongSizeDoc = {
-    name: 'wrong picture size', num_level: 1,
+    name: 'wrong picture size', world_id: 'wrong-picture-size', num_level: 1,
     levels: { level_1: { name: 'test', width: 2, height: 1, golf_score: 1,
       win_picture: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX2UAAAAASUVORK5CYII=',
       grid: [[1, 2]] } }
@@ -831,8 +835,86 @@ function checkRules() {
 function checkLevels() {
   eq(SM.P_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  player palette remains the four existing colors');
   eq(SM.W_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  world palette remains the four existing colors');
+  const smallLevel = { name: 'One step', width: 2, height: 2,
+    golf_score: 1, grid: [[0, 2], [1, 0]] };
+  const worldDoc = {
+    name: 'Test World', world_id: 'test-world', num_level: 1,
+    levels: { level_1: smallLevel }
+  };
+  const validWorld = SM.LEVELS.validate(worldDoc, { solve: false });
+  ok(validWorld.ok, 'PACK  a named world with stable identity validates',
+    validWorld.problems.map(p => p.message).join(' | '));
+  eq(validWorld.levels[0].worldId, 'test-world', 'PACK  normalized levels retain stable world identity');
+  eq(validWorld.levels[0].worldName, 'Test World', 'PACK  normalized levels retain display name');
+  const unknownTileWorld = SM.LEVELS.validate({
+    name: 'Broken World', world_id: 'broken-world', num_level: 1,
+    levels: { level_1: { name: 'Bad cell', width: 2, height: 2, grid: [[1, 99], [0, 2]] } }
+  }, { solve: false });
+  const unknownTileMessage = unknownTileWorld.problems[0] && unknownTileWorld.problems[0].message;
+  ok(/World "Broken World" \(broken-world\), level_1:/.test(unknownTileMessage || '') &&
+     /tile id 99 at B2/.test(unknownTileMessage || '') && /registered, implemented tile ID/.test(unknownTileMessage || ''),
+    'PACK  semantic tile diagnostics include world, level, ID, coordinate, and corrective action');
+
+  const missingIdentity = SM.LEVELS.validate({
+    name: 'Missing identity', num_level: 1, levels: { level_1: smallLevel }
+  }, { solve: false });
+  ok(missingIdentity.problems.some(p => /world_id.*required/i.test(p.message)),
+    'PACK  external world pack without stable identity is rejected');
+  const malformedIdentity = SM.LEVELS.validate({
+    name: 'Bad identity', world_id: 'Not a slug', num_level: 1, levels: { level_1: smallLevel }
+  }, { solve: false });
+  ok(malformedIdentity.problems.some(p => /world_id.*lowercase slug/i.test(p.message)),
+    'PACK  malformed world identity is rejected');
+
+  const wrongCount = SM.LEVELS.validate({
+    name: 'Count mismatch', world_id: 'count-mismatch', num_level: 2,
+    levels: { level_1: smallLevel }
+  }, { solve: false });
+  ok(wrongCount.problems.some(p => /num_level is 2.*contains 1 level record/i.test(p.message)),
+    'PACK  declared level count must match records');
+
+  const badKey = SM.LEVELS.validate({
+    name: 'Bad key', world_id: 'bad-key', num_level: 1,
+    levels: { first: smallLevel }
+  }, { solve: false });
+  ok(badKey.problems.some(p => /not a level key/.test(p.message)),
+    'PACK  invalid level key is rejected');
+  const outOfOrder = SM.LEVELS.validate({
+    name: 'Out of order', world_id: 'out-of-order', num_level: 2,
+    levels: { level_2: smallLevel, level_1: smallLevel }
+  }, { solve: false });
+  ok(outOfOrder.problems.some(p => /contiguous numeric order/.test(p.message)),
+    'PACK  out-of-order level keys are rejected');
+  throws(() => SM.parseYAML(
+    'name: "Duplicate key"\nworld_id: duplicate-key\nnum_level: 2\nlevels:\n' +
+    '  level_1: {}\n  level_1: {}\n'),
+  'PACK  duplicate YAML level keys are rejected by the parser');
+
+  const tooWideGrid = new Array(17).fill(0);
+  tooWideGrid[0] = 1; tooWideGrid[16] = 2;
+  const tooWide = SM.LEVELS.validate({
+    name: 'Too wide', world_id: 'too-wide', num_level: 1,
+    levels: { level_1: { name: 'Wide', width: 17, height: 1, grid: [tooWideGrid] } }
+  }, { solve: false });
+  ok(tooWide.problems.some(p => /width 17 is out of range/.test(p.message)),
+    'PACK  grid wider than 16 columns is rejected');
+  const tooTallGrid = Array.from({ length: 10 }, () => [0, 0]);
+  tooTallGrid[0][1] = 2; tooTallGrid[9][0] = 1;
+  const tooTall = SM.LEVELS.validate({
+    name: 'Too tall', world_id: 'too-tall', num_level: 1,
+    levels: { level_1: { name: 'Tall', width: 2, height: 10, grid: tooTallGrid } }
+  }, { solve: false });
+  ok(tooTall.problems.some(p => /height 10 is out of range/.test(p.message)),
+    'PACK  grid taller than 9 rows is rejected');
+  const dimensionMismatch = SM.LEVELS.validate({
+    name: 'Dimension mismatch', world_id: 'dimension-mismatch', num_level: 1,
+    levels: { level_1: { name: 'Mismatch', width: 2, height: 1, grid: [[1, 0, 2]] } }
+  }, { solve: false });
+  ok(dimensionMismatch.problems.some(p => /width is declared as 2 but the rows are 3/.test(p.message)),
+    'PACK  declared dimensions must match grid dimensions');
+
   const unsupportedColour = {
-    name: 'unsupported color', num_level: 1,
+    name: 'unsupported color', world_id: 'unsupported-color', num_level: 1,
     levels: { level_1: { name: 'test', width: 3, height: 1, golf_score: 1,
       overrides: { 11: { colour: 'yellow' } }, grid: [[1, 11, 2]] } }
   };
@@ -843,6 +925,7 @@ function checkLevels() {
   ok(res.problems.length === 0, 'V1-V11  the boot levels validate',
     res.problems.map(p => p.level + ': ' + p.message).join('\n      '));
   ok(res.levels.length === 13, 'V3  thirteen boot levels loaded, got ' + res.levels.length);
+  eq(res.levels[0].worldId, 'prologue', 'PACK  legacy Prologue gets its stable internal identity');
   ok(typeof res.levels[0].goalText === 'string', 'LEVEL  tutorial text stays distinct from the goal coordinate');
   ok(res.levels[0].goal && typeof res.levels[0].goal.x === 'number', 'LEVEL  goal coordinate remains available to the rules');
 

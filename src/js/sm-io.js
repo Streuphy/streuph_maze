@@ -126,7 +126,7 @@
     try {
       doc = SM.parseYAML(text);
     } catch (e) {
-      this.report([{ level: 'levels.yaml', line: e.line || 0,
+      this.report([{ level: 'levels.yaml', line: e.line || 0, column: e.column || 0,
         message: e.reason || e.message }], true);
       return false;
     }
@@ -179,9 +179,13 @@
       return;
     }
     box.innerHTML = list.map(function (d) {
+      var where = [];
+      if (d.world) where.push('world ' + d.world + (d.worldId ? ' (' + d.worldId + ')' : ''));
+      if (d.level) where.push(d.level);
+      if (d.line) where.push('line ' + d.line + (d.column ? ', column ' + d.column : ''));
       return '<div class="d' + (hard ? '' : ' warn') + '">' +
         escapeHtml(d.message) +
-        '<div class="where">' + escapeHtml(d.level) + (d.line ? ' · line ' + d.line : '') + '</div>' +
+        '<div class="where">' + escapeHtml(where.join(' · ')) + '</div>' +
         '</div>';
     }).join('');
   };

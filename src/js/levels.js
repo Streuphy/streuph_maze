@@ -114,6 +114,18 @@
         'the header key "name" is required and must be a non-empty string'));
     }
 
+    var worldId = null;
+    if (doc.world_id === undefined && SM.DEFAULT_LEVELS && doc.name === SM.DEFAULT_LEVELS.name) {
+      // Keep the shipped Prologue's long-standing document shape intact while
+      // giving it a stable identity in normalized runtime levels.
+      worldId = 'prologue';
+    } else if (typeof doc.world_id !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(doc.world_id)) {
+      problems.push(diag('(document)', 1,
+        '"world_id" is required for world packs and must be a lowercase slug (letters, digits, hyphens)'));
+    } else {
+      worldId = doc.world_id;
+    }
+
     var levelsObj = doc.levels;
     if (!levelsObj || typeof levelsObj !== 'object' || Array.isArray(levelsObj)) {
       problems.push(diag('(document)', 0,
@@ -121,11 +133,20 @@
       return finish(out, diagnostics, problems);
     }
 
-    var levelKeys = Object.keys(levelsObj).filter(function (k) { return /^level_\d+$/.test(k); });
+    var inputLevelKeys = Object.keys(levelsObj).filter(function (k) { return /^level_\d+$/.test(k); });
+    var levelKeys = inputLevelKeys.slice();
     var strayKeys = Object.keys(levelsObj).filter(function (k) { return !/^level_\d+$/.test(k); });
     levelKeys.sort(function (a, b) {
       return parseInt(a.slice(6), 10) - parseInt(b.slice(6), 10);
     });
+
+    for (var order = 0; order < inputLevelKeys.length; order++) {
+      if (inputLevelKeys[order] !== levelKeys[order]) {
+        problems.push(diag(inputLevelKeys[order], 0,
+          'V7: level keys must be listed in contiguous numeric order (level_1, level_2, ...)'));
+        break;
+      }
+    }
 
     /* V7 — contiguous, in file order. */
     for (var n = 0; n < levelKeys.length; n++) {
@@ -145,10 +166,10 @@
     /* V1 — num_level must agree. */
     if (typeof doc.num_level !== 'number' || !isFinite(doc.num_level)) {
       problems.push(diag('(document)', 0, '"num_level" is required and must be a number'));
-    } else if (doc.num_level !== levelKeys.length) {
+    } else if (doc.num_level !== Object.keys(levelsObj).length) {
       problems.push(diag('(document)', 0,
         'V1: num_level is ' + doc.num_level + ' but the document contains ' +
-        levelKeys.length + ' level_ key(s)'));
+        Object.keys(levelsObj).length + ' level record(s)'));
     }
 
     if (problems.length) return finish(out, diagnostics, problems);
@@ -156,9 +177,19 @@
     var seenGoalText = {};
     for (var i = 0; i < levelKeys.length; i++) {
       var key = levelKeys[i];
+      var diagnosticsBeforeLevel = diagnostics.length;
       var res = validateLevel(key, levelsObj[key], diagnostics, seenGoalText, opts);
-      if (res.error) problems.push(res.error);
-      else out.push(res.level);
+      if (res.error) {
+        problems.push(addWorldContext(res.error, doc.name, worldId, key));
+      }
+      else {
+        res.level.worldId = worldId;
+        res.level.worldName = doc.name;
+        out.push(res.level);
+      }
+      for (var di = diagnosticsBeforeLevel; di < diagnostics.length; di++) {
+        addWorldContext(diagnostics[di], doc.name, worldId, key);
+      }
     }
 
     return finish(out, diagnostics, problems);
@@ -171,6 +202,16 @@
       problems: problems,
       ok: problems.length === 0
     };
+  }
+
+  function addWorldContext(diagnostic, worldName, worldId, levelKey) {
+    diagnostic.world = worldName || null;
+    diagnostic.worldId = worldId || null;
+    if (levelKey) {
+      diagnostic.message = 'World "' + worldName + '" (' + (worldId || 'unknown id') + '), ' +
+        levelKey + ': ' + diagnostic.message;
+    }
+    return diagnostic;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -248,7 +289,9 @@
         }
         var def = SM.getTile(id);
         if (!def) {
-          return { error: diag(key, 0, 'V5: unknown tile id ' + id + ' at ' + label) };
+          return { error: diag(key, 0,
+            'V5: unknown tile id ' + id + ' at ' + label +
+            '. Replace it with a registered, implemented tile ID from the tile catalogue.') };
         }
         if (def.implemented === false) {
           return { error: diag(key, 0,
