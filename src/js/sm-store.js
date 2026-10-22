@@ -13,7 +13,9 @@
   var SM = global.SM || (global.SM = {});
 
   var KEY = 'streuphs-maze/progress/v1';
-  var SCHEMA = 1;
+  var SCHEMA = 2;
+  var LEGACY_SCHEMA = 1;
+  var PROLOGUE_ID = 'prologue';
 
   var memory = null;      // the always-present fallback
   var backend = null;     // 'localStorage' | 'memory'
@@ -34,7 +36,49 @@
   backend = probe() ? 'localStorage' : 'memory';
 
   function blank() {
-    return { schema: SCHEMA, levels: {}, lastLevel: null };
+    return { schema: SCHEMA, levels: {}, lastLevels: {} };
+  }
+
+  function progressKey(worldId, levelKey) {
+    return (worldId || PROLOGUE_ID) + '::' + levelKey;
+  }
+
+  function qualified(key) {
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*::level_\d+$/.test(key);
+  }
+
+  function mergeEntry(target, source) {
+    target.unlocked = !!(target.unlocked || source.unlocked);
+    if (source.cleared) target.cleared = true;
+    if (source.best && (!target.best || source.best.strokes < target.best.strokes)) {
+      target.best = source.best;
+    }
+    target.seenTiles = target.seenTiles || [];
+    (source.seenTiles || []).forEach(function (id) {
+      if (target.seenTiles.indexOf(id) === -1) target.seenTiles.push(id);
+    });
+  }
+
+  function migrate(obj) {
+    var next = blank();
+    Object.keys(obj.levels || {}).forEach(function (key) {
+      var destination = qualified(key) ? key : progressKey(PROLOGUE_ID, key);
+      var entry = next.levels[destination] || (next.levels[destination] = {});
+      mergeEntry(entry, obj.levels[key] || {});
+    });
+
+    if (obj.lastLevels && typeof obj.lastLevels === 'object') {
+      Object.keys(obj.lastLevels).forEach(function (worldId) {
+        if (typeof obj.lastLevels[worldId] === 'string') {
+          next.lastLevels[worldId] = obj.lastLevels[worldId];
+        }
+      });
+    }
+    if (typeof obj.lastLevel === 'string' && !next.lastLevels[PROLOGUE_ID]) {
+      var last = obj.lastLevel;
+      next.lastLevels[PROLOGUE_ID] = qualified(last) ? last.slice(last.indexOf('::') + 2) : last;
+    }
+    return next;
   }
 
   function read() {
@@ -43,7 +87,14 @@
       var raw = global.localStorage.getItem(KEY);
       if (!raw) return blank();
       var obj = JSON.parse(raw);
-      if (!obj || obj.schema !== SCHEMA || typeof obj.levels !== 'object') return blank();
+      if (!obj || typeof obj.levels !== 'object') return blank();
+      if (obj.schema === LEGACY_SCHEMA) {
+        obj = migrate(obj);
+        write(obj);
+        return obj;
+      }
+      if (obj.schema !== SCHEMA) return blank();
+      if (!obj.lastLevels || typeof obj.lastLevels !== 'object') obj.lastLevels = {};
       return obj;
     } catch (e) {
       return blank();
@@ -63,9 +114,10 @@
     }
   }
 
-  function ensure(prog, key) {
-    if (!prog.levels[key]) prog.levels[key] = { unlocked: false, best: null, seenTiles: [] };
-    var e = prog.levels[key];
+  function ensure(prog, key, worldId) {
+    var id = progressKey(worldId, key);
+    if (!prog.levels[id]) prog.levels[id] = { unlocked: false, best: null, seenTiles: [] };
+    var e = prog.levels[id];
     if (!e.seenTiles) e.seenTiles = [];
     return e;
   }
@@ -77,29 +129,29 @@
 
     all: function () { return read(); },
 
-    entry: function (key) {
+    entry: function (key, worldId) {
       var p = read();
-      return p.levels[key] || { unlocked: false, best: null, seenTiles: [] };
+      return p.levels[progressKey(worldId, key)] || { unlocked: false, best: null, seenTiles: [] };
     },
 
     /** Mark a level finished. Unlocks the NEXT level (G3, gating order = file order). */
-    complete: function (key, nextKey, strokes, turns) {
+    complete: function (key, nextKey, strokes, turns, worldId) {
       var p = read();
-      var e = ensure(p, key);
+      var e = ensure(p, key, worldId);
       e.unlocked = true;
       e.cleared = true;
       if (!e.best || strokes < e.best.strokes) e.best = { strokes: strokes, turns: turns };
       if (nextKey) {
-        var n = ensure(p, nextKey);
+        var n = ensure(p, nextKey, worldId);
         n.unlocked = true;
       }
       return write(p);
     },
 
     /** Record which tile ids the player has stood on, for the codex (W2). */
-    noteTiles: function (key, ids) {
+    noteTiles: function (key, ids, worldId) {
       var p = read();
-      var e = ensure(p, key);
+      var e = ensure(p, key, worldId);
       var changed = false;
       for (var i = 0; i < ids.length; i++) {
         if (e.seenTiles.indexOf(ids[i]) === -1) { e.seenTiles.push(ids[i]); changed = true; }
@@ -108,17 +160,19 @@
       return changed;
     },
 
-    lastLevel: function () { return read().lastLevel; },
-    setLastLevel: function (key) {
+    lastLevel: function (worldId) { return read().lastLevels[worldId || PROLOGUE_ID] || null; },
+    setLastLevel: function (key, worldId) {
       var p = read();
-      p.lastLevel = key;
+      worldId = worldId || PROLOGUE_ID;
+      if (!p.lastLevels) p.lastLevels = {};
+      p.lastLevels[worldId] = key;
       write(p);
     },
 
-    isUnlocked: function (key, index) {
+    isUnlocked: function (key, index, worldId) {
       var p = read();
       if (index === 0) return true;                 // the first level is always open
-      if (p.levels[key] && p.levels[key].unlocked) return true;
+      if (p.levels[progressKey(worldId, key)] && p.levels[progressKey(worldId, key)].unlocked) return true;
       // Fall back to "every earlier level is cleared".
       var order = Object.keys(p.levels).sort();
       return false;
@@ -145,13 +199,13 @@
         throw new Error('that is not valid JSON');
       }
       if (!obj || typeof obj !== 'object') throw new Error('expected a progress object');
-      if (obj.schema !== SCHEMA) {
-        throw new Error('progress schema is ' + JSON.stringify(obj.schema) + ', expected ' + SCHEMA);
-      }
+       if (obj.schema !== SCHEMA && obj.schema !== LEGACY_SCHEMA) {
+         throw new Error('progress schema is ' + JSON.stringify(obj.schema) + ', expected ' + SCHEMA + ' or legacy ' + LEGACY_SCHEMA);
+       }
       if (!obj.levels || typeof obj.levels !== 'object') {
         throw new Error('the object has no "levels" map');
       }
-      return write(obj);
+       return write(obj.schema === LEGACY_SCHEMA ? migrate(obj) : obj);
     }
   };
 

@@ -82,7 +82,7 @@
   Game.prototype.unlocked = function (i) {
     if (this.levels[i] && this.levels[i].worldId !== 'prologue') return true;
     if (i === 0) return true;
-    var entry = SM.STORE.entry(this.levels[i - 1].key);
+    var entry = SM.STORE.entry(this.levels[i - 1].key, this.levels[i - 1].worldId);
     return !!entry.cleared;
   };
 
@@ -95,7 +95,7 @@
     this.history = [];
     this.overParSaid = false;
     this.r.build(this.state);
-    SM.STORE.setLastLevel(level.key);
+    SM.STORE.setLastLevel(level.key, level.worldId);
     this.syncAll();
     this.r.say(level.goalText || '');
   };
@@ -157,7 +157,7 @@
   Game.prototype.afterTurn = function () {
     var s = this.state;
     var level = this.state.level;
-    SM.STORE.noteTiles(level.key, Object.keys(s.seen).map(Number));
+    SM.STORE.noteTiles(level.key, Object.keys(s.seen).map(Number), level.worldId);
     this.syncCodex();
     this.syncHud();
 
@@ -174,7 +174,8 @@
     var level = this.state.level;
     var i = this.index;
     var strokes = this.state.strokes;
-    SM.STORE.complete(level.key, this.levels[i + 1] && this.levels[i + 1].key, strokes, this.state.turns);
+    SM.STORE.complete(level.key, this.levels[i + 1] && this.levels[i + 1].key,
+      strokes, this.state.turns, level.worldId);
 
     var par = level.par;
     var cls = strokes <= par ? 'under' : strokes === par + 1 ? 'over' : 'over';
@@ -453,7 +454,7 @@
       b.type = 'button';
       b.disabled = !self.unlocked(i);
       b.setAttribute('aria-current', i === self.index ? 'true' : 'false');
-      var entry = SM.STORE.entry(lv.key);
+      var entry = SM.STORE.entry(lv.key, lv.worldId);
       b.innerHTML = '<span class="n">' + (i + 1) + '</span>' +
         '<span class="nm">' + escapeHtml(lv.name) + '</span>' +
         '<span class="sc"></span>';
@@ -478,7 +479,7 @@
     this.el.strokes.textContent = s.strokes;
     this.el.par.textContent = s.level.par;
     this.el.moves.textContent = s.turns;
-    var e = SM.STORE.entry(s.level.key);
+    var e = SM.STORE.entry(s.level.key, s.level.worldId);
     this.el.best.textContent = e.best ? e.best.strokes : '—';
     this.root.querySelector('#btn-undo').disabled = this.history.length === 0;
   };
