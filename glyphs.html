@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streuph Maze - Galerie Exhaustive par Scan d'IDs (1-256)</title>
+    <title>Streuph Maze - Galerie des Glyphs (ID 1-256)</title>
     <link rel="stylesheet" href="src/css/sm.css">
     <style>
         :root {
@@ -32,7 +32,7 @@
 
         .gallery-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 15px;
         }
 
@@ -46,7 +46,7 @@
             align-items: flex-start;
         }
 
-        /* Conteneur 1x1 Field aligné sur le rendu principal */
+        /* Conteneur 1x1 Field identique au moteur de index.html */
         .field-1x1 {
             width: 48px;
             height: 48px;
@@ -58,6 +58,7 @@
             justify-content: center;
             flex-shrink: 0;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
+            position: relative;
         }
 
         .glyph-info {
@@ -100,15 +101,15 @@
 <body>
     <div id="app">
         <header>
-            <h2>🧭 STREUPH MAZE — GALERIE PAR SCAN D'IDS (1 - 256)</h2>
-            <p style="color: var(--text-muted); font-size: 0.8rem;">Balayage séquentiel et résolution directe via le scope global du moteur[span_0](start_span)[span_0](end_span)</p>
+            <h2>🧭 STREUPH MAZE — GALERIE DES GLYPHS (ID 1 - 256)</h2>
+            <p style="color: var(--text-muted); font-size: 0.8rem;">Affichage séquentiel par ID croissant avec gestion des exceptions (inspiré de index.html)[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)</p>
         </header>
 
-        <div id="status" style="text-align: center; color: var(--text-muted); margin-bottom: 20px;">Scan des IDs 1 à 256 en cours...</div>
+        <div id="status" style="text-align: center; color: var(--text-muted); margin-bottom: 20px;">Chargement des registres du moteur...</div>
         <main id="gallery-viewport" class="gallery-grid"></main>
     </div>
 
-    <!-- Chargement des scripts globaux du moteur -->
+    <!-- Chargement des scripts globaux du moteur aligné sur index.html -->
     <script src="src/js/tiles.js"></script>
     <script src="src/js/sm-glyphs.js"></script>
     <script src="src/js/sm-entities.js"></script>
@@ -120,87 +121,111 @@
             const viewport = document.getElementById('gallery-viewport');
             const statusEl = document.getElementById('status');
             
-            let renderedCount = 0;
             viewport.innerHTML = '';
+            let displayedCount = 0;
 
-            // Fonction de résolution robuste par ID (1 à 256)
-            function resolveTileEntity(id) {
-                const candidateNamespaces = [
-                    window.Tiles, window.Glyphs, window.Entities, 
-                    window.SM?.Tiles, window.SM?.Glyphs, window.SM
-                ];
+            // Fonction de résolution sécurisée par ID
+            function getTileDataSafe(id) {
+                try {
+                    const registries = [
+                        window.Tiles, window.Glyphs, window.Entities, 
+                        window.SM?.Tiles, window.SM?.Glyphs, window.SM
+                    ];
 
-                for (const ns of candidateNamespaces) {
-                    if (!ns) continue;
-                    if (ns[id]) return ns[id];
-                    for (const val of Object.values(ns)) {
-                        if (val && typeof val === 'object' && (val.id === id || val.index === id)) {
-                            return val;
+                    for (const reg of registries) {
+                        if (!reg) continue;
+                        if (reg[id]) return reg[id];
+                        for (const val of Object.values(reg)) {
+                            if (val && typeof val === 'object' && (val.id === id || val.index === id)) {
+                                return val;
+                            }
                         }
                     }
-                }
 
-                if (typeof window.getTile === 'function') {
-                    try { const res = window.getTile(id); if (res) return res; } catch(e){}
-                }
+                    if (typeof window.getTile === 'function') {
+                        const tile = window.getTile(id);
+                        if (tile) return tile;
+                    }
 
-                return null;
+                    return null;
+                } catch (err) {
+                    return null;
+                }
             }
 
-            // Balayage séquentiel de 1 à 256 par scan d'ID
+            // Itération séquentielle stricte par ordre d'ID croissant de 1 à 256
             for (let id = 1; id <= 256; id++) {
-                const entity = resolveTileEntity(id);
-                if (!entity) continue; // Ignore les IDs non implémentés
+                try {
+                    const tile = getTileDataSafe(id);
+                    if (!tile) continue; // Skip silencieux des IDs non implémentés
 
-                renderedCount++;
-                const card = document.createElement('div');
-                card.className = 'glyph-card';
+                    displayedCount++;
+                    const card = document.createElement('div');
+                    card.className = 'glyph-card';
 
-                const fieldBox = document.createElement('div');
-                fieldBox.className = 'field-1x1';
+                    const fieldBox = document.createElement('div');
+                    fieldBox.className = 'field-1x1';
 
-                if (entity.svg && typeof entity.svg === 'string') {
-                    fieldBox.innerHTML = entity.svg;
-                } else if (entity.char || entity.symbol) {
-                    fieldBox.innerHTML = `<span style="font-size:1.6rem; color:#fff;">${entity.char || entity.symbol}</span>`;
-                } else {
-                    fieldBox.innerHTML = `<span style="font-size:0.75rem; color:#38bdf8;">#${id}</span>`;
+                    let rendered = false;
+                    if (typeof window.renderTile === 'function') {
+                        try {
+                            const res = window.renderTile(id, tile);
+                            if (res instanceof Element) {
+                                fieldBox.appendChild(res);
+                                rendered = true;
+                            }
+                        } catch (e) {}
+                    }
+
+                    if (!rendered) {
+                        if (tile.svg && typeof tile.svg === 'string') {
+                            fieldBox.innerHTML = tile.svg;
+                        } else if (tile.char || tile.symbol) {
+                            fieldBox.innerHTML = `<span style="font-size:1.6rem; color:#fff;">${tile.char || tile.symbol}</span>`;
+                        } else {
+                            fieldBox.innerHTML = `<span style="font-size:0.75rem; color:#38bdf8;">#${id}</span>`;
+                        }
+                    }
+
+                    const name = tile.name || tile.label || `Glyph_${id}`;
+                    const category = tile.category || tile.type || 'Standard';
+
+                    const skipKeys = ['svg', 'render', 'draw', 'callback', 'handler'];
+                    const attrHtml = Object.entries(tile)
+                        .filter(([k, v]) => !skipKeys.includes(k) && v !== null && typeof v !== 'function')
+                        .map(([k, v]) => `
+                            <div class="attr-row">
+                                <span class="attr-k">${k}:</span>
+                                <span class="attr-v">${typeof v === 'object' ? JSON.stringify(v) : v}</span>
+                            </div>
+                        `).join('');
+
+                    card.innerHTML = `
+                        <div class="field-slot"></div>
+                        <div class="glyph-info">
+                            <div class="glyph-header-row">
+                                <span class="glyph-name">${name}</span>
+                                <span class="glyph-badge">ID: ${id}</span>
+                            </div>
+                            <div class="glyph-category">Catégorie : ${category}</div>
+                            <div class="attributes-box">
+                                ${attrHtml || '<div style="color:var(--text-muted); font-style:italic;">Aucun attribut additionnel</div>'}
+                            </div>
+                        </div>
+                    `;
+                    card.querySelector('.field-slot').replaceWith(fieldBox);
+                    viewport.appendChild(card);
+
+                } catch (err) {
+                    // Skip par exception comme exigé
+                    continue;
                 }
-
-                const name = entity.name || entity.label || `Glyph_${id}`;
-                const category = entity.category || entity.type || 'Moteur';
-
-                const skipKeys = ['svg', 'render', 'draw', 'callback', 'handler'];
-                const attrHtml = Object.entries(entity)
-                    .filter(([k, v]) => !skipKeys.includes(k) && v !== null && typeof v !== 'function')
-                    .map(([k, v]) => `
-                        <div class="attr-row">
-                            <span class="attr-k">${k}:</span>
-                            <span class="attr-v">${typeof v === 'object' ? JSON.stringify(v) : v}</span>
-                        </div>
-                    `).join('');
-
-                card.innerHTML = `
-                    <div class="field-slot"></div>
-                    <div class="glyph-info">
-                        <div class="glyph-header-row">
-                            <span class="glyph-name">${name}</span>
-                            <span class="glyph-badge">ID: ${id}</span>
-                        </div>
-                        <div class="glyph-category">Catégorie : ${category}</div>
-                        <div class="attributes-box">
-                            ${attrHtml || '<div style="color:var(--text-muted); font-style:italic;">Aucun attribut additionnel</div>'}
-                        </div>
-                    </div>
-                `;
-                card.querySelector('.field-slot').replaceWith(fieldBox);
-                viewport.appendChild(card);
             }
 
-            statusEl.textContent = `Scan terminé : ${renderedCount} glyphe(s) actif(s) affiché(s) sur les IDs 1-256.`;
+            statusEl.textContent = `Galerie générée avec succès : ${displayedCount} glyphe(s) affiché(s) par ordre d'ID croissant (1-256)[span_8](start_span)[span_8](end_span)[span_9](start_span)[span_9](end_span).`;
 
-            if (renderedCount === 0) {
-                viewport.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #ef4444;">Aucun glyphe trouvé par scan direct. Le moteur utilise une structure globale indexée spécifique.</div>`;
+            if (displayedCount === 0) {
+                statusEl.textContent = "Aucun glyphe n'a pu être résolu. Vérifiez l'attachement des registres sur l'objet window[span_10](start_span)[span_10](end_span)[span_11](start_span)[span_11](end_span).";
             }
         });
     </script>
