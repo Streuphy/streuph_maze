@@ -3,78 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streuph Maze - Deep Diagnostic Inspector</title>
+    <title>Streuph Maze - Debug Verbose Default Export</title>
     <link rel="stylesheet" href="src/css/sm.css">
     <style>
         :root {
             --bg-color: #0b0f19;
             --card-bg: #131b2e;
             --border-color: #1e293b;
-            --accent-color: #6366f1;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
         }
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            padding: 20px;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px dashed var(--border-color);
-            padding-bottom: 15px;
-        }
-        .console-box {
-            background: #020617;
-            border: 1px solid #3b82f6;
-            border-radius: 6px;
-            padding: 15px;
-            font-size: 0.75rem;
-            color: #93c5fd;
-            max-height: 300px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-break: break-all;
-            margin-bottom: 20px;
-        }
-        .test-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 15px;
-        }
-        .test-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        .field-1x1 {
-            width: 48px;
-            height: 48px;
-            background: #000;
-            border: 2px solid #334155;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
+        body { background-color: var(--bg-color); color: var(--text-main); font-family: 'Courier New', Courier, monospace; margin: 0; padding: 20px; }
+        .console-box { background: #020617; border: 1px solid #3b82f6; border-radius: 6px; padding: 15px; font-size: 0.75rem; color: #93c5fd; max-height: 350px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 20px; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
+        .test-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; gap: 12px; align-items: center; }
+        .field-1x1 { width: 48px; height: 48px; background: #000; border: 2px solid #334155; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
     <div id="app">
-        <header>
-            <h2>🔬 INSPECTEUR DE DIAGNOSTIC PROFOND DU MOTEUR</h2>
-            <p style="color: var(--text-muted); font-size: 0.8rem;">Analyse des exports de tiles.js, sm-glyphs.js et sm-render.js</p>
-        </header>
-
-        <div id="console" class="console-box">[INIT] Démarrage du diagnostic des modules...</div>
+        <h2>🔍 VERBOSE MODULE INSPECTOR (.default analysis)</h2>
+        <div id="console" class="console-box">[INIT] Analyse détaillée des structures d'export...</div>
         <div class="test-grid" id="test-viewport"></div>
     </div>
 
@@ -87,101 +36,26 @@
             consoleBox.scrollTop = consoleBox.scrollHeight;
         }
 
-        async function runDeepDiagnostic() {
-            let tilesMod, glyphsMod, renderMod;
-
-            try {
-                log("-> Importation de src/js/tiles.js ...");
-                tilesMod = await import('./src/js/tiles.js');
-                log("   Exports nommés tiles.js: " + JSON.stringify(Object.keys(tilesMod)));
-            } catch (e) {
-                log("   ERREUR tiles.js: " + e.message);
-            }
-
-            try {
-                log("-> Importation de src/js/sm-glyphs.js ...");
-                glyphsMod = await import('./src/js/sm-glyphs.js');
-                log("   Exports nommés sm-glyphs.js: " + JSON.stringify(Object.keys(glyphsMod)));
-            } catch (e) {
-                log("   ERREUR sm-glyphs.js: " + e.message);
-            }
-
-            try {
-                log("-> Importation de src/js/sm-render.js ...");
-                renderMod = await import('./src/js/sm-render.js');
-                log("   Exports nommés sm-render.js: " + JSON.stringify(Object.keys(renderMod)));
-            } catch (e) {
-                log("   ERREUR sm-render.js: " + e.message);
-            }
-
-            // Tentative d'extraction et de rendu séquentiel des premiers identifiants (1, 2, 3)
-            log("-> Tentative de résolution des glyphes 1, 2, 3...");
+        async function inspectModules() {
+            const paths = ['./src/js/tiles.js', './src/js/sm-glyphs.js', './src/js/sm-render.js'];
             
-            const candidateSources = [tilesMod, glyphsMod, renderMod];
-            let foundEntities = [];
-
-            candidateSources.forEach((mod, modIdx) => {
-                if (!mod) return;
-                Object.keys(mod).forEach(key => {
-                    const val = mod[key];
-                    if (val && (typeof val === 'object' || typeof val === 'function')) {
-                        if (Array.isArray(val)) {
-                            log(`   [Mod #${modIdx}] ${key} est un tableau de ${val.length} éléments.`);
-                            val.forEach((item, idx) => {
-                                if (item) foundEntities.push({ source: `${key}[${idx}]`, data: item });
-                            });
-                        } else if (typeof val === 'object') {
-                            log(`   [Mod #${modIdx}] ${key} est un objet avec ${Object.keys(val).length} clés.`);
-                            Object.keys(val).forEach(subKey => {
-                                const subVal = val[subKey];
-                                if (subVal && typeof subVal === 'object') {
-                                    foundEntities.push({ source: `${key}.${subKey}`, data: subVal });
-                                }
-                            });
-                        }
+            for (const path of paths) {
+                try {
+                    log(`\n--- Chargement de ${path} ---`);
+                    const mod = await import(path);
+                    log(`  Object.keys(mod): ${JSON.stringify(Object.keys(mod))}`);
+                    log(`  Has .default? ${mod.default !== undefined} (type: ${typeof mod.default})`);
+                    
+                    if (mod.default && typeof mod.default === 'object') {
+                        log(`  Object.keys(mod.default): ${JSON.stringify(Object.keys(mod.default).slice(0, 10))}`);
                     }
-                });
-            });
-
-            log(`-> Total d'entités brutes détectées : ${foundEntities.length}`);
-
-            // Affichage de test séquentiel des 3 premières entités trouvées dans un conteneur 1x1
-            viewport.innerHTML = '';
-            foundEntities.slice(0, 6).forEach((entity, index) => {
-                const card = document.createElement('div');
-                card.className = 'test-card';
-
-                const field1x1 = document.createElement('div');
-                field1x1.className = 'field-1x1';
-
-                const d = entity.data;
-                let visualContent = `<span style="color:#38bdf8;">#${index+1}</span>`;
-                if (d.svg && typeof d.svg === 'string') {
-                    field1x1.innerHTML = d.svg;
-                } else if (d.char || d.symbol) {
-                    field1x1.innerHTML = `<span style="font-size:1.5rem; color:#fff;">${d.char || d.symbol}</span>`;
-                } else {
-                    field1x1.innerHTML = visualContent;
+                } catch (e) {
+                    log(`  ERREUR import ${path}: ${e.message}`);
                 }
-
-                const name = d.name || d.label || entity.source;
-                card.innerHTML = `
-                    <div class="field-slot"></div>
-                    <div style="font-size:0.75rem;">
-                        <div><strong>Source:</strong> ${entity.source}</div>
-                        <div><strong>Nom:</strong> ${name}</div>
-                    </div>
-                `;
-                card.querySelector('.field-slot').replaceWith(field1x1);
-                viewport.appendChild(card);
-            });
-
-            if (foundEntities.length === 0) {
-                log("⚠️ Aucune entité n'a pu être extraite automatiquement. Copie-moi ces logs pour analyse !");
             }
         }
 
-        runDeepDiagnostic().catch(err => log("ERREUR FATALE: " + err.message));
+        inspectModules();
     </script>
 </body>
 </html>
