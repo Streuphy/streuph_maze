@@ -60,7 +60,10 @@
     b.textContent = '';
 
     var frag = document.createDocumentFragment();
-    for (var y = 0; y < level.height; y++) {
+    // CSS grid lays children out top-to-bottom, while rules coordinates grow
+    // northward from y=0 at the bottom. Create the visual rows in reverse.
+    for (var displayY = 0; displayY < level.height; displayY++) {
+      var y = level.height - 1 - displayY;
       for (var x = 0; x < level.width; x++) {
         var cell = document.createElement('div');
         cell.className = 'cell';
@@ -91,7 +94,7 @@
     }
     for (var j = 0; j < level.height; j++) {
       var sy = document.createElement('span');
-      sy.textContent = String(j + 1);
+      sy.textContent = String(level.height - j);
       y.appendChild(sy);
     }
     x.style.setProperty('--cols', level.width);
@@ -138,7 +141,7 @@
   };
 
   Renderer.prototype.cellAt = function (x, y) {
-    return this.board.children[y * this.state.level.width + x];
+    return this.board.children[(this.state.level.height - 1 - y) * this.state.level.width + x];
   };
 
   Renderer.prototype.draw = function (view) {
@@ -156,7 +159,7 @@
     for (var y = 0; y < lv.height; y++) {
       for (var x = 0; x < w; x++) {
         var inst = lv.tiles[y][x];
-        var cell = this.board.children[y * w + x];
+        var cell = this.cellAt(x, y);
         var ctx = SM.RULES.describeTile(view, x, y);
         var directions = rayAt[x + ',' + y] || [];
         var html = '';
