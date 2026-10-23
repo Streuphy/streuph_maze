@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streuph Maze - Galerie Vivante & Introspection des Glyphs</title>
+    <title>Streuph Maze - Engine Glyph Registry (0-255)</title>
     <link rel="stylesheet" href="src/css/sm.css">
     <style>
         :root {
@@ -30,19 +30,9 @@
             padding-bottom: 15px;
         }
 
-        .section-title {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #c7d2fe;
-            border-left: 4px solid var(--accent-color);
-            padding-left: 10px;
-            margin: 30px 0 15px 0;
-            text-transform: uppercase;
-        }
-
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 15px;
         }
 
@@ -60,9 +50,9 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             border-bottom: 1px solid var(--border-color);
-            padding-bottom: 6px;
+            padding-bottom: 4px;
         }
 
         .preview-box {
@@ -76,8 +66,8 @@
         }
 
         .glyph-visual {
-            width: 42px;
-            height: 42px;
+            width: 48px;
+            height: 48px;
             background: #000;
             border: 1px solid #4b5563;
             display: flex;
@@ -86,122 +76,135 @@
             flex-shrink: 0;
         }
 
-        .props-container {
-            font-size: 0.75rem;
+        .props {
+            font-size: 0.7rem;
             color: var(--text-muted);
             background: #111827;
-            padding: 6px;
+            padding: 4px;
             border-radius: 4px;
-            max-height: 100px;
+            max-height: 80px;
             overflow-y: auto;
-            border: 1px solid #1f2937;
-        }
-
-        pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-break: break-all;
         }
     </style>
 </head>
 <body>
     <div id="app">
         <header>
-            <h1>🧭 STREUPH MAZE — GALERIE DES GLYPHS & MOTEUR</h1>
-            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 5px;">Introspection dynamique des modules sources (`src/js/`)</p>
+            <h1>🧭 STREUPH MAZE — REGISTRE DES GLYPHS (ID 0 - 255)</h1>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">Rendu séquentiel basé sur l'état réel des modules du moteur</p>
         </header>
 
-        <main id="app-viewport">
-            <p style="text-align: center; color: var(--text-muted);">Chargement et analyse dynamique des modules en cours...</p>
+        <main id="viewport">
+            <p style="text-align: center; color: var(--text-muted);">Chargement et analyse des registres (0-255)...</p>
         </main>
     </div>
 
     <script type="module">
-        const viewport = document.getElementById('app-viewport');
+        import * as TilesMod from './src/js/tiles.js';
+        import * as GlyphsMod from './src/js/sm-glyphs.js';
 
-        async function loadLiveModules() {
-            let modulesData = {};
+        const viewport = document.getElementById('viewport');
 
-            try {
-                // Importation dynamique des modules source réels du projet
-                const tilesModule = await import('./src/js/tiles.js').catch(() => null);
-                const glyphsModule = await import('./src/js/sm-glyphs.js').catch(() => null);
+        async function initInspector() {
+            let extractedItems = [];
 
-                if (tilesModule) {
-                    modulesData["Tiles Module (tiles.js)"] = tilesModule.Tiles || tilesModule.default || tilesModule;
-                }
-                if (glyphsModule) {
-                    modulesData["Glyphs Module (sm-glyphs.js)"] = glyphsModule.Glyphs || glyphsModule.default || glyphsModule;
-                }
-            } catch (err) {
-                console.warn("Erreur lors du chargement des modules ES :", err);
+            // Helper to extract items safely from modules regardless of export shape
+            function harvestModule(mod) {
+                if (!mod) return;
+                const candidateContainers = [
+                    mod.Tiles, mod.Glyphs, mod.tiles, mod.glyphs, 
+                    mod.default, mod
+                ];
+                
+                candidateContainers.forEach(container => {
+                    if (!container) return;
+                    if (Array.isArray(container)) {
+                        container.forEach((item, idx) => {
+                            if (item && typeof item === 'object') {
+                                extractedItems.push({
+                                    id: item.id !== undefined ? item.id : idx,
+                                    name: item.name || item.label || `Tile_${idx}`,
+                                    desc: item.description || item.desc || 'Entité du moteur',
+                                    svg: item.svg || item.renderSvg || null,
+                                    char: item.char || item.symbol || null,
+                                    raw: item
+                                });
+                            }
+                        });
+                    } else if (typeof container === 'object') {
+                        Object.entries(container).forEach(([key, val], idx) => {
+                            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                extractedItems.push({
+                                    id: val.id !== undefined ? val.id : idx,
+                                    key: key,
+                                    name: val.name || val.label || key,
+                                    desc: val.description || val.desc || 'Entité du moteur',
+                                    svg: val.svg || val.renderSvg || null,
+                                    char: val.char || val.symbol || null,
+                                    raw: val
+                                });
+                            }
+                        });
+                    }
+                });
             }
+
+            harvestModule(TilesMod);
+            harvestModule(GlyphsMod);
 
             viewport.innerHTML = '';
-            let totalEntries = 0;
+            const grid = document.createElement('div');
+            grid.className = 'grid';
 
-            for (const [modName, dataObj] of Object.entries(modulesData)) {
-                // Filtrer pour ne garder que les objets/dictionnaires exploitables
-                if (!dataObj || typeof dataObj !== 'object') continue;
+            let renderedCount = 0;
+
+            // Parcourir séquentiellement de ID 0 à 255
+            for (let id = 0; id <= 255; id++) {
+                // Trouver le glyph/tuile correspondant à cet ID exact ou index
+                const tile = extractedItems.find(item => item.id === id) || extractedItems[id];
                 
-                const entries = Object.entries(dataObj).filter(([k, v]) => v && typeof v === 'object' && !Array.isArray(v));
-                if (entries.length === 0) continue;
+                if (!tile) continue; // Ignorer les IDs non implémentés
+                renderedCount++;
 
-                const section = document.createElement('section');
-                const title = document.createElement('div');
-                title.className = 'section-title';
-                title.textContent = `${modName} (${entries.length} entité${entries.length > 1 ? 's' : ''})`;
-                section.appendChild(title);
+                const card = document.createElement('div');
+                card.className = 'card';
 
-                const grid = document.createElement('div');
-                grid.className = 'grid';
+                // Génération de la géométrie visuelle aux dimensions du niveau (index.html style)
+                let visualContent = `<span style="font-size:0.8rem; color:#34d399;">#${tile.id}</span>`;
+                if (tile.svg) {
+                    visualContent = tile.svg;
+                } else if (tile.char) {
+                    visualContent = `<span style="font-size:1.5rem; color:#fff;">${tile.char}</span>`;
+                } else {
+                    visualContent = `<svg viewBox="0 0 24 24" width="32" height="32"><rect width="24" height="24" fill="#1e1b4b" stroke="#6366f1" stroke-width="2"/><text x="12" y="16" font-size="9" fill="#fff" text-anchor="middle">${tile.id}</text></svg>`;
+                }
 
-                entries.forEach(([key, val]) => {
-                    totalEntries++;
-                    const card = document.createElement('div');
-                    card.className = 'card';
-
-                    const name = val.name || val.label || key;
-                    const jsonProps = JSON.stringify(val, (k, v) => typeof v === 'function' ? '[Function]' : v, 2);
-
-                    // Génération du rendu graphique heuristique (SVG, Caractère ou ID abrégé)
-                    let visualHtml = `<span style="font-size:0.8rem; color:#34d399; font-weight:bold;">${key.substring(0,3)}</span>`;
-                    if (val.svg && typeof val.svg === 'string') {
-                        visualHtml = val.svg;
-                    } else if (val.char || val.symbol) {
-                        visualHtml = `<span style="font-size:1.4rem; color:#fff;">${val.char || val.symbol}</span>`;
-                    }
-
-                    card.innerHTML = `
-                        <div class="card-header">
-                            <span style="font-weight:bold; color:#fff;">${name}</span>
-                            <span style="font-size:0.7rem; background:#111827; padding:2px 5px; border-radius:3px; color:#9ca3af;">${key}</span>
-                        </div>
-                        <div class="preview-box">
-                            <div class="glyph-visual">${visualHtml}</div>
-                            <div style="font-size:0.8rem; color:var(--text-muted); flex-grow:1;">
-                                ${val.description || val.desc || 'Propriétés vectorielles et logiques du moteur'}
-                            </div>
-                        </div>
-                        <div class="props-container"><pre>${jsonProps}</pre></div>
-                    `;
-                    grid.appendChild(card);
-                });
-
-                section.appendChild(grid);
-                viewport.appendChild(section);
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span style="font-weight:bold; color:#fff;">${tile.name}</span>
+                        <span style="font-size:0.7rem; background:#111827; padding:2px 5px; border-radius:3px; color:#9ca3af;">ID: ${tile.id}</span>
+                    </div>
+                    <div class="preview-box">
+                        <div class="glyph-visual">${visualContent}</div>
+                        <div style="font-size:0.8rem; color:var(--text-muted); flex-grow:1;">${tile.desc}</div>
+                    </div>
+                    <div class="props"><pre>${JSON.stringify(tile.raw, (k,v) => typeof v === 'function' ? '[Function]' : v, 2)}</pre></div>
+                `;
+                grid.appendChild(card);
             }
 
-            if (totalEntries === 0) {
+            if (renderedCount === 0) {
                 viewport.innerHTML = `
                     <div style="text-align: center; color: #ef4444; padding: 20px;">
-                        <p>⚠️ Aucun dictionnaire exporté n'a pu être lu automatiquement depuis les modules.</p>
-                        <p style="font-size: 0.8rem; color: var(--text-muted);">Vérifiez que <code>tiles.js</code> et <code>sm-glyphs.js</code> exportent bien leurs structures (ex: <code>export const Tiles = ...</code>).</p>
+                        <p>⚠️ Aucun enregistrement n'a pu être extrait des modules <code>tiles.js</code> / <code>sm-glyphs.js</code>.</p>
+                        <p style="font-size: 0.8rem; color: var(--text-muted);">Assurez-vous que les objets exportés contiennent des propriétés identifiables.</p>
                     </div>`;
+            } else {
+                viewport.appendChild(grid);
             }
         }
 
-        loadLiveModules();
+        initInspector();
     </script>
 </body>
 </html>
