@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streuph Maze - Galerie & Modèles SVG des Glyphs</title>
+    <link rel="stylesheet" href="src/css/sm.css">
+    <style>
+        :root {
+            --bg-color: #0f111a;
+            --card-bg: #1a1e29;
+            --border-color: #2f364d;
+            --accent-color: #4f46e5;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px dashed var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        .category-section { margin-bottom: 40px; }
+        .category-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #c7d2fe;
+            border-left: 4px solid var(--accent-color);
+            padding-left: 10px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .glyph-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .glyph-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .glyph-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .glyph-name { font-size: 1.1rem; font-weight: bold; color: #fff; }
+        .glyph-id { font-size: 0.8rem; background: #111827; padding: 2px 6px; border-radius: 4px; color: var(--text-muted); }
+
+        .glyph-preview-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #111827;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        /* Rendu géométrique SVG fidèle au modèle en jeu */
+        .glyph-svg-visual {
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+            background: #000;
+            border: 1px solid #374151;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .glyph-description { font-size: 0.85rem; color: var(--text-muted); line-height: 1.3; }
+
+        .glyph-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: #12151c;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 18px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #374151; transition: .3s; border-radius: 18px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px;
+            background-color: white; transition: .3s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--accent-color); }
+        input:checked + .slider:before { transform: translateX(16px); }
+
+        select {
+            background: #1f2937; color: #fff; border: 1px solid #4b5563; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>🧭 STREUPH MAZE — GALERIE DES GLYPHS (MODÈLES SVG)</h1>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 5px;">Visualisation géométrique vectorielle et contrôles interactifs</p>
+        </header>
+
+        <main id="glyph-viewport"></main>
+    </div>
+
+    <script type="module">
+        import { Tiles } from './src/js/tiles.js';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const viewport = document.getElementById('glyph-viewport');
+            
+            // Données enrichies intégrant la structure graphique SVG pour chaque tuile
+            const categories = {
+                "Structures & Obstacles": [
+                    {
+                        id: "TILE_WALL",
+                        name: "Mur Standard",
+                        // Modèle SVG vectoriel de la géométrie du mur
+                        svg: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#4f46e5"><rect x="2" y="2" width="20" height="20" rx="2" fill="#1e1b4b" stroke="#818cf8" stroke-width="2"/><path d="M2 12h20M12 2v20" stroke="#818cf8" stroke-width="1"/></svg>`,
+                        desc: "Obstacle géométrique infranchissable.",
+                        stateToggle: true,
+                        stateLabel: "Collision",
+                        selectOptions: null
+                    },
+                    {
+                        id: "TILE_CRUMBLING",
+                        name: "Mur Instable",
+                        svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="2" y="2" width="20" height="20" rx="2" fill="#292524" stroke="#d97706" stroke-width="2" stroke-dasharray="3,3"/><path d="M6 6l12 12M18 6L6 18" stroke="#d97706" stroke-width="1"/></svg>`,
+                        desc: "S'effrite sous l'impact.",
+                        stateToggle: false,
+                        stateLabel: "Fragile",
+                        selectOptions: null
+                    }
+                ],
+                "Logique & Transmutation": [
+                    {
+                        id: "TILE_GATE",
+                        name: "Porte Binaire",
+                        svg: `<svg viewBox="0 0 24 24" width="32" height="32"><circle cx="12" cy="12" r="9" fill="#065f46" stroke="#34d399" stroke-width="2"/><path d="M12 6v12M6 12h12" stroke="#34d399" stroke-width="2"/></svg>`,
+                        desc: "Bascule d'état selon la polarité.",
+                        stateToggle: true,
+                        stateLabel: "Ouvert / Fermé",
+                        selectOptions: null
+                    },
+                    {
+                        id: "TILE_AURA",
+                        name: "Aura Chromatique",
+                        svg: `<svg viewBox="0 0 24 24" width="32" height="32"><polygon points="12,2 22,22 2,22" fill="#581c87" stroke="#c084fc" stroke-width="2"/></svg>`,
+                        desc: "Champ d'influence coloré.",
+                        stateToggle: false,
+                        stateLabel: "Spectre",
+                        selectOptions: ["Rouge", "Vert", "Bleu"]
+                    }
+                ]
+            };
+
+            viewport.innerHTML = '';
+
+            for (const [categoryName, glyphs] of Object.entries(categories)) {
+                const section = document.createElement('section');
+                section.className = 'category-section';
+
+                const title = document.createElement('div');
+                title.className = 'category-title';
+                title.textContent = categoryName;
+                section.appendChild(title);
+
+                const grid = document.createElement('div');
+                grid.className = 'glyph-grid';
+
+                glyphs.forEach(g => {
+                    const card = document.createElement('div');
+                    card.className = 'glyph-card';
+
+                    let controlsHtml = '';
+                    if (g.stateToggle) {
+                        controlsHtml += `
+                            <div class="control-row">
+                                <span>${g.stateLabel}:</span>
+                                <label class="switch">
+                                    <input type="checkbox" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>`;
+                    }
+                    if (g.selectOptions) {
+                        const options = g.selectOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+                        controlsHtml += `
+                            <div class="control-row">
+                                <span>${g.stateLabel}:</span>
+                                <select>${options}</select>
+                            </div>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="glyph-header">
+                            <span class="glyph-name">${g.name}</span>
+                            <span class="glyph-id">${g.id}</span>
+                        </div>
+                        <div class="glyph-preview-container">
+                            <div class="glyph-svg-visual">${g.svg}</div>
+                            <div class="glyph-description">${g.desc}</div>
+                        </div>
+                        <div class="glyph-controls">
+                            ${controlsHtml || '<div class="control-row"><span>Statut:</span><span style="color: #34d399;">Actif</span></div>'}
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                section.appendChild(grid);
+                viewport.appendChild(section);
+            }
+        });
+    </script>
+</body>
+</html>
