@@ -1,167 +1,189 @@
-    <script type="module">
-        // Importation sécurisée avec le chemin relatif correct (./)
-        let Tiles = {};
-        try {
-            const module = await import('./src/js/tiles.js');
-            Tiles = module.Tiles || module;
-        } catch (e) {
-            console.warn("Module tiles.js non chargé directement, utilisation du catalogue étendu.");
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streuph Maze - Galerie Vivante & Introspection des Glyphs</title>
+    <link rel="stylesheet" href="src/css/sm.css">
+    <style>
+        :root {
+            --bg-color: #0f111a;
+            --card-bg: #1a1e29;
+            --border-color: #2f364d;
+            --accent-color: #4f46e5;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
         }
 
-        const viewport = document.getElementById('glyph-viewport');
-        
-        const categories = {
-            "Structures & Obstacles": [
-                {
-                    id: "TILE_WALL",
-                    name: "Mur Standard",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#4f46e5"><rect x="2" y="2" width="20" height="20" rx="2" fill="#1e1b4b" stroke="#818cf8" stroke-width="2"/><path d="M2 12h20M12 2v20" stroke="#818cf8" stroke-width="1"/></svg>`,
-                    desc: "Obstacle géométrique infranchissable de base.",
-                    stateToggle: true,
-                    stateLabel: "Collision"
-                },
-                {
-                    id: "TILE_CRUMBLING",
-                    name: "Mur Instable",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="2" y="2" width="20" height="20" rx="2" fill="#292524" stroke="#d97706" stroke-width="2" stroke-dasharray="3,3"/><path d="M6 6l12 12M18 6L6 18" stroke="#d97706" stroke-width="1"/></svg>`,
-                    desc: "S'effrite ou se transmute sous l'impact.",
-                    stateToggle: false,
-                    stateLabel: "Fragile"
-                },
-                {
-                    id: "TILE_OBSTACLE",
-                    name: "Obstacle Fixe",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="4" y="4" width="16" height="16" fill="#312e81" stroke="#6366f1" stroke-width="2"/></svg>`,
-                    desc: "Bloc lourd bloquant le passage des entités.",
-                    stateToggle: true,
-                    stateLabel: "Actif"
-                }
-            ],
-            "Circulation & Sols": [
-                {
-                    id: "TILE_FLOOR",
-                    name: "Sol / Couloir",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="2" y="2" width="20" height="20" fill="#111827" stroke="#374151" stroke-width="1"/><circle cx="12" cy="12" r="2" fill="#6b7280"/></svg>`,
-                    desc: "Zone de déplacement libre standard.",
-                    stateToggle: false,
-                    stateLabel: "Traversal",
-                    selectOptions: ["Libre", "Restreint"]
-                },
-                {
-                    id: "TILE_EMPTY",
-                    name: "Vide / Abîme",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="2" y="2" width="20" height="20" fill="#030712" stroke="#1f2937" stroke-width="1"/></svg>`,
-                    desc: "Espace inoccupé ou infranchissable par le vide.",
-                    stateToggle: false,
-                    stateLabel: "Abîme"
-                },
-                {
-                    id: "TILE_PATH",
-                    name: "Sentier Guidé",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><path d="M12 2v20M2 12h20" stroke="#10b981" stroke-width="2" stroke-dasharray="2,2"/></svg>`,
-                    desc: "Trace ou chemin lumineux d'orientation.",
-                    stateToggle: true,
-                    stateLabel: "Visibilité"
-                }
-            ],
-            "Logique & Objectifs": [
-                {
-                    id: "TILE_GATE",
-                    name: "Porte Binaire",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><circle cx="12" cy="12" r="9" fill="#065f46" stroke="#34d399" stroke-width="2"/><path d="M12 6v12M6 12h12" stroke="#34d399" stroke-width="2"/></svg>`,
-                    desc: "Bascule d'état selon la polarité du circuit.",
-                    stateToggle: true,
-                    stateLabel: "Ouvert / Fermé"
-                },
-                {
-                    id: "TILE_TARGET",
-                    name: "Cible / Objectif",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><circle cx="12" cy="12" r="8" fill="none" stroke="#f59e0b" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="#f59e0b"/></svg>`,
-                    desc: "Emplacement recevant une caisse ou un signal.",
-                    stateToggle: true,
-                    stateLabel: "Validé"
-                },
-                {
-                    id: "TILE_SWITCH",
-                    name: "Interrupteur de Sol",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><polygon points="12,4 20,20 4,20" fill="#1e3a8a" stroke="#60a5fa" stroke-width="2"/></svg>`,
-                    desc: "Déclenche une action lorsqu'activé.",
-                    stateToggle: true,
-                    stateLabel: "État"
-                }
-            ],
-            "Effets & Transmutations": [
-                {
-                    id: "TILE_AURA",
-                    name: "Aura Chromatique",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><polygon points="12,2 22,22 2,22" fill="#581c87" stroke="#c084fc" stroke-width="2"/></svg>`,
-                    desc: "Champ d'influence modifiant les tuiles adjacentes.",
-                    stateToggle: false,
-                    stateLabel: "Spectre",
-                    selectOptions: ["Rouge", "Vert", "Bleu"]
-                },
-                {
-                    id: "TILE_PORTAL",
-                    name: "Portail Quantique",
-                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><ellipse cx="12" cy="12" rx="4" ry="9" fill="#0284c7" stroke="#38bdf8" stroke-width="2"/></svg>`,
-                    desc: "Téléporte les entités d'un point à un autre.",
-                    stateToggle: true,
-                    stateLabel: "Actif"
-                }
-            ]
-        };
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+        }
 
-        if (viewport) {
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px dashed var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #c7d2fe;
+            border-left: 4px solid var(--accent-color);
+            padding-left: 10px;
+            margin: 30px 0 15px 0;
+            text-transform: uppercase;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+
+        .preview-box {
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .glyph-visual {
+            width: 42px;
+            height: 42px;
+            background: #000;
+            border: 1px solid #4b5563;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .props-container {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: #111827;
+            padding: 6px;
+            border-radius: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+            border: 1px solid #1f2937;
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>🧭 STREUPH MAZE — GALERIE DES GLYPHS & MOTEUR</h1>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 5px;">Introspection dynamique des modules sources (`src/js/`)</p>
+        </header>
+
+        <main id="app-viewport">
+            <p style="text-align: center; color: var(--text-muted);">Chargement et analyse dynamique des modules en cours...</p>
+        </main>
+    </div>
+
+    <script type="module">
+        const viewport = document.getElementById('app-viewport');
+
+        async function loadLiveModules() {
+            let modulesData = {};
+
+            try {
+                // Importation dynamique des modules source réels du projet
+                const tilesModule = await import('./src/js/tiles.js').catch(() => null);
+                const glyphsModule = await import('./src/js/sm-glyphs.js').catch(() => null);
+
+                if (tilesModule) {
+                    modulesData["Tiles Module (tiles.js)"] = tilesModule.Tiles || tilesModule.default || tilesModule;
+                }
+                if (glyphsModule) {
+                    modulesData["Glyphs Module (sm-glyphs.js)"] = glyphsModule.Glyphs || glyphsModule.default || glyphsModule;
+                }
+            } catch (err) {
+                console.warn("Erreur lors du chargement des modules ES :", err);
+            }
+
             viewport.innerHTML = '';
+            let totalEntries = 0;
 
-            for (const [categoryName, glyphs] of Object.entries(categories)) {
+            for (const [modName, dataObj] of Object.entries(modulesData)) {
+                // Filtrer pour ne garder que les objets/dictionnaires exploitables
+                if (!dataObj || typeof dataObj !== 'object') continue;
+                
+                const entries = Object.entries(dataObj).filter(([k, v]) => v && typeof v === 'object' && !Array.isArray(v));
+                if (entries.length === 0) continue;
+
                 const section = document.createElement('section');
-                section.className = 'category-section';
-
                 const title = document.createElement('div');
-                title.className = 'category-title';
-                title.textContent = categoryName;
+                title.className = 'section-title';
+                title.textContent = `${modName} (${entries.length} entité${entries.length > 1 ? 's' : ''})`;
                 section.appendChild(title);
 
                 const grid = document.createElement('div');
-                grid.className = 'glyph-grid';
+                grid.className = 'grid';
 
-                glyphs.forEach(g => {
+                entries.forEach(([key, val]) => {
+                    totalEntries++;
                     const card = document.createElement('div');
-                    card.className = 'glyph-card';
+                    card.className = 'card';
 
-                    let controlsHtml = '';
-                    if (g.stateToggle) {
-                        controlsHtml += `
-                            <div class="control-row">
-                                <span>${g.stateLabel}:</span>
-                                <label class="switch">
-                                    <input type="checkbox" checked>
-                                    <span class="slider"></span>
-                                </label>
-                            </div>`;
-                    }
-                    if (g.selectOptions) {
-                        const options = g.selectOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('');
-                        controlsHtml += `
-                            <div class="control-row">
-                                <span>${g.stateLabel}:</span>
-                                <select>${options}</select>
-                            </div>`;
+                    const name = val.name || val.label || key;
+                    const jsonProps = JSON.stringify(val, (k, v) => typeof v === 'function' ? '[Function]' : v, 2);
+
+                    // Génération du rendu graphique heuristique (SVG, Caractère ou ID abrégé)
+                    let visualHtml = `<span style="font-size:0.8rem; color:#34d399; font-weight:bold;">${key.substring(0,3)}</span>`;
+                    if (val.svg && typeof val.svg === 'string') {
+                        visualHtml = val.svg;
+                    } else if (val.char || val.symbol) {
+                        visualHtml = `<span style="font-size:1.4rem; color:#fff;">${val.char || val.symbol}</span>`;
                     }
 
                     card.innerHTML = `
-                        <div class="glyph-header">
-                            <span class="glyph-name">${g.name}</span>
-                            <span class="glyph-id">${g.id}</span>
+                        <div class="card-header">
+                            <span style="font-weight:bold; color:#fff;">${name}</span>
+                            <span style="font-size:0.7rem; background:#111827; padding:2px 5px; border-radius:3px; color:#9ca3af;">${key}</span>
                         </div>
-                        <div class="glyph-preview-container">
-                            <div class="glyph-svg-visual">${g.svg}</div>
-                            <div class="glyph-description">${g.desc}</div>
+                        <div class="preview-box">
+                            <div class="glyph-visual">${visualHtml}</div>
+                            <div style="font-size:0.8rem; color:var(--text-muted); flex-grow:1;">
+                                ${val.description || val.desc || 'Propriétés vectorielles et logiques du moteur'}
+                            </div>
                         </div>
-                        <div class="glyph-controls">
-                            ${controlsHtml || '<div class="control-row"><span>Statut:</span><span style="color: #34d399;">Actif</span></div>'}
-                        </div>
+                        <div class="props-container"><pre>${jsonProps}</pre></div>
                     `;
                     grid.appendChild(card);
                 });
@@ -169,5 +191,17 @@
                 section.appendChild(grid);
                 viewport.appendChild(section);
             }
+
+            if (totalEntries === 0) {
+                viewport.innerHTML = `
+                    <div style="text-align: center; color: #ef4444; padding: 20px;">
+                        <p>⚠️ Aucun dictionnaire exporté n'a pu être lu automatiquement depuis les modules.</p>
+                        <p style="font-size: 0.8rem; color: var(--text-muted);">Vérifiez que <code>tiles.js</code> et <code>sm-glyphs.js</code> exportent bien leurs structures (ex: <code>export const Tiles = ...</code>).</p>
+                    </div>`;
+            }
         }
+
+        loadLiveModules();
     </script>
+</body>
+</html>
