@@ -55,6 +55,23 @@ Emitters are immutable level data, so no new ray phase enters state keys. Respaw
 
 Retain the blueprint's eight roles and suggested board sizes. Replace the “timed movement,” “timed exit,” “swept corridor,” and “moving rays” wording with fixed rays, static intersections, or deliberate player-triggered linked gates. No action advances a wall-clock ray phase. The pack lives at a World 2-specific `data/worlds/` path and uses the shared W1 world-pack format once that contract is available.
 
+## Authored Level Route Review
+
+The pack is `data/worlds/world-02-lolos-castle.levels.yaml`. All eight starts are at A1 and are outside every active ray in the initial state. The solver proves these minimum-stroke pars: **6, 6, 9, 12, 14, 14, 28, 36**. Route replay through the resolver confirms the intended shield and catch transitions:
+
+| Level | Route and review |
+|---|---|
+| 1 — First Medusa | Push the crate north to the westbound row at C3; it blocks the ray before the exit at A3. The player can then reach the exit without entering the exposed segment. |
+| 2 — Crossfire | Push the crate north to the crossing at C3. The crate blocks both the southbound and westbound rays; the exit at A3 is safe behind the shield. |
+| 3 — Crossing Lines | Push the crate north onto the intersection at E3. It occludes both rays. The solver's shortest continuation uses one intentional catch from the exposed horizontal segment, then returns from A1 to the now-safe exit at A3. |
+| 4 — The Unhurried Exit | Push the crate east onto the link-1 target; the player is caught and respawns while the target remains occupied. The link-1 gate opens, and the exit route follows the bottom corridor. Replacing the target with floor makes the level unsolvable, so the gate cannot be bypassed. |
+| 5 — Four Medusas | Push the crate north to F5, where it blocks the westbound courtyard ray and the southbound ray. A subsequent exposed step intentionally respawns the player; the exit is then reached behind the shield. The two side emitters are stopped by their adjacent walls. |
+| 6 — Still Corridor | Push the crate north to H4 to shield the westbound corridor. The shortest route accepts one catch on the exposed side of the shield and returns to the exit from A1. The other emitters terminate at walls; none sweeps or advances with time. |
+| 7 — Twin Chambers | Push the first crate onto link 1, respawn, cross gate 1, then push the second crate onto link 2 and respawn before crossing gate 2. Wall F2 closes the upper bypass around gate 1, and the wall at K2 closes the gate-2 bypass. Removing the targets makes the level unsolvable. |
+| 8 — Labyrinth Fortress | Three shield pushes activate links 1–3 in order; each caught push returns the player to A1 while retaining its crate and open gate. The three gates are the only passage between row-1 chambers, and replacing all targets makes the level unsolvable. Six static emitters and three movable crates are present; the three auxiliary rays terminate in walled-off cells. |
+
+Solver replay ends with every level won, all three gated levels become unsolvable when their target cells are removed, and replayed respawns always land on the authored safe start. The static ray layout—not a timer, animation, or sweeping phase—is the only hazard state.
+
 ## Risks / Trade-offs
 
 - [A crate moved during the same action can alter the ray line] → Check only the fully settled post-action board and test both shielding and unshielding pushes.

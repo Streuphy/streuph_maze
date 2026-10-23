@@ -232,8 +232,242 @@ function mkLevel(grid, over, par) {
   }, 'test');
 }
 function st(level) { return SM.RULES.newState(level); }
+function canonicalSnapshot(s) {
+  const snap = SM.RULES.snapshot(s);
+  snap.crates = snap.crates.map(row => Array.from({ length: s.width }, (_, x) => row[x] || null));
+  return snap;
+}
 function go(s, dir) { return SM.RULES.resolveTurn(s, { type: 'move', dir: dir }); }
 function act(s) { return SM.RULES.resolveTurn(s, { type: 'act' }); }
+
+function rayTestState(emitterId, blocker, overrides) {
+  const width = 5, height = 5;
+  const grid = Array.from({ length: height }, () => Array(width).fill(0));
+  const put = (x, y, id) => { grid[height - 1 - y][x] = id; };
+  put(0, 0, 1);
+  put(4, 4, 2);
+  put(2, 2, emitterId);
+  if (blocker) put(blocker.x, blocker.y, blocker.id);
+  return st(mkLevel(grid, overrides));
+}
+
+function checkRayQueries() {
+  const R = SM.RULES;
+  const directions = [
+    { id: 81, dir: 'north', cells: [{ x: 2, y: 3 }, { x: 2, y: 4 }], player: { x: 2, y: 4 }, offAxis: { x: 3, y: 2 } },
+    { id: 82, dir: 'east', cells: [{ x: 3, y: 2 }, { x: 4, y: 2 }], player: { x: 4, y: 2 }, offAxis: { x: 2, y: 3 } },
+    { id: 83, dir: 'south', cells: [{ x: 2, y: 1 }, { x: 2, y: 0 }], player: { x: 2, y: 0 }, offAxis: { x: 3, y: 2 } },
+    { id: 84, dir: 'west', cells: [{ x: 1, y: 2 }, { x: 0, y: 2 }], player: { x: 0, y: 2 }, offAxis: { x: 2, y: 3 } }
+  ];
+  for (const item of directions) {
+    const s = rayTestState(item.id);
+    eq(R.traceRay(s, 2, 2), item.cells,
+      'RAY  ' + item.dir + ' emitter traces to the board edge');
+    s.player = item.player;
+    eq(R.isCaught(s), true, 'RAY  ' + item.dir + ' ray catches an aligned player');
+    s.player = item.offAxis;
+    eq(R.isCaught(s), false, 'RAY  ' + item.dir + ' ray does not catch an off-axis player');
+  }
+
+  const wall = rayTestState(82, { x: 3, y: 2, id: 3 });
+  wall.player = { x: 4, y: 2 };
+  eq(R.traceRay(wall, 2, 2), [], 'RAY  wall blocks the ray before the player');
+  eq(R.isCaught(wall), false, 'RAY  player beyond a wall is safe');
+
+  const crate = rayTestState(82, { x: 3, y: 2, id: 70 });
+  crate.player = { x: 4, y: 2 };
+  eq(R.traceRay(crate, 2, 2), [], 'RAY  movable crate shields cells beyond it');
+  eq(R.isCaught(crate), false, 'RAY  player behind a crate is safe');
+
+  const barrier = rayTestState(82, { x: 3, y: 2, id: 10 });
+  barrier.player = { x: 4, y: 2 };
+  eq(R.traceRay(barrier, 2, 2), [], 'RAY  closed phase barrier is opaque');
+
+  const closedGate = rayTestState(82, { x: 3, y: 2, id: 30 }, { 30: { link: 1 } });
+  closedGate.player = { x: 4, y: 2 };
+  eq(closedGate.locked[2][3], true, 'RAY  fixture starts with linked gate closed');
+  eq(R.traceRay(closedGate, 2, 2), [], 'RAY  closed gate is opaque');
+
+  const openGate = rayTestState(82, { x: 3, y: 2, id: 30 },
+    { 30: { link: 1, defaultLocked: false } });
+  openGate.player = { x: 4, y: 2 };
+  eq(openGate.locked[2][3], false, 'RAY  fixture starts with linked gate open');
+  eq(R.traceRay(openGate, 2, 2), [{ x: 3, y: 2 }, { x: 4, y: 2 }],
+    'RAY  open gate is transparent');
+  eq(R.isCaught(openGate), true, 'RAY  player beyond an open gate is exposed');
+
+  const target = rayTestState(82, { x: 3, y: 2, id: 23 });
+  target.player = { x: 4, y: 2 };
+  eq(R.traceRay(target, 2, 2), [{ x: 3, y: 2 }, { x: 4, y: 2 }],
+    'RAY  target tiles do not block visibility');
+}
+
+function checkCatchTransitions() {
+  const R = SM.RULES;
+
+  // Entering a north belt returns the player to the authored start after the
+  // forced hop reaches a westbound ray. The final coordinates equal the
+  // pre-action coordinates, but the successful caught move still costs one.
+  const samePosition = st(mkLevel([
+    [0, 0, 0, 0, 2],
+    [0, 0, 84, 0, 0],
+    [1, 66, 0, 0, 0]
+  ]));
+  const returned = R.resolveTurn(samePosition, { type: 'move', dir: 'east' });
+  eq(samePosition.player, { x: 0, y: 0 }, 'CATCH  forced ray encounter respawns to the pre-action position');
+  eq(samePosition.strokes, 1, 'CATCH  respawned move is charged exactly one stroke');
+  eq(returned.stroke, true, 'CATCH  same-position outcome is reported as stroked');
+  eq(returned.changed, true, 'CATCH  same-position outcome is reported as changed');
+  ok(returned.steps.some(step => step.type === 'caught' && step.at.x === 1 && step.at.y === 1),
+    'CATCH  resolver reports the caught position');
+  ok(returned.steps.some(step => step.type === 'respawn' &&
+    step.to.x === 0 && step.to.y === 0), 'CATCH  resolver reports the respawn destination');
+
+  const retained = st(mkLevel([
+    [0, 41, 0, 0, 70, 2],
+    [0, 0, 0, 40, 84, 0],
+    [1, 0, 0, 0, 0, 30]
+  ], { 30: { link: 1 }, 41: { link: 2 } }));
+  retained.player = { x: 2, y: 1 };
+  retained.P = 'red';
+  retained.W = 'blu';
+  retained.switches.find(sw => sw.inst.id === 41).latched = true;
+  R.rebuildLocks(retained);
+  const caughtTurn = R.resolveTurn(retained, { type: 'move', dir: 'east' });
+  eq(retained.player, { x: 0, y: 0 }, 'CATCH  caught player returns to the authored start');
+  eq(retained.crates[2][4].id, 70, 'CATCH  unrelated crate position is preserved');
+  eq([retained.P, retained.W], ['red', 'blu'], 'CATCH  player and world colors are preserved');
+  eq(retained.switches.find(sw => sw.inst.id === 41).latched, true,
+    'CATCH  latched switch state is preserved');
+  eq(retained.locked[0][5], true,
+    'CATCH  player-occupancy gate is rebuilt after respawn and closes');
+  eq(caughtTurn.stroke, true, 'CATCH  push-independent caught move is one stroke');
+
+  const caughtGoal = st(mkLevel([
+    [0, 0, 0, 0, 0],
+    [1, 82, 2, 0, 0]
+  ]));
+  go(caughtGoal, 'east');
+  const goalTurn = go(caughtGoal, 'east');
+  eq(caughtGoal.won, false, 'CATCH  exposed goal entry loses to catch and is not a win');
+  eq(caughtGoal.player, { x: 0, y: 0 }, 'CATCH  goal catch respawns before final goal test');
+  eq(goalTurn.steps.some(step => step.type === 'goal'), false,
+    'CATCH  provisional goal event is removed when ray catch takes precedence');
+
+  const moveUndo = st(mkLevel([
+    [0, 0, 0, 0, 2],
+    [0, 0, 84, 0, 0],
+    [1, 66, 0, 0, 0]
+  ]));
+  const beforeMoveCatch = canonicalSnapshot(moveUndo);
+  R.resolveTurn(moveUndo, { type: 'move', dir: 'east' });
+  R.restore(moveUndo, beforeMoveCatch);
+  eq(canonicalSnapshot(moveUndo), beforeMoveCatch,
+    'CATCH UNDO  undo restores every snapshotted value after a caught move');
+
+  const pushUndo = st(mkLevel([
+    [0, 41, 0, 0, 0, 2],
+    [0, 0, 0, 70, 84, 0],
+    [1, 0, 0, 0, 0, 30]
+  ], { 30: { link: 1 }, 41: { link: 2 } }));
+  pushUndo.player = { x: 2, y: 1 };
+  pushUndo.P = 'red';
+  pushUndo.W = 'blu';
+  pushUndo.switches.find(sw => sw.inst.id === 41).latched = true;
+  R.rebuildLocks(pushUndo);
+  const beforePushCatch = canonicalSnapshot(pushUndo);
+  const beforePushLocks = JSON.stringify(pushUndo.locked);
+  const pushed = R.resolveTurn(pushUndo, { type: 'move', dir: 'east' });
+  eq(pushUndo.crates[1][4].id, 70, 'CATCH UNDO  caught push retains the moved crate before undo');
+  eq(pushed.stroke, true, 'CATCH UNDO  caught push has a one-stroke outcome');
+  R.restore(pushUndo, beforePushCatch);
+  eq(canonicalSnapshot(pushUndo), beforePushCatch,
+    'CATCH UNDO  undo exactly restores player, crate, colors, latch, and stroke state');
+  eq(JSON.stringify(pushUndo.locked), beforePushLocks,
+    'CATCH UNDO  undo rebuilds the exact derived gate state');
+}
+
+function checkRayTransportTransitions() {
+  const R = SM.RULES;
+  const level = mkLevel([
+    [0, 0, 0, 0, 2],
+    [0, 82, 70, 0, 0],
+    [1, 0, 0, 0, 0]
+  ], null, 1, { C2: { ray: 'transport' } });
+  const state = st(level);
+  state.player = { x: 4, y: 1 };
+  state.P = 'gre'; state.W = 'blu';
+  const before = R.snapshot(state);
+  const beforeSignature = R.snapshotSig(state);
+  const result = R.resolveTurn(state, { type: 'act' });
+  eq([state.player.x, state.player.y], [0, 0],
+    'RAY TRANSPORT  exposed player is caught after object transport and respawned');
+  eq(state.crates[1][3].id, 70,
+    'RAY TRANSPORT  crate advances until the exposed player blocks its destination');
+  eq([state.P, state.W], ['gre', 'blu'],
+    'RAY TRANSPORT  catch preserves player/world colors');
+  eq([result.stroke, state.strokes], [true, 1],
+    'RAY TRANSPORT  an ACT with transport and catch costs one stroke total');
+  ok(result.steps.findIndex(step => step.type === 'push') <
+      result.steps.findIndex(step => step.type === 'caught'),
+    'RAY TRANSPORT  crate movement resolves before player hazard catch');
+
+  R.restore(state, before);
+  eq([state.player.x, state.player.y, state.crates[1][2].id,
+    state.P, state.W, R.snapshotSig(state)],
+  [4, 1, 70, 'gre', 'blu', beforeSignature],
+  'RAY TRANSPORT UNDO  undo restores crate, player, colors, and solver identity');
+
+  const searchLevel = mkLevel([
+    [0, 0, 0, 0, 2],
+    [0, 82, 70, 0, 0],
+    [1, 0, 0, 0, 0]
+  ], null, 1, { C2: { ray: 'transport' } });
+  const search = SM.LEVELS.solve(searchLevel, { maxStates: 10000, maxDepth: 20 });
+  eq(search.status, 'solvable', 'RAY TRANSPORT BFS  solver finds a route with a moving ray object');
+  const replay = st(searchLevel);
+  let sawTransport = false;
+  for (const action of search.path || []) {
+    const stepResult = R.resolveTurn(replay, action);
+    if (stepResult.steps.some(step => step.type === 'push' && step.crate.x === 2 && step.crate.y === 1)) {
+      sawTransport = true;
+    }
+  }
+  eq(replay.won, true, 'RAY TRANSPORT BFS  replay reaches the goal');
+  eq(replay.strokes, search.optimal, 'RAY TRANSPORT BFS  replay uses the solver optimum');
+  eq(sawTransport, true, 'RAY TRANSPORT BFS  solver replay includes the same ray transport transition');
+}
+
+function checkCatchSolver() {
+  const R = SM.RULES;
+  const level = mkLevel([
+    [3, 3, 3, 3, 3],
+    [3, 0, 70, 23, 3],
+    [1, 0, 81, 10, 2]
+  ], { 10: { link: 1 } }, 7);
+  const search = SM.LEVELS.solve(level, { maxStates: 10000, maxDepth: 20 });
+  eq(search.status, 'solvable', 'CATCH BFS  solver finds a route requiring a strategic respawn');
+  eq(search.optimal, level.par, 'CATCH BFS  declared par equals the solver-proven minimum');
+  ok(search.explored <= 10000, 'CATCH BFS  search terminates inside its configured state budget');
+
+  const replay = st(level);
+  const initialSignature = R.snapshotSig(replay);
+  let sawStrategicCatch = false;
+  for (const action of search.path || []) {
+    const result = R.resolveTurn(replay, action);
+    if (!result.steps.some(step => step.type === 'caught')) continue;
+    sawStrategicCatch = true;
+    eq(replay.player, { x: level.start.x, y: level.start.y },
+      'CATCH BFS  replayed catch respawns to the authored start');
+    eq(replay.crates[1][3].id, 70, 'CATCH BFS  pushed crate remains on its target after respawn');
+    eq(replay.locked[0][3], false, 'CATCH BFS  target-controlled exit stays open after respawn');
+    ok(R.snapshotSig(replay) !== initialSignature,
+      'CATCH BFS  state signature retains the crate change across respawn');
+  }
+  eq(sawStrategicCatch, true, 'CATCH BFS  optimal solver path includes the caught push');
+  eq(replay.won, true, 'CATCH BFS  replay reaches the goal after strategic respawn');
+}
+
 
 function checkRules() {
   const R = SM.RULES;
@@ -833,6 +1067,91 @@ function checkRules() {
 /* Boot levels                                                              */
 /* ---------------------------------------------------------------------- */
 
+function checkWorld2Content() {
+  const file = path.join(ROOT, 'data/worlds/world-02-lolos-castle.levels.yaml');
+  ok(fs.existsSync(file), 'WORLD 2  independent Lolo pack exists');
+  if (!fs.existsSync(file)) return;
+
+  const text = fs.readFileSync(file, 'utf8');
+  const doc = SM.parseYAML(text);
+  const loaded = SM.LEVELS.load(text, { solve: true });
+  eq(loaded.problems.length, 0, 'WORLD 2  pack parses and validates through the shared UI loader',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  eq([doc.world_id, doc.num_level, loaded.levels.length],
+    ['world-02-lolos-castle', 8, 8], 'WORLD 2  pack has stable identity and eight levels');
+
+  const expected = [
+    { name: 'First Medusa', width: 5, height: 5, emitters: 1, crates: 1 },
+    { name: 'Crossfire', width: 7, height: 5, emitters: 2, crates: 1 },
+    { name: 'Crossing Lines', width: 9, height: 6, emitters: 2, crates: 1 },
+    { name: 'The Unhurried Exit', width: 10, height: 8, emitters: 1, crates: 1 },
+    { name: 'Four Medusas', width: 12, height: 8, emitters: 4, crates: 1 },
+    { name: 'Still Corridor', width: 14, height: 6, emitters: 3, crates: 1 },
+    { name: 'Twin Chambers', width: 16, height: 9, emitters: 2, crates: 2 },
+    { name: 'Labyrinth Fortress', width: 16, height: 9, emitters: 6, crates: 3 }
+  ];
+  for (let i = 0; i < expected.length; i++) {
+    const level = loaded.levels[i];
+    const want = expected[i];
+    eq([level.name, level.width, level.height, level.worldId],
+      [want.name, want.width, want.height, 'world-02-lolos-castle'],
+      'WORLD 2  level_' + (i + 1) + ' has its authored name, board bounds, and world identity');
+
+    const state = SM.RULES.newState(level);
+    let emitters = 0, crates = 0;
+    const targetLinks = new Set();
+    const gateLinks = new Set();
+    for (let y = 0; y < level.height; y++) {
+      for (let x = 0; x < level.width; x++) {
+        const tile = level.tiles[y][x];
+        if (tile.family === 'hazard') {
+          emitters++;
+          const dir = tile.params.dir;
+          const definition = SM.getTile(tile.id);
+          ok((Math.abs(dir.x) + Math.abs(dir.y)) === 1 &&
+              definition.presentation.motion === 'static',
+            'WORLD 2  ' + level.key + ' uses a registered static cardinal ray');
+        }
+        if (tile.family === 'target') targetLinks.add(tile.params.link);
+        if (tile.solid === 'locked' && tile.params.link > 0) gateLinks.add(tile.params.link);
+        if (state.crates[y][x]) crates++;
+      }
+    }
+    eq([emitters, crates], [want.emitters, want.crates],
+      'WORLD 2  ' + level.key + ' has the authored emitter and movable-shield counts');
+    for (const link of targetLinks) {
+      ok(gateLinks.has(link),
+        'WORLD 2  ' + level.key + ' target link ' + link + ' has a matching gate');
+    }
+    eq(SM.RULES.isCaught(state), false,
+      'WORLD 2  ' + level.key + ' authored start is safe from every ray');
+    eq(level.solve.status, 'solvable', 'WORLD 2  ' + level.key + ' has a solver-proven route');
+    eq(level.solve.optimal, level.par,
+      'WORLD 2  ' + level.key + ' par matches its solver-proven minimum');
+
+    let respawnsSafe = true;
+    for (const action of level.solve.path || []) {
+      const result = SM.RULES.resolveTurn(state, action);
+      if (result.steps.some(step => step.type === 'caught') &&
+          (state.player.x !== state.start.x || state.player.y !== state.start.y ||
+           SM.RULES.isCaught(state))) respawnsSafe = false;
+    }
+    eq(state.won, true, 'WORLD 2  replay of ' + level.key + ' reaches the goal');
+    eq(state.strokes, level.par, 'WORLD 2  replay of ' + level.key + ' uses the recorded par');
+    eq(respawnsSafe, true, 'WORLD 2  every ' + level.key + ' respawn lands safely');
+  }
+
+  for (const number of [4, 7, 8]) {
+    const withoutTargets = JSON.parse(JSON.stringify(doc));
+    for (const row of withoutTargets.levels['level_' + number].grid) {
+      for (let x = 0; x < row.length; x++) if ([23, 24, 25].includes(row[x])) row[x] = 0;
+    }
+    const checked = SM.LEVELS.validate(withoutTargets, { solve: true });
+    eq(checked.levels[number - 1].solve.status, 'unsolvable',
+      'WORLD 2  level_' + number + ' cannot bypass its target-controlled gate');
+  }
+}
+
 function checkLevels() {
   eq(SM.P_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  player palette remains the four existing colors');
   eq(SM.W_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  world palette remains the four existing colors');
@@ -1138,6 +1457,9 @@ function checkStore() {
 console.log('--- Streuph\'s Maze: verification ---');
 checkTileRegistry();
 checkYaml();
+checkRayQueries();
+checkCatchTransitions();
+checkCatchSolver();
 checkRules();
 const res = checkLevels();
 checkWorldOneContent();

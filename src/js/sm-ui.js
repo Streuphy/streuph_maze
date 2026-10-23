@@ -118,6 +118,7 @@
     // resolveTurn mutates in place and there is no dry-run mode (R19 needs a
     // real snapshot, not a re-simulation).
     var before = SM.RULES.snapshot(this.state);
+    var viewBefore = SM.RULES.cloneState(this.state);
 
     var result;
     try {
@@ -141,10 +142,11 @@
 
     var self = this;
     this.pending = true;
-    this.r.play(result.steps, this.snapshotView(), function () {
+    this.r.play(result.steps, viewBefore, function () {
       self.pending = false;
-      self.r.draw(self.state);
-      self.r.placePlayer(self.state, false);
+      self.r.view = self.snapshotView();
+      self.r.draw(self.r.view);
+      self.r.placePlayer(self.r.view, false);
       self.afterTurn();
     });
   };
@@ -424,6 +426,27 @@
       bits.push('sets your colour to ' + i.params.colour);
     } else if (i.family === 'actuator') {
       bits.push(i.name === 'cycle_reset' ? 'world colour back to white' : 'changes a colour');
+    } else if (i.family === 'hazard') {
+      var rayCells = SM.RULES.traceRay(this.state, x, y);
+      bits.push('static ray points ' + cardinalDirection(i.params.dir));
+      bits.push(rayCells.length + ' unobstructed cells; stops at walls, crates, and closed barriers');
+    }
+    var rays = SM.RULES.traceRays(this.state);
+    for (var ri = 0; ri < rays.length; ri++) {
+      var ray = rays[ri];
+      var visible = ray.cells.some(function (cell) { return cell.x === x && cell.y === y; });
+      if (visible) {
+        bits.push('on the active ' + cardinalDirection(ray.dir) + ' ray from ' +
+          SM.RULES.cellLabel(ray.x, ray.y));
+        if (this.state.player.x === x && this.state.player.y === y) bits.push('player exposed');
+      }
+      if (d.crate) {
+        var last = ray.cells.length ? ray.cells[ray.cells.length - 1] : { x: ray.x, y: ray.y };
+        if (last.x + ray.dir.x === x && last.y + ray.dir.y === y) {
+          bits.push('crate shields the ' + cardinalDirection(ray.dir) + ' ray from ' +
+            SM.RULES.cellLabel(ray.x, ray.y));
+        }
+      }
     }
     this.r.say(bits.join(' · '));
   };
@@ -494,9 +517,13 @@
 
   Game.prototype.syncTutorial = function () {
     var lv = this.state.level;
+    var hasRay = lv.tiles.some(function (row) {
+      return row.some(function (tile) { return tile.family === 'hazard'; });
+    });
     this.el.tutorial.innerHTML =
       '<p class="goal-name">' + escapeHtml(lv.name) + '</p>' +
       '<p>' + escapeHtml(lv.goalText || '') + '</p>' +
+      (hasRay ? '<p><strong>Line of sight:</strong> Rays are static and resolve on turns. Push a crate into a ray to shield cells beyond it. If caught after an action, you return to the start for that one stroke; crates and switches remain, and undo restores the turn. There is no timer or sweeping beam.</p>' : '') +
       '<p><strong>Tile visuals:</strong> tiles are static unless explicitly marked animated. The player marker pulses through eight display frames, about 250 ms per frame; this never changes moves or game rules.</p>' +
       '<p><strong>Win picture:</strong> omit <code>win_picture</code> for the built-in 250×250 PASS image, or set a level-specific PNG data URI, for example <code>win_picture: "data:image/png;base64,…"</code>. It appears only after the goal is achieved.</p>' +
       '<p style="color:var(--mute);font-size:.78rem">Arrows / WASD / HJKL move · Space presses (ACT) · ' +
@@ -520,10 +547,13 @@
         locked: def.params ? def.params.defaultLocked !== false : false,
         active: on, latched: false, W: 'wht', lit: {}
       };
+      var detail = def.family === 'hazard'
+        ? '<small class="detail">Static ' + cardinalDirection(def.params.dir) + ' ray · crates shield it</small>'
+        : '';
       html += '<div class="row' + (on ? '' : ' unseen') + '"' +
         (on ? '' : ' title="not yet seen in this level"') + '>' +
         wrapSvg(SM.glyph(def, ctx)) +
-        '<span class="nm">' + escapeHtml(def.name) + '</span>' +
+        '<span class="nm">' + escapeHtml(def.name) + detail + '</span>' +
         '<span class="id">' + id + '</span>' +
         '</div>';
     });
@@ -536,6 +566,13 @@
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+
+  function cardinalDirection(dir) {
+    if (dir.y > 0) return 'north';
+    if (dir.x > 0) return 'east';
+    if (dir.y < 0) return 'south';
+    return 'west';
   }
 
   function wrapSvg(inner) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>'; }

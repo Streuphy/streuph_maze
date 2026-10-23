@@ -1,0 +1,116 @@
+name: "Lolo's Castle"
+world_id: world-02-lolos-castle
+num_level: 8
+levels:
+  level_1:
+    name: "First Medusa"
+    goal: "Push the shield north into the westbound ray, then reach the exit behind it."
+    width: 5
+    height: 5
+    golf_score: 6
+    grid:
+      - [0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0]
+      - [2, 0, 0, 0, 84]
+      - [0, 0, 70, 0, 0]
+      - [1, 0, 0, 0, 0]
+  level_2:
+    name: "Crossfire"
+    goal: "Two rays meet at the crossing; place one crate on their shared line to protect the exit."
+    width: 7
+    height: 5
+    golf_score: 6
+    grid:
+      - [0, 0, 83, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0]
+      - [2, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 70, 0, 0, 0, 0]
+      - [1, 0, 0, 0, 0, 0, 0]
+  level_3:
+    name: "Crossing Lines"
+    goal: "Slide the shield east to the perpendicular ray intersection before approaching the exit."
+    width: 9
+    height: 6
+    golf_score: 9
+    grid:
+      - [0, 0, 0, 0, 83, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0]
+      - [2, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 0, 0, 70, 0, 0, 0, 0]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0]
+  level_4:
+    name: "The Unhurried Exit"
+    goal: "A caught push opens the linked exit; respawn keeps the crate on its target. No timer is running."
+    width: 10
+    height: 8
+    golf_score: 12
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 70, 23, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 81, 0, 0, 0, 0, 0, 10, 2]
+  level_5:
+    name: "Four Medusas"
+    goal: "Shield the courtyard crossing with a block; the side turrets are fixed and wall-occluded."
+    width: 12
+    height: 8
+    golf_score: 14
+    grid:
+      - [0, 0, 0, 0, 0, 83, 0, 0, 0, 0, 0, 0]
+      - [82, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      - [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 0, 0, 0, 70, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0]
+  level_6:
+    name: "Still Corridor"
+    goal: "The corridor ray is fixed; move the shield into its line, then use the lower return aisle."
+    width: 14
+    height: 6
+    golf_score: 14
+    grid:
+      - [3, 3, 3, 3, 83, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 0, 0, 0, 0, 0, 70, 0, 0, 0, 0, 0, 0]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0, 0]
+  level_7:
+    name: "Twin Chambers"
+    goal: "Activate both crate targets; each caught push leaves its shield in place and returns you to the entrance."
+    width: 16
+    height: 9
+    golf_score: 28
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 0, 70, 23, 3, 0, 0, 70, 24, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 0, 81, 0, 10, 0, 0, 81, 0, 26, 0, 0, 0, 0, 2]
+  level_8:
+    name: "Labyrinth Fortress"
+    goal: "Three shields open three passages. Set each block, accept the strategic respawn, then cross the fortress."
+    width: 16
+    height: 9
+    golf_score: 36
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 83, 84]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [82, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 70, 23, 3, 0, 70, 24, 3, 0, 70, 25, 3, 3, 3, 3]
+      - [1, 0, 81, 0, 10, 0, 81, 0, 26, 0, 81, 0, 27, 0, 0, 2]

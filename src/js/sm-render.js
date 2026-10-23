@@ -48,6 +48,7 @@
     var level = state.level;
     this.state = state;
     this.view = mirror(state);
+    this.playerEl.classList.remove('caught');
 
     var b = this.board;
     b.style.setProperty('--cols', level.width);
@@ -143,12 +144,24 @@
   Renderer.prototype.draw = function (view) {
     var lv = this.state.level;
     var w = lv.width;
+    var rayAt = {};
+    var rays = SM.RULES.traceRays(view);
+    for (var ri = 0; ri < rays.length; ri++) {
+      for (var ci = 0; ci < rays[ri].cells.length; ci++) {
+        var rayCell = rays[ri].cells[ci];
+        var rayKey = rayCell.x + ',' + rayCell.y;
+        (rayAt[rayKey] || (rayAt[rayKey] = [])).push(rays[ri].dir);
+      }
+    }
     for (var y = 0; y < lv.height; y++) {
       for (var x = 0; x < w; x++) {
         var inst = lv.tiles[y][x];
         var cell = this.board.children[y * w + x];
         var ctx = SM.RULES.describeTile(view, x, y);
-        var html = SM.glyph(ctx.inst, ctx);
+        var directions = rayAt[x + ',' + y] || [];
+        var html = '';
+        for (var di = 0; di < directions.length; di++) html += rayGlyph(directions[di]);
+        html += SM.glyph(ctx.inst, ctx);
         if (ctx.crate) html += SM.glyph(ctx.crate, ctx);
         if (cell.dataset.mark !== html) {
           cell.innerHTML = html ? wrapSvg(html) : '';
@@ -156,6 +169,8 @@
         }
         var cls = 'cell' + (ctx.solid ? ' wall' : '');
         if (cell.className !== cls) cell.className = cls;
+        if (directions.length) cell.dataset.ray = directions.map(directionName).join(' ');
+        else delete cell.dataset.ray;
       }
     }
     var aura = this.playerEl.querySelector('.aura');
@@ -163,6 +178,19 @@
     aura.style.borderColor = SM.PALETTE[view.W] || SM.PALETTE.wht;
     aura.classList.toggle('matched', view.P === view.W);
   };
+
+  function directionName(dir) {
+    if (dir.y > 0) return 'north';
+    if (dir.x > 0) return 'east';
+    if (dir.y < 0) return 'south';
+    return 'west';
+  }
+
+  function rayGlyph(dir) {
+    var path = dir.x ? 'M0 12 H24' : 'M12 0 V24';
+    return '<path class="ray-beam" d="' + path + '" fill="none" stroke="' +
+      SM.PALETTE.red + '" stroke-width="4" stroke-opacity="0.42" stroke-linecap="round"/>';
+  }
 
   function wrapSvg(inner) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>';
@@ -216,6 +244,7 @@
       if (finished) return;
       finished = true;
       if (self.timer) { clearTimeout(self.timer); self.timer = null; }
+      self.playerEl.classList.remove('caught');
       self.queue = null;
       done();
     }
@@ -227,7 +256,14 @@
         self.timer = setTimeout(function () { self.timer = null; finish(); }, wait);
         return;
       }
-      applyStep(view, steps[i++]);
+      var step = steps[i++];
+      applyStep(view, step);
+      if (step.type === 'caught') {
+        self.playerEl.classList.add('caught');
+        self.say('Caught by a ray — returning to start.', 'warn');
+      } else if (step.type === 'respawn') {
+        self.playerEl.classList.remove('caught');
+      }
       self.draw(view);
       self.placePlayer(view, true);
       self.timer = setTimeout(tick, STEP_MS);
@@ -255,10 +291,27 @@
         view.player.x = step.to.x; view.player.y = step.to.y;
         break;
       case 'push':
+      case 'pull':
         view.crates[step.to.y][step.to.x] = view.crates[step.crate.y][step.crate.x];
         view.crates[step.crate.y][step.crate.x] = null;
         break;
+      case 'target-move':
+        moveTargetInView(view, step);
+        break;
       case 'teleport':
+        view.player.x = step.to.x; view.player.y = step.to.y;
+        break;
+      case 'object-teleport':
+        if (step.objectType === 'target') moveTargetInView(view, step);
+        else {
+          view.crates[step.to.y][step.to.x] = view.crates[step.from.y][step.from.x];
+          view.crates[step.from.y][step.from.x] = null;
+        }
+        break;
+      case 'caught':
+        view.player.x = step.at.x; view.player.y = step.at.y;
+        break;
+      case 'respawn':
         view.player.x = step.to.x; view.player.y = step.to.y;
         break;
       case 'colour':
@@ -274,6 +327,20 @@
       }
       default:
         break;
+    }
+  }
+
+  function moveTargetInView(view, step) {
+    for (var i = 0; i < view.switches.length; i++) {
+      var target = view.switches[i];
+      if (target.inst.family !== 'target') continue;
+      var matchesId = step.entityId && target.entityId === step.entityId;
+      var matchesPosition = target.x === step.from.x && target.y === step.from.y &&
+        target.inst.id === step.id;
+      if (matchesId || matchesPosition) {
+        target.x = step.to.x; target.y = step.to.y;
+        return;
+      }
     }
   }
 

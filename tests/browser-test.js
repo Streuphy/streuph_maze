@@ -119,6 +119,10 @@ function key(k) {
   const implemented = Object.keys(SM.TILES).filter(k => SM.TILES[k].implemented !== false).length;
   eq(codexRows.length, implemented, 'the codex lists every implemented tile, generated from SM.TILES');
   ok(doc.querySelector('#codex .row svg'), 'codex rows carry a glyph');
+  const northRayCodex = Array.from(codexRows).find(row => row.querySelector('.id').textContent === '81');
+  ok(northRayCodex && /Static north ray/.test(northRayCodex.textContent) &&
+      /crates shield it/.test(northRayCodex.textContent),
+    'codex explains the static direction and crate-shield behavior for World 2 emitters');
 
   /* ---- play level 1 ---------------------------------------------------- */
   const g = () => SM.game;
@@ -165,10 +169,12 @@ function key(k) {
   const voidCell = doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
   ok(!voidCell.classList.contains('wall'), 'Void begins passable');
   key('ArrowRight');
+  await waitFor(() => voidCell.classList.contains('wall'));
   ok(voidCell.classList.contains('wall'), 'master_void renders Void as a wall while latched');
   key('ArrowRight');
   eq(g().state.player.x, 1, 'active Void prevents the player entering the tile');
   key(' ');
+  await waitFor(() => !voidCell.classList.contains('wall'));
   ok(!voidCell.classList.contains('wall'), 'ACT restores passable Void in the renderer');
   key('ArrowRight'); key('ArrowRight');
   await new Promise(r => setTimeout(r, 300));
@@ -426,6 +432,72 @@ function key(k) {
     'custom PNG art takes precedence over the generated World 1 snapshot');
   eq(doc.querySelector('#win-picture').alt, 'Custom level victory picture',
     'custom World 1 art retains its descriptive alternative text');
+
+  SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
+  await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
+
+  /* ---- World 2 ray shielding, catch, and respawn ------------------------ */
+  const rayPack = [
+    'name: "Ray Browser Test"',
+    'world_id: world-02-ray-test',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Strategic Respawn"',
+    '    width: 5',
+    '    height: 3',
+    '    golf_score: 7',
+    '    grid:',
+    '      - [3, 3, 3, 3, 3]',
+    '      - [3, 0, 70, 23, 3]',
+    '      - [1, 0, 81, 10, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(rayPack), 'a World 2 ray/respawn browser pack loads');
+  await waitFor(() => doc.querySelectorAll('#board .cell').length === 15);
+  const rayPlayerCell = (x, y) => doc.querySelector('#board .cell[data-x="' + x + '"][data-y="' + y + '"]');
+  ok(/Line of sight/.test(doc.querySelector('#tutorial').textContent) &&
+      /no timer or sweeping beam/.test(doc.querySelector('#tutorial').textContent),
+    'World 2 tutorial describes turn-based rays without timed or sweeping behavior');
+  rayPlayerCell(2, 0).click();
+  ok(/static ray points north/.test(doc.querySelector('#banner').textContent) &&
+      /0 unobstructed cells/.test(doc.querySelector('#banner').textContent),
+    'inspecting the emitter reports its direction and currently blocked ray');
+  rayPlayerCell(2, 1).click();
+  ok(/crate shields the north ray/.test(doc.querySelector('#banner').textContent),
+    'inspecting the shielding crate reports its current ray effect');
+  const initiallyShieldedCell = rayPlayerCell(2, 1);
+  ok(!initiallyShieldedCell.dataset.ray && /<rect/.test(initiallyShieldedCell.innerHTML),
+    'crate shielding stops the rendered ray at the crate');
+  key('ArrowRight');
+  await waitFor(() => !g().pending);
+  key('ArrowUp');
+  await waitFor(() => !g().pending);
+  const resolveTurn = SM.RULES.resolveTurn;
+  let caughtResult = null;
+  SM.RULES.resolveTurn = function (state, action) {
+    caughtResult = resolveTurn(state, action);
+    return caughtResult;
+  };
+  key('ArrowRight');
+  SM.RULES.resolveTurn = resolveTurn;
+  await waitFor(() => !g().pending);
+  ok(!!caughtResult && caughtResult.steps.some(step => step.type === 'ray' &&
+      step.cells.some(cell => cell.x === 2 && cell.y === 1)),
+    'resolver returns the settled ray path that reaches the player');
+  ok(caughtResult && caughtResult.steps.some(step => step.type === 'caught') &&
+      caughtResult.steps.some(step => step.type === 'respawn'),
+    'resolver returns explicit catch and respawn steps');
+  eq(g().state.player, { x: 0, y: 0 }, 'caught animation finishes with the player at the authored start');
+  eq(g().state.crates[1][3].id, 70, 'caught animation preserves the crate pushed onto the target');
+  eq(g().r.view.player, g().state.player, 'renderer mirror reaches the resolver final player state');
+  eq(g().r.view.crates[1][3].id, 70, 'renderer mirror reaches the resolver final crate state');
+  ok(rayPlayerCell(2, 1).dataset.ray === 'north' &&
+      rayPlayerCell(2, 1).querySelector('.ray-beam'),
+    'unshielded ray is visibly drawn through the vacated crate cell');
+  ok(!rayPlayerCell(3, 1).dataset.ray && /<rect/.test(rayPlayerCell(3, 1).innerHTML),
+    'the target crate visibly shields its own cell from the ray');
+  ok(!doc.querySelector('#player').classList.contains('caught'),
+    'respawn clears the transient caught presentation');
 
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);

@@ -296,6 +296,59 @@
   }
   RULES.isSolid = isSolid;
 
+  /* ---------------------------------------------------------------------- */
+  /* Static line-of-sight hazards                                           */
+  /* ---------------------------------------------------------------------- */
+
+  // Return the visible, non-opaque cells in one emitter's cardinal ray.
+  function traceRay(s, x, y) {
+    if (!inBounds(s, x, y)) return [];
+    var emitter = tileAt(s, x, y);
+    if (!emitter || emitter.family !== 'hazard') return [];
+    var dir = emitter.params.dir || {};
+    var dx = dir.x, dy = dir.y;
+    if (!((dx === 0 && (dy === 1 || dy === -1)) ||
+          (dy === 0 && (dx === 1 || dx === -1)))) return [];
+
+    var cells = [], cx = x + dx, cy = y + dy;
+    var remaining = s.width + s.height;
+    while (remaining-- > 0 && inBounds(s, cx, cy)) {
+      if (crateAt(s, cx, cy) || isSolid(s, cx, cy)) break;
+      cells.push({ x: cx, y: cy });
+      cx += dx;
+      cy += dy;
+    }
+    return cells;
+  }
+  RULES.traceRay = traceRay;
+
+  function traceRays(s) {
+    var rays = [];
+    for (var y = 0; y < s.height; y++) {
+      for (var x = 0; x < s.width; x++) {
+        var inst = tileAt(s, x, y);
+        if (!inst || inst.family !== 'hazard') continue;
+        rays.push({ x: x, y: y, dir: inst.params.dir,
+          cells: traceRay(s, x, y) });
+      }
+    }
+    return rays;
+  }
+  RULES.traceRays = traceRays;
+
+  function isCaught(s, player) {
+    var target = player || s.player;
+    var rays = traceRays(s);
+    for (var i = 0; i < rays.length; i++) {
+      for (var j = 0; j < rays[i].cells.length; j++) {
+        var cell = rays[i].cells[j];
+        if (cell.x === target.x && cell.y === target.y) return true;
+      }
+    }
+    return false;
+  }
+  RULES.isCaught = isCaught;
+
   /** Can the player stand on this cell right now? */
   function canEnter(s, x, y) {
     if (!inBounds(s, x, y)) return false;
@@ -569,6 +622,7 @@
     var steps = [];
     var engine = makeEngine(s, steps);
     var before = snapshotSig(s);
+    var wasWon = s.won;
 
     if (action.type === 'move') {
       var d = null, i;
@@ -585,14 +639,38 @@
       throw LevelError(s.key, 'resolveTurn: unknown action "' + action.type + '"');
     }
 
+    // Resolve line-of-sight only after movement, forced effects, entry effects,
+    // and the first derived-lock rebuild have settled.
     rebuildLocks(s);
+    var actionChanged = before !== snapshotSig(s);
+    var resolvedAction = action.type === 'act' ||
+      (action.type === 'move' && actionChanged);
+    var rayRecords = resolvedAction ? traceRays(s) : [];
+    for (var ri = 0; ri < rayRecords.length; ri++) {
+      steps.push({ type: 'ray', emitter: { x: rayRecords[ri].x, y: rayRecords[ri].y },
+        dir: rayRecords[ri].dir, cells: rayRecords[ri].cells });
+    }
+    var caught = resolvedAction && isCaught(s);
+    if (caught) {
+      var caughtAt = { x: s.player.x, y: s.player.y };
+      var respawnAt = { x: s.start.x, y: s.start.y };
+      s.won = wasWon;
+      for (var si = steps.length - 1; si >= 0; si--) {
+        if (steps[si].type === 'goal') steps.splice(si, 1);
+      }
+      steps.push({ type: 'caught', at: caughtAt });
+      s.player.x = respawnAt.x;
+      s.player.y = respawnAt.y;
+      steps.push({ type: 'respawn', from: caughtAt, to: respawnAt });
+      rebuildLocks(s);
+    }
+
     s.turns++;
     var inst = tileAt(s, s.player.x, s.player.y);
     if (inst) s.seen[inst.id] = true;
 
-    var after = snapshotSig(s);
-    var moved = before !== after;
-    var stroke = (action.type === 'move' && moved) || action.type === 'act';
+    var moved = actionChanged || caught;
+    var stroke = (action.type === 'move' && (actionChanged || caught)) || action.type === 'act';
     if (stroke) s.strokes++;
 
     // Goal is re-tested every turn; it is cheap and it means a colour change

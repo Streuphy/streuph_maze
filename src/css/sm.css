@@ -204,6 +204,7 @@ aside {
   #player[data-motion="animated"] .aura { animation: none; opacity: .75; transform: none; }
 }
 #player .aura.matched { border-width: 3px; }
+#player.caught .aura { box-shadow: 0 0 0 3px var(--red); }
 
 #banner {
   min-height: 1.4rem;
@@ -273,6 +274,7 @@ aside {
 #codex .row { display: grid; grid-template-columns: 1.6rem 1fr auto; gap: .5rem; align-items: center; font-size: .78rem; }
 #codex .row svg { width: 1.4rem; height: 1.4rem; }
 #codex .row .id { color: var(--mute); font-variant-numeric: tabular-nums; font-size: .68rem; }
+#codex .row .detail { display: block; color: var(--mute); font-size: .66rem; }
 #codex .row.unseen { color: var(--mute-2); }
 #codex .row.unseen .nm { color: var(--mute); }
 #codex .row .seenmark { font-size: .62rem; color: var(--mute); text-align: right; }

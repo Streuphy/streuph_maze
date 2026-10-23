@@ -30,6 +30,17 @@ starting entities over ordinary floor; when pushed away, their source cells
 remain walkable floor. To put a crate on a target, author the crate and target
 in separate cells and push the crate onto the target during play.
 
+World 2 uses static cardinal ray emitters **81–84** (north, east, south, and
+west, respectively). A ray checks the settled board after a successful action,
+including forced movement and tile effects. Walls, crates, and currently
+closed/solid barriers stop it; open gates and target tiles are transparent. If
+the player is exposed, the resolver records the catch and returns only the
+player to the authored start before testing the goal. The action costs one
+stroke total, and undo restores the pre-action state. Crates, colors, and
+latched switches are not reset. Author every level with a start cell outside
+all active rays so a respawn is safe. Ray checks are turn-based and do not use
+timers, animation completion, or wall-clock movement.
+
 See [the world-pack authoring guide](docs/world-level-packs.md) for the
 canonical YAML shape, grid orientation, tile IDs, and local-file loading rules.
 
