@@ -234,14 +234,15 @@ function key(k, modifiers) {
     'a document with too few levels is rejected and the live levels survive');
   ok(doc.querySelector('#diag').textContent.length > 0, 'the diagnostic panel explains the rejection');
 
-  SM.io.applyText('name: "x"\nworld_id: invalid-test\nnum_level: 1\nlevels:\n  level_1:\n    name: "y"\n    width: 2\n    height: 2\n    grid:\n      - [1, 99]\n      - [0, 2]\n');
+  const badTileAccepted = SM.io.applyText('name: "x"\nworld_id: invalid-test\nnum_level: 1\nlevels:\n  level_1:\n    name: "y"\n    width: 2\n    height: 2\n    grid:\n      - [1, 999]\n      - [0, 2]\n');
+  eq(badTileAccepted, false, 'shared loader rejects unknown tile IDs');
   eq(SM.game.levels.map(l => l.key).join(','), before,
     'an unknown tile id is rejected and the live levels survive');
-  ok(/unknown tile id 99/.test(doc.querySelector('#diag').textContent),
+  ok(/unknown tile id 999/.test(doc.querySelector('#diag').textContent),
     'the diagnostic names the offending id', doc.querySelector('#diag').textContent.slice(0, 200));
   ok(/invalid-test/.test(doc.querySelector('#diag').textContent) &&
      /level_1/.test(doc.querySelector('#diag').textContent) &&
-     /tile id 99 at B2/.test(doc.querySelector('#diag').textContent) &&
+     /tile id 999 at B2/.test(doc.querySelector('#diag').textContent) &&
      /registered, implemented tile ID/.test(doc.querySelector('#diag').textContent),
     'semantic pack errors identify world, level, cell and a correction');
 
@@ -288,8 +289,8 @@ function key(k, modifiers) {
   }
   selectPackFile('name: "Broken upload"\nworld_id: broken-upload\nnum_level: 1\nlevels:\n' +
     '  level_1:\n    name: "Bad tile"\n    width: 2\n    height: 2\n' +
-    '    grid:\n      - [1, 99]\n      - [0, 2]\n', 'broken.yaml');
-  await waitFor(() => /unknown tile id 99/.test(doc.querySelector('#diag').textContent));
+    '    grid:\n      - [1, 999]\n      - [0, 2]\n', 'broken.yaml');
+  await waitFor(() => /unknown tile id 999/.test(doc.querySelector('#diag').textContent));
   eq(g().levels.map(l => l.key).join(','), beforeBadFile.keys,
     'invalid picker file leaves the active level pack untouched');
   eq(doc.querySelector('#world-name').textContent, beforeBadFile.world,
@@ -441,6 +442,136 @@ function key(k, modifiers) {
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
 
+  /* ---- World 6 receiver indicators and shared crate overlays ------------ */
+  const receiverBrowserPack = [
+    'name: "Receiver Indicator Browser Test"',
+    'world_id: world-06-goof-proximity',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Four-Way Contact"',
+    '    goal: "Matching crates light only their cardinal receiver indicators."',
+    '    width: 5',
+    '    height: 5',
+    '    golf_score: 1',
+    '    grid:',
+    '      - [0, 0, 0, 0, 2]',
+    '      - [0, 0, 71, 0, 0]',
+    '      - [0, 71, 50, 71, 0]',
+    '      - [0, 0, 71, 0, 0]',
+    '      - [1, 0, 0, 0, 0]'
+  ].join('\n');
+  ok(SM.io.applyText(receiverBrowserPack),
+    'a World 6 receiver fixture loads through the shared world-pack path');
+  await waitFor(() => g().levels.length === 1 &&
+    doc.querySelectorAll('#board .cell').length === 25);
+  const receiverBrowserCell = (x, y) =>
+    doc.querySelector('#board .cell[data-x="' + x + '"][data-y="' + y + '"]');
+  const receiverBrowserView = SM.RULES.describeTile(g().state, 2, 2);
+  eq([receiverBrowserView.inst.id, receiverBrowserView.active, receiverBrowserView.lit],
+    [50, true, { n: true, e: true, s: true, w: true }],
+  'all four orthogonal indicators are exposed by the read-only receiver view');
+  const receiverMark = receiverBrowserCell(2, 2).dataset.mark;
+  for (const direction of [
+    { x: 12, y: 2, name: 'north' }, { x: 22, y: 12, name: 'east' },
+    { x: 12, y: 22, name: 'south' }, { x: 2, y: 12, name: 'west' }
+  ]) {
+    ok(new RegExp('cx="' + direction.x + '" cy="' + direction.y +
+      '" r="1\\.8" fill="' + SM.PALETTE.red + '"').test(receiverMark),
+    'the rendered receiver visibly lights its ' + direction.name + ' indicator');
+  }
+  for (const crateCell of [{ x: 2, y: 3 }, { x: 3, y: 2 }, { x: 2, y: 1 }, { x: 1, y: 2 }]) {
+    const view = SM.RULES.describeTile(g().state, crateCell.x, crateCell.y);
+    const element = receiverBrowserCell(crateCell.x, crateCell.y);
+    eq([view.inst.family, view.crate.id], ['terrain', 71],
+      'receiver fixture keeps the walkable terrain and crate as separate layers');
+    ok(/<rect/.test(element.innerHTML),
+      'the World 1 shared crate-overlay renderer visibly draws the adjacent crate');
+  }
+  const receiverGuide = fs.readFileSync(
+    path.join(ROOT, 'docs/level-design/tile-mechanics.md'), 'utf8');
+  ok(/receiver is not an occupancy target/i.test(receiverGuide),
+  'receiver authoring semantics explicitly distinguish contact from occupancy');
+
+  SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
+  await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
+
+  /* ---- World 5 chromatic pack: named selection, white, and gate feedback -- */
+  const chromaticText = fs.readFileSync(
+    path.join(ROOT, 'data/worlds/world-05-chips-chromatic.levels.yaml'), 'utf8');
+  ok(SM.io.applyText(chromaticText), 'the World 5 pack loads through the shared UI path');
+  await waitFor(() => g().levels.length === 8 &&
+    doc.querySelector('#world-name').textContent === "Chip's Chromatic");
+  eq(g().levels.map(level => level.name), [
+    'The White Mark', 'Two Prisms', 'The Other Carrier', 'Guarded Spectrum',
+    'Three-Way Filter', 'Chromatic Corridor', 'Commit to Green', 'Spectrum Nexus'
+  ], 'the World 5 selector receives every named level');
+  for (let index = 0; index < g().levels.length; index++) {
+    const level = g().levels[index];
+    const button = Array.from(doc.querySelectorAll('#levels button'))
+      .find(candidate => candidate.textContent.includes(level.name));
+    ok(!!button && !button.disabled,
+      'World 5 level is directly selectable by name: ' + level.name);
+    if (button) button.click();
+    eq([g().state.key, g().levels[g().index].name],
+      ['level_' + (index + 1), level.name],
+      'direct selection loads World 5 level ' + (index + 1));
+  }
+
+  const whiteMark = Array.from(doc.querySelectorAll('#levels button'))
+    .find(button => button.textContent.includes('The White Mark'));
+  whiteMark.click();
+  ok(/white is still white/i.test(doc.querySelector('#banner').textContent) &&
+     /yellow-key role/i.test(doc.querySelector('#banner').textContent),
+    'the World 5 tutorial explains the yellow analogy without renaming white');
+  const firstChromatic = g().levels[0];
+  firstChromatic.solve.path.forEach(action =>
+    key(action.type === 'act' ? ' ' : keyFor[action.dir]));
+  await waitFor(() => !g().pending);
+  ok(g().state.won, 'the World 5 tutorial route reaches a matching-color goal');
+  ok(!doc.querySelector('#win-picture-panel').hidden &&
+     doc.querySelector('#win-picture').src.indexOf('data:image/svg+xml') === 0 &&
+     doc.querySelector('#win-picture').alt === 'PASS',
+    'World 5 without custom art uses the shared offline PASS fallback');
+
+  const nexusButton = Array.from(doc.querySelectorAll('#levels button'))
+    .find(button => button.textContent.includes('Spectrum Nexus'));
+  nexusButton.click();
+  eq([g().state.P, g().state.W], ['wht', 'wht'],
+    'the mastery level begins with the existing white carrier state');
+  eq(doc.querySelector('#player .aura').style.background, 'rgb(237, 234, 227)',
+    'the mastery player aura renders with the existing neutral-white palette value');
+  ok(SM.PALETTE.yellow === undefined,
+    'the browser palette does not expose a yellow gameplay/display color');
+
+  const feedbackPack = [
+    'name: "Chromatic Gate Feedback"',
+    'world_id: world-05-gate-feedback',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "White Cannot Pass Red"',
+    '    width: 3',
+    '    height: 2',
+    '    golf_score: 6',
+    '    grid:',
+    '      - [0, 11, 20]',
+    '      - [1, 31, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(feedbackPack), 'the chromatic gate-feedback fixture loads offline');
+  await waitFor(() => g().levels.length === 1 && g().state.key === 'level_1');
+  key('ArrowRight');
+  eq(g().state.strokes, 0, 'a wrong-color gate attempt does not charge a stroke');
+  ok(/white mark will not open that gate; it wants red/i.test(doc.querySelector('#banner').textContent),
+    'the UI reports the actual white-versus-red gate mismatch');
+  g().levels[0].solve.path.forEach(action =>
+    key(action.type === 'act' ? ' ' : keyFor[action.dir]));
+  await waitFor(() => !g().pending);
+  ok(g().state.won, 'the gate-feedback fixture remains solvable via its red prism and dial');
+
+  SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
+  await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
+
   /* ---- World 2 ray shielding, catch, and respawn ------------------------ */
   const rayPack = [
     'name: "Ray Browser Test"',
@@ -571,6 +702,108 @@ function key(k, modifiers) {
     'undo restores the pre-push player, crate, and stroke count after an ice chain');
   eq(g().r.view.crates[0][2].id, 71,
     'undo redraws the crate at its restored pre-force position');
+
+  /* ---- World 3 polarity barriers and explicit ACT ---------------------- */
+  const polarityPack = [
+    'name: "Polarity Browser Test"',
+    'world_id: world-03-polarity-test',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Flip the route"',
+    '    goal: "Reach the crystal and ACT to exchange the open barrier."',
+    '    initial_polarity: red-open',
+    '    width: 4',
+    '    height: 2',
+    '    golf_score: 6',
+    '    grid:',
+    '      - [0, 48, 0, 3]',
+    '      - [1, 46, 47, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(polarityPack), 'a World 3 polarity browser pack loads through the shared workflow');
+  await waitFor(() => g().levels.length === 1 && doc.querySelectorAll('#board .cell').length === 8);
+  const polarityCell = (x, y) => doc.querySelector('#board .cell[data-x="' + x + '"][data-y="' + y + '"]');
+  const redBarrierCell = polarityCell(1, 0);
+  const blueBarrierCell = polarityCell(2, 0);
+  const crystalCell = polarityCell(1, 1);
+  eq([g().state.polarity, redBarrierCell.className, blueBarrierCell.className],
+    ['red-open', 'cell', 'cell wall'],
+  'World 3 renders red-open/blue-closed barriers from resolver state');
+  const redOpenCrystalGlyph = crystalCell.innerHTML;
+  redBarrierCell.click();
+  ok(/Red polarity barrier/.test(doc.querySelector('#banner').textContent) &&
+      /open under red-open/.test(doc.querySelector('#banner').textContent),
+    'World 3 barrier inspection reports its class, open state, and current polarity');
+  key('ArrowRight');
+  await waitFor(() => !g().pending);
+  key('ArrowUp');
+  await waitFor(() => !g().pending);
+  eq(g().state.player, { x: 1, y: 1 }, 'player reaches the explicit crystal switch');
+  key(' ');
+  await waitFor(() => !g().pending);
+  eq([g().state.polarity, redBarrierCell.className, blueBarrierCell.className],
+    ['blue-open', 'cell wall', 'cell'],
+  'ACT immediately exchanges the visible red and blue barrier states');
+  ok(crystalCell.innerHTML !== redOpenCrystalGlyph && g().r.view.polarity === 'blue-open',
+    'renderer mirror and crystal glyph both reflect blue-open after ACT');
+  key('z');
+  eq([g().state.polarity, redBarrierCell.className, blueBarrierCell.className,
+    crystalCell.innerHTML === redOpenCrystalGlyph, g().state.strokes],
+    ['red-open', 'cell', 'cell wall', true, 2],
+  'undo restores the previous polarity, both gate glyphs, switch glyph, and stroke count');
+
+  const world3Text = fs.readFileSync(
+    path.join(ROOT, 'data/worlds/world-03-hyrule-flip-flop.levels.yaml'), 'utf8');
+  ok(SM.io.applyText(world3Text), 'the complete World 3 pack loads through the shared UI path');
+  await waitFor(() => g().levels.length === 8 && doc.querySelectorAll('#board .cell').length === 25);
+  const world3LevelButtons = doc.querySelectorAll('#levels button');
+  world3LevelButtons[7].click();
+  await waitFor(() => g().state.key === 'level_8' &&
+    doc.querySelectorAll('#board .cell').length === 144);
+  eq([g().state.level.name, doc.querySelector('#world-name').textContent],
+    ['Grand Inversion', 'World 3: Hyrule Flip-Flop'],
+  'all World 3 levels, including mastery, are directly selectable in the shared picker');
+  world3LevelButtons[6].click();
+  await waitFor(() => g().state.key === 'level_7' &&
+    doc.querySelectorAll('#board .cell').length === 144);
+  for (const direction of ['ArrowRight', 'ArrowUp', 'ArrowRight', 'ArrowRight', ' ']) {
+    key(direction);
+    await waitFor(() => !g().pending);
+  }
+  const closedCrateBarrier = doc.querySelector(
+    '#board .cell[data-x="2"][data-y="1"]');
+  eq([g().state.polarity, g().state.crates[1][2].id,
+    closedCrateBarrier.className, !!closedCrateBarrier.querySelector('svg')],
+  ['blue-open', 70, 'cell wall', true],
+  'World 3 browser route leaves a crate visible on the red barrier closed by ACT');
+  key('z');
+  eq([g().state.polarity, g().state.crates[1][2].id, closedCrateBarrier.className],
+    ['red-open', 70, 'cell'],
+  'undo reopens the barrier while restoring the crate on it');
+
+  const blockedPushPack = [
+    'name: "World 3 Closed-Barrier Push Test"',
+    'world_id: world-03-closed-push-test',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Do not push into blue"',
+    '    goal: "A blue barrier is closed while red is open."',
+    '    initial_polarity: red-open',
+    '    width: 4',
+    '    height: 1',
+    '    golf_score: 1',
+    '    grid:',
+    '      - [1, 70, 47, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(blockedPushPack), 'World 3 closed-barrier push fixture loads in the browser');
+  await waitFor(() => g().levels.length === 1 && doc.querySelectorAll('#board .cell').length === 4);
+  key('ArrowRight');
+  eq([g().state.player, g().state.crates[0][1].id, g().state.strokes],
+    [{ x: 0, y: 0 }, 70, 0],
+  'player cannot push a crate into the initially closed blue barrier in the browser');
+  SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
+  await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
 
   const pullPack = [
     'name: "Pull Browser Test"',

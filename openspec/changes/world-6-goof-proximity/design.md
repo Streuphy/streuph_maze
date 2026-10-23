@@ -76,6 +76,65 @@ Place World 6's eight named levels in its own world pack under `data/worlds/`, u
 
 Rollback removes World 6's pack and any newly allocated variants. Existing ID 50 levels, Prologue content, and World 1 targets remain unchanged.
 
+## Route review: World 6 levels
+
+Coordinates use A1 at the bottom-left. Routes below are the shared BFS solver's
+minimum-stroke paths and were replayed through the resolver; comparison of tied
+minimum routes completed for every level. Counts include explicit directional
+commands (including pushes), not forced conveyor hops. Removing any listed
+receiver makes its level unsolvable, and the level tests assert the route crosses
+each linked gate. The pack uses no target IDs: receivers are activated only by
+matching-color crates in cardinally adjacent cells.
+
+- **Level 1 — First Dock (5×5, PAR 6):** `U R D R R R` (U=1, D=1, L=0, R=4).
+  The first push moves the crate B2→C2, immediately adjacent to receiver D2; the
+  only route to E1 crosses link-1 gate D1. A crate on D2 would not activate the
+  receiver. Reversing the push or parking the crate off the dock is recoverable
+  with undo/restart; no blocked action changes the board.
+- **Level 2 — Two Colors, Two Links (7×5, PAR 6):** `R R R R R R`
+  (U=0, D=0, L=0, R=6). Red crate C3 docks at B3/link 1 and green crate F3
+  docks at E3/link 2. The sole route from A2 to G2 crosses gates C2 and E2 in
+  order. The crate-and-wall alcoves do not permit a bypass or push into the gate
+  corridor.
+- **Level 3 — Around the Corner (9×6, PAR 12):** `U L U R R R D R D R R R`
+  (U=2, D=2, L=1, R=7). The crate starts at C2; push north to C3, walk around
+  its west side, then push east around the corner. It ends at F3 beside receiver
+  E3, opening the only route through gate G1. Short pushes onto the receiver do
+  not count as contact, but the minimum route re-docks it on the far side.
+- **Level 4 — Belt and Barrier (10×8, PAR 8):** `R R R R R R R R`
+  (U=0, D=0, L=0, R=8). The red crate begins docked at C2 beside B2's receiver;
+  a single east command on B1's player conveyor carries the player to C1. Gate
+  F1 is the only exit from the corridor. The route uses the existing conveyor
+  resolver and does not depend on World 4 sliding.
+- **Level 5 — Castle Basement Rooms (12×8, PAR 11):** eleven east commands
+  (U=0, D=0, L=0, R=11). The red/link-1 dock at B3 and green/link-2 dock at H3
+  control consecutive gates D1 and H1. The two walled rooms cannot be traversed
+  as a substitute path; each gate's receiver is individually necessary.
+- **Level 6 — Railway Dock (16×6, PAR 19):** `U U` + ten east pushes + `D D` +
+  five east commands (U=2, D=2, L=0, R=15). Push the crate from B3 to L3 along
+  the 16-column railway, where it touches receiver M3. Return through K2/K1 and
+  cross gate O1 to P1. K is the only descent from the track; the gate cannot be
+  bypassed from the upper rows.
+- **Level 7 — Re-dock the Red Crate (16×9, PAR 21):**
+  `R R U R U L R D D` + twelve east commands (U=2, D=2, L=1, R=16). The red
+  crate at C3 initially activates receiver D3/link 1, opening gate C1. After
+  crossing it, push the crate west to B3; link 1 deactivates and receiver A3/
+  link 2 activates. Gate F1 then opens. The solver route confirms the re-dock
+  occurs only after the player has crossed the first gate.
+- **Level 8 — Grand Dockworks (16×9, PAR 21):** the same re-dock sequence as
+  level 7 (U=2, D=2, L=1, R=16), followed by the long route through gate M1.
+  A red crate switches from D3/link 1 to A3/link 2 after gate C1; a separate
+  blue crate stays beside the blue/link-3 receiver at I4 and opens gate M1.
+  Each of the three link gates is necessary and inspectable. This combines
+  sequential re-docking with a stable second-color dock without introducing
+  new movement behavior.
+
+Levels 1–3 were manually checked for plausible wrong pushes and dead ends.
+Bounded wall cells prevent crate loss into the gate route; a wrong push can
+temporarily park a crate away from its intended dock, but undo/restart restores
+the authored puzzle. The pack's shortest routes and exact pars are asserted in
+the World 6 content suite.
+
 ## Open Questions
 
 - None blocking. The variant map is intentionally limited to three links and four gameplay colors; expand it only when a reviewed level demonstrates the need.

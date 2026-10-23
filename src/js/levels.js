@@ -19,6 +19,7 @@
  *   V10 level is solvable                                 warning
  *   V11 exactly one goal tile                             error
  *   V12 every portal has a partner                        warning
+ *   V14 initial binary polarity is red-open or blue-open   error
  *
  * The V10 solver is breadth-first over the REAL resolver (SM.RULES), so it
  * can never disagree with play. It reports "unknown" — never a wrong answer
@@ -35,6 +36,7 @@
   var MIN_HEIGHT = 1;
   var MAX_STATES = 250000;
   var MAX_DEPTH = 200;
+  var POLARITIES = ['red-open', 'blue-open'];
 
   var GAMECOLOURS = SM.GAME_COLOURS;
 
@@ -228,6 +230,10 @@
     if (typeof raw.name !== 'string' || raw.name === '') {
       return { error: diag(key, 0, '"name" is required and must be a non-empty string') };
     }
+    if (raw.initial_polarity !== undefined && POLARITIES.indexOf(raw.initial_polarity) === -1) {
+      return { error: diag(key, 0,
+        'V14: "initial_polarity" must be "red-open" or "blue-open"') };
+    }
     var pictureError = validateWinPicture(raw.win_picture);
     if (pictureError) return { error: diag(key, 0, pictureError) };
     var hint = raw.goal !== undefined ? raw.goal : raw.hint;
@@ -359,6 +365,21 @@
         if (!parameterCheck.ok) {
           return { error: diag(key, 0, 'V6: tile id ' + oid + ' has an invalid parameter override: ' +
             parameterCheck.errors[0]) };
+        }
+        var overrideTile = SM.getTile(Number(oid));
+        if (overrideTile.strategies &&
+            overrideTile.strategies.activation === 'crateAdjacencySensor') {
+          var receiverLink = ov.link === undefined ? overrideTile.params.link : ov.link;
+          var receiverColour = ov.colour === undefined ? overrideTile.params.colour : ov.colour;
+          if (!isInt(receiverLink) || receiverLink < 1 || receiverLink > 3) {
+            return { error: diag(key, 0,
+              'V6: receiver tile id ' + oid + ' link must be one of the configured links 1, 2, or 3') };
+          }
+          if (GAMECOLOURS.indexOf(receiverColour) === -1) {
+            return { error: diag(key, 0,
+              'V6: receiver tile id ' + oid + ' colour must be a supported gameplay colour: ' +
+              GAMECOLOURS.join(', ')) };
+          }
         }
       }
     }

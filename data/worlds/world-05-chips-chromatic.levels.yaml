@@ -1,0 +1,124 @@
+# World 5: Chip's Chromatic — persistent player auras, world colors, and filters.
+# White remains the actual white gameplay color; it fills the classic yellow-key role.
+name: "Chip's Chromatic"
+world_id: world-05-chips-chromatic
+num_level: 8
+levels:
+  level_1:
+    name: "The White Mark"
+    goal: "White is still white here; it fills the classic yellow-key role. Take the red prism, advance the world dial to red, then pass the red aura gate."
+    width: 5
+    height: 5
+    golf_score: 8
+    grid:
+      - [3, 3, 2, 3, 3]
+      - [3, 3, 31, 3, 3]
+      - [3, 3, 0, 3, 3]
+      - [3, 11, 0, 20, 3]
+      - [1, 0, 3, 3, 3]
+
+  level_2:
+    name: "Two Prisms"
+    goal: "Red then blue: each prism replaces your aura. Blue persists while you return to the dial; advance it to blue before the matching goal."
+    width: 7
+    height: 5
+    golf_score: 10
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 20, 3]
+      - [1, 0, 11, 31, 13, 33, 2]
+
+  level_3:
+    name: "The Other Carrier"
+    goal: "The blue world gate reads W, not your red aura. Set W to blue, cross it, then take the blue prism so both carriers match at the exit."
+    width: 9
+    height: 6
+    golf_score: 9
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 11, 20, 0, 36, 13, 0, 2, 3]
+
+  level_4:
+    name: "Guarded Spectrum"
+    goal: "Latch the key to open the phase wall and power the green set-dial. The green prism changes P; the dial changes W."
+    width: 10
+    height: 8
+    golf_score: 7
+    overrides:
+      10: { link: 1 }
+      22: { link: 1, colour: gre }
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 41, 10, 12, 22, 32, 2, 3, 3]
+
+  level_5:
+    name: "Three-Way Filter"
+    goal: "Each aura gate tests your current P: red, then green, then blue. The final dial must leave W blue to match the last prism."
+    width: 12
+    height: 8
+    golf_score: 13
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 11, 31, 12, 32, 13, 33, 20, 0, 0, 0, 2]
+
+  level_6:
+    name: "Chromatic Corridor"
+    goal: "This corridor alternates W-gates with P-gates. Set each world color with the dial, then take the matching prism before its aura filter."
+    width: 16
+    height: 2
+    golf_score: 15
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 20, 34, 11, 31, 20, 35, 12, 32, 20, 36, 13, 33, 0, 0, 2]
+
+  level_7:
+    name: "Commit to Green"
+    goal: "At the fork, the red spur is a reversible dead end. Choose the green prism and gate to reach the upper route, then change to blue for the exit."
+    width: 16
+    height: 9
+    golf_score: 27
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 32, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3]
+      - [3, 3, 12, 3, 3, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 3, 3, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 3, 3, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 3, 3, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3]
+      - [1, 0, 0, 11, 31, 0, 3, 3, 3, 3, 0, 13, 33, 20, 0, 2]
+
+  level_8:
+    name: "Spectrum Nexus"
+    goal: "Use the white gate while P is white, then follow red, green, and blue through both P- and W-filters. White stays white; all four states remain distinct."
+    width: 16
+    height: 9
+    golf_score: 15
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 30, 11, 31, 20, 34, 12, 32, 20, 35, 13, 33, 20, 36, 0, 2]

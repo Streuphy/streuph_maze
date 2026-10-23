@@ -38,15 +38,15 @@
    */
   RULES.STATE_CONTRACT = Object.freeze({
     fixed: Object.freeze(['level', 'key', 'width', 'height', 'grid', 'portals', 'start', 'goal']),
-    mutable: Object.freeze(['crates', 'switches', 'player', 'P', 'W', 'strokes', 'turns', 'won']),
+    mutable: Object.freeze(['crates', 'switches', 'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won']),
     derived: Object.freeze(['locked']),
     persistent: Object.freeze(['seen']),
     undo: Object.freeze([
-      'player', 'P', 'W', 'strokes', 'turns', 'won',
+      'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won',
       'switches[].latched', 'switches[target].position', 'crates[][]'
     ]),
     solverIdentity: Object.freeze([
-      'player', 'P', 'W', 'switches[].latched', 'targets[].position',
+      'player', 'P', 'W', 'polarity', 'switches[].latched', 'targets[].position',
       'crates[][]:id+colour+capabilities'
     ])
   });
@@ -210,6 +210,7 @@
       key: key,
       name: raw.name || key,
       goalText: raw.goal || '',
+      initialPolarity: raw.initial_polarity || 'red-open',
       winPicture: raw.win_picture || null,
       width: w,
       height: h,
@@ -259,6 +260,7 @@
       strokes: 0,
       turns: 0,
       won: false,
+      polarity: level.initialPolarity || 'red-open',
       seen: {}
     };
     rebuildLocks(s);
@@ -293,6 +295,7 @@
       start: { x: s.start.x, y: s.start.y },
       goal: { x: s.goal.x, y: s.goal.y },
       P: s.P, W: s.W,
+      polarity: s.polarity,
       strokes: s.strokes, turns: s.turns, won: s.won,
       seen: Object.assign({}, s.seen)
     };
@@ -304,7 +307,7 @@
     // restored signals and latches.
     return {
       player: { x: s.player.x, y: s.player.y },
-      P: s.P, W: s.W,
+      P: s.P, W: s.W, polarity: s.polarity,
       strokes: s.strokes, turns: s.turns, won: s.won,
       latched: s.switches.map(function (sw) { return sw.latched; }),
       targets: s.switches.filter(isTargetEntity)
@@ -322,7 +325,7 @@
     // capability profiles remain attached to immutable instances; positions,
     // colors, counters, latches, and crate occupancy are restored explicitly.
     s.player.x = snap.player.x; s.player.y = snap.player.y;
-    s.P = snap.P; s.W = snap.W;
+    s.P = snap.P; s.W = snap.W; s.polarity = snap.polarity || 'red-open';
     s.strokes = snap.strokes; s.turns = snap.turns; s.won = snap.won;
     for (var i = 0; i < s.switches.length; i++) s.switches[i].latched = snap.latched[i];
     if (snap.targets) {
@@ -680,6 +683,11 @@
         if (!sw) return;
         sw.latched = !sw.latched;
         steps.push({ type: 'switch', x: sw.x, y: sw.y, latched: sw.latched });
+      },
+      flipPolarity: function (ctx) {
+        var from = s.polarity;
+        s.polarity = from === 'red-open' ? 'blue-open' : 'red-open';
+        steps.push({ type: 'polarity', x: ctx.x, y: ctx.y, from: from, to: s.polarity });
       },
       teleportPlayer: function (ctx) {
         var dest = partnerPortal(s, ctx.x, ctx.y, ctx.inst.params.link);
@@ -1097,7 +1105,7 @@
 
   /** Cheap identity of the mutable parts of the state. */
   function snapshotSig(s) {
-    var sig = s.player.x + ',' + s.player.y + '|' + s.P + '|' + s.W;
+    var sig = s.player.x + ',' + s.player.y + '|' + s.P + '|' + s.W + '|' + s.polarity;
     for (var i = 0; i < s.switches.length; i++) {
       var sw = s.switches[i];
       sig += '|' + (sw.latched ? 1 : 0);
@@ -1142,6 +1150,7 @@
       active: sw ? switchActive(s, sw) : false,
       latched: sw ? sw.latched : false,
       W: s.W,
+      polarity: s.polarity,
       lit: {}
     };
     if (sw && sw.inst.strategies && sw.inst.strategies.activation === 'crateAdjacencySensor') {

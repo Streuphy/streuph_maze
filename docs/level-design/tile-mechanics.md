@@ -50,6 +50,16 @@ Unknown coordinates, non-object cells, unsupported keys, and invalid values
 are validation errors. `pushable`, `pullable`, `conveyor`, and `portal` accept
 booleans. `ray` accepts `block`, `transport`, or `ignore`.
 
+### World 3: binary gate polarity
+
+World 3 levels may set `initial_polarity` to `red-open` or `blue-open`; when
+omitted it defaults to `red-open`. IDs 46 and 47 are complementary barrier
+classes, and ID 48 changes the level-wide polarity only when the player presses
+ACT while standing on it. This polarity is separate from player/world colors
+(`P`/`W`) and from `master_lock` links. A polarity flip changes barrier
+passability immediately; an occupant is not ejected from a barrier that closes
+around it.
+
 ## Tile catalogue
 
 All IDs below are registered and implemented in the current runtime. Defaults
@@ -88,7 +98,10 @@ parameter. Object capabilities may additionally be overridden per cell.
 | 42 | `link_plate` | switch | Tagged momentary link 1; active while the player stands on it. |
 | 44 | `master_lock` | switch | Global toggle; when latched, forces every lock-controlled tile closed. |
 | 45 | `master_void` | switch | Global toggle; when latched, makes all ID 4 void cells solid. |
-| 50 | `receiver` | sensor | Tagged link 1, color red. Active when at least one matching-color crate occupies a cardinally adjacent cell. |
+| 46 | `polarity_barrier_red` | barrier | Open only while the level-wide polarity is `red-open`; independent of player/world colors and lock links. |
+| 47 | `polarity_barrier_blue` | barrier | Open only while the level-wide polarity is `blue-open`; complementary to ID 46. |
+| 48 | `polarity_switch` | switch | ACT flips the level-wide `red-open` / `blue-open` polarity; entry alone does not flip it. |
+| 50 | `receiver` | sensor | Red, tagged link 1. Active when at least one matching-color crate occupies a cardinally adjacent cell. |
 | 60 | `crate_east` | flow | Crate-force belt directed east. |
 | 61 | `crate_west` | flow | Crate-force belt directed west. |
 | 62 | `crate_north` | flow | Crate-force belt directed north. |
@@ -106,6 +119,17 @@ parameter. Object capabilities may additionally be overridden per cell.
 | 82 | `ray_east` | hazard | Static ray emitter directed east. |
 | 83 | `ray_south` | hazard | Static ray emitter directed south. |
 | 84 | `ray_west` | hazard | Static ray emitter directed west. |
+| 90 | `receiver_gre_link_1` | sensor | Green, tagged link 1. |
+| 91 | `receiver_blu_link_1` | sensor | Blue, tagged link 1. |
+| 92 | `receiver_wht_link_1` | sensor | White, tagged link 1. |
+| 93 | `receiver_red_link_2` | sensor | Red, tagged link 2. |
+| 94 | `receiver_gre_link_2` | sensor | Green, tagged link 2. |
+| 95 | `receiver_blu_link_2` | sensor | Blue, tagged link 2. |
+| 96 | `receiver_wht_link_2` | sensor | White, tagged link 2. |
+| 97 | `receiver_red_link_3` | sensor | Red, tagged link 3. |
+| 98 | `receiver_gre_link_3` | sensor | Green, tagged link 3. |
+| 99 | `receiver_blu_link_3` | sensor | Blue, tagged link 3. |
+| 100 | `receiver_wht_link_3` | sensor | White, tagged link 3. |
 
 Targets are stationary by default (`pushable: false`, `pullable: false`) and do
 not ride conveyors or portals; they are transparent to rays (`ray: ignore`). A
@@ -113,7 +137,7 @@ designer can explicitly enable supported capabilities at the target's
 coordinate. When enabled and moved, target identity and link move with the
 feature; its vacated terrain remains unchanged.
 
-IDs 6–7 are retired. IDs 8–9, 14, 28–29, 37–39, 43, 51–59, 68–69, and 74–79
+IDs 6–7 are retired. IDs 8–9, 14, 28–29, 37–39, 43, 49, 51–59, 68–69, and 74–79
 are not registered for gameplay. Any other absent ID is also unavailable until
 it is added to the catalogue and given implemented rules. The level loader
 rejects unknown and explicitly unimplemented IDs rather than guessing.
@@ -164,6 +188,11 @@ rejects unknown and explicitly unimplemented IDs rather than guessing.
 - Targets are momentary and use **crate occupancy**, not player occupancy or
   adjacency. Receivers use **matching-color crate adjacency** in the four
   cardinal cells; a crate sitting on the receiver does not count.
+- Receiver links are restricted to 1–3. Use the fixed IDs above to choose a
+  color/link pair; ID-level overrides still apply to every occurrence of an ID
+  in the level. Multiple active receivers on the same link combine with **OR**
+  semantics: any one matching adjacent crate opens that link's lock. Separate
+  links remain independent. A receiver is not an occupancy target.
 - A target's link follows it when pushed, pulled, conveyed, teleported, or
   transported by a ray. The linked signal is derived from the crate and target
   sharing a cell after the resolved movement.

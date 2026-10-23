@@ -1,0 +1,116 @@
+name: "World 6: Goof Proximity"
+world_id: world-06-goof-proximity
+num_level: 8
+levels:
+  level_1:
+    name: "First Dock"
+    goal: "Push the red crate beside the receiver; standing on it is not a dock."
+    width: 5
+    height: 5
+    golf_score: 6
+    grid:
+      - [3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3]
+      - [0, 71, 0, 50, 3]
+      - [1, 0, 0, 10, 2]
+  level_2:
+    name: "Two Colors, Two Links"
+    goal: "The red dock opens link 1; the green dock opens only link 2."
+    width: 7
+    height: 5
+    golf_score: 6
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3]
+      - [3, 50, 71, 3, 94, 72, 3]
+      - [1, 0, 10, 0, 26, 0, 2]
+      - [3, 3, 3, 3, 3, 3, 3]
+  level_3:
+    name: "Around the Corner"
+    goal: "Lift the crate, walk around its corner, then dock it beside the red receiver."
+    width: 9
+    height: 6
+    golf_score: 12
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 0, 0, 0, 50, 0, 3, 3, 3]
+      - [3, 0, 71, 0, 0, 0, 3, 3, 3]
+      - [3, 3, 1, 0, 0, 0, 10, 0, 2]
+  level_4:
+    name: "Belt and Barrier"
+    goal: "The matching dock opens the phase wall; the floor belt carries you forward."
+    width: 10
+    height: 8
+    golf_score: 8
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 50, 71, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 64, 0, 0, 0, 10, 0, 0, 0, 2]
+  level_5:
+    name: "Castle Basement Rooms"
+    goal: "Cross the red and green dock rooms in order; neither receiver is an occupancy plate."
+    width: 12
+    height: 8
+    golf_score: 11
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 50, 71, 3, 3, 3, 3, 94, 72, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 0, 10, 0, 0, 0, 26, 0, 0, 0, 2]
+  level_6:
+    name: "Railway Dock"
+    goal: "Push the red crate to the end of the 16-column track, then take the lower route."
+    width: 16
+    height: 6
+    golf_score: 19
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 71, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 3, 3, 3]
+      - [0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 2]
+  level_7:
+    name: "Re-dock the Red Crate"
+    goal: "Cross link 1 first, then re-dock the same crate on link 2 before the exit."
+    width: 16
+    height: 9
+    golf_score: 21
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [93, 0, 71, 50, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 10, 0, 0, 26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+  level_8:
+    name: "Grand Dockworks"
+    goal: "Cross link 1, re-dock red on link 2, then use the blue dock to open link 3."
+    width: 16
+    height: 9
+    golf_score: 21
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 99, 73, 3, 3, 3, 3, 3, 3]
+      - [93, 0, 71, 50, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 10, 0, 0, 26, 0, 0, 0, 0, 0, 0, 27, 0, 0, 2]

@@ -87,6 +87,89 @@ function runRegistrySuite(SM) {
       `phase-wall ID ${item.id} shares the standard phase-wall glyph`);
   }
 
+  const receiverAllocation = [
+    { id: 90, colour: 'gre', link: 1 },
+    { id: 91, colour: 'blu', link: 1 },
+    { id: 92, colour: 'wht', link: 1 },
+    { id: 93, colour: 'red', link: 2 },
+    { id: 94, colour: 'gre', link: 2 },
+    { id: 95, colour: 'blu', link: 2 },
+    { id: 96, colour: 'wht', link: 2 },
+    { id: 97, colour: 'red', link: 3 },
+    { id: 98, colour: 'gre', link: 3 },
+    { id: 99, colour: 'blu', link: 3 },
+    { id: 100, colour: 'wht', link: 3 }
+  ];
+  assert.equal(new Set(receiverAllocation.map(item => item.id)).size, 11,
+    'World 6 receiver allocations use eleven unique IDs');
+  assert.deepEqual(receiverAllocation.map(item => item.id),
+    Array.from({ length: 11 }, (_, index) => index + 90),
+  'World 6 receiver variants reserve the contiguous 90–100 range');
+  assert.deepEqual(receiverAllocation.map(({ colour, link }) => [colour, link]), [
+    ['gre', 1], ['blu', 1], ['wht', 1],
+    ['red', 2], ['gre', 2], ['blu', 2], ['wht', 2],
+    ['red', 3], ['gre', 3], ['blu', 3], ['wht', 3]
+  ], 'World 6 allocations fill the documented color/link combinations besides ID 50');
+  for (const item of receiverAllocation) {
+    const tile = SM.TILES[item.id];
+    assert.ok(tile, `World 6 receiver ID ${item.id} is registered`);
+    assert.deepEqual([tile.family, tile.glyph, tile.solid, tile.walkable],
+      ['sensor', 'receiver', false, true],
+    `World 6 receiver ID ${item.id} remains a walkable sensor`);
+    assert.deepEqual(tile.params,
+      { mode: 'sensor', scope: 'tagged', link: item.link, colour: item.colour },
+    `World 6 receiver ID ${item.id} defaults to ${item.colour}/link ${item.link}`);
+    assert.deepEqual(tile.strategies, { activation: 'crateAdjacencySensor' },
+      `World 6 receiver ID ${item.id} uses the existing adjacency strategy`);
+  }
+  assert.deepEqual([SM.TILES[50].params, SM.TILES[50].family, SM.TILES[50].glyph], [
+    { mode: 'sensor', scope: 'tagged', link: 1, colour: 'red' }, 'sensor', 'receiver'
+  ], 'legacy receiver ID 50 remains red/link 1 with its original identity');
+  assert.deepEqual([SM.TILES[10].params.link, SM.TILES[26].params.link,
+    SM.TILES[27].params.link], [1, 2, 3],
+  'World 6 link allocation agrees with World 1 phase-wall links 1–3');
+
+  const polarityTiles = [
+    { id: 46, name: 'polarity_barrier_red', family: 'barrier', openWhen: 'red-open' },
+    { id: 47, name: 'polarity_barrier_blue', family: 'barrier', openWhen: 'blue-open' },
+    { id: 48, name: 'polarity_switch', family: 'switch', openWhen: null }
+  ];
+  for (const item of polarityTiles) {
+    const tile = SM.TILES[item.id];
+    assert.ok(tile, `World 3 tile ID ${item.id} is registered`);
+    assert.deepEqual([tile.id, tile.name, tile.family],
+      [item.id, item.name, item.family], `World 3 ID ${item.id} has its allocated meaning`);
+    if (item.openWhen) {
+      assert.deepEqual([tile.solid, tile.walkable, tile.params.openWhen,
+        tile.strategies.passability],
+      ['polarity', 'polarity', item.openWhen, 'binaryPolarityBarrier'],
+      `World 3 barrier ${item.name} declares its opening polarity and rule strategy`);
+    } else {
+      assert.deepEqual(tile.strategies, { onAct: 'flipPolarity' },
+        'World 3 crystal switch flips only through ACT, never by walking onto it');
+    }
+  }
+  assert.equal(SM.TILES[44].name, 'master_lock', 'ID 44 remains the existing master lock');
+  assert.equal(SM.TILES[45].name, 'master_void', 'ID 45 remains the existing master void');
+  assert.equal(SM.TILES[49], undefined, 'ID 49 remains unused and reserved');
+  assert.equal(new Set(polarityTiles.map(item => SM.TILES[item.id].name)).size, 3,
+    'World 3 allocated IDs have three distinct meanings');
+  assert.match(SM.TILES[46].presentation.codex, /red-open/,
+    'red barrier codex names its independent global polarity state');
+  assert.match(SM.TILES[47].presentation.codex, /blue-open/,
+    'blue barrier codex names its complementary global polarity state');
+  assert.match(SM.TILES[48].presentation.codex, /ACT flips/,
+    'crystal switch codex distinguishes explicit activation from entry');
+  assert.notEqual(SM.glyph(SM.TILES[46], { solid: false }),
+    SM.glyph(SM.TILES[46], { solid: true }),
+  'red barrier glyph distinguishes open from closed state');
+  assert.notEqual(SM.glyph(SM.TILES[47], { solid: false }),
+    SM.glyph(SM.TILES[47], { solid: true }),
+  'blue barrier glyph distinguishes open from closed state');
+  assert.notEqual(SM.glyph(SM.TILES[48], { polarity: 'red-open' }),
+    SM.glyph(SM.TILES[48], { polarity: 'blue-open' }),
+  'crystal switch glyph exposes which polarity is currently open');
+
   const duplicate = { ...SM.TILES[0], name: 'duplicate-floor' };
   const duplicateResult = SM.validateTileRegistry([SM.TILES[0], duplicate]);
   assert.ok(duplicateResult.errors.some(message => /duplicate stable tile id/.test(message)),

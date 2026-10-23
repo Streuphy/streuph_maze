@@ -32,9 +32,18 @@ The system SHALL treat a closed polarity barrier as solid for both player entry 
 - **WHEN** a crate's destination is a barrier closed by the current polarity
 - **THEN** the push is blocked and neither player nor crate moves
 
-#### Scenario: Polarity closes around an occupant
-- **WHEN** a switch closes a barrier beneath a player or crate already occupying it
-- **THEN** the occupant is not teleported or destroyed, may leave under normal rules, and cannot re-enter until the barrier opens
+#### Scenario: A polarity flip closes a barrier beneath a crate
+- **WHEN** a switch changes polarity while a crate occupies a barrier that becomes closed
+- **THEN** the crate remains in place, may be pushed off under normal rules, and cannot be pushed back into the barrier until it opens
+
+#### Scenario: A player is already on a barrier that becomes closed
+- **WHEN** a runtime or restored state has the player on a barrier cell that is solid under the current polarity
+- **THEN** the player is not ejected, may leave under normal movement rules, and cannot re-enter until the barrier opens
+
+The current switch is a single-cell tile activated only by ACT while occupied, so
+the player-on-closing-barrier case is a defensive state invariant rather than a
+state reachable through the ordinary switch interaction. It is verified with a
+focused state fixture; no remote activation or layered-tile mechanic is implied.
 
 ### Requirement: Polarity state is undoable and solver-visible
 The system SHALL include polarity in turn snapshots, restoration, state identity, and solvability search so that undo and computed par match interactive play.

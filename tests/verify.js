@@ -74,14 +74,14 @@ function checkStateContract() {
   eq(Object.keys(R.cloneState(state)).sort(), roots,
     'STATE  solver clones preserve the canonical runtime root-field shape');
   eq(Object.keys(R.snapshot(state)).sort(), [
-    'P', 'W', 'crates', 'latched', 'player', 'strokes', 'targets', 'turns', 'won'
+    'P', 'W', 'crates', 'latched', 'player', 'polarity', 'strokes', 'targets', 'turns', 'won'
   ], 'STATE  undo snapshots contain the explicit reversible payload');
   eq(contract.undo, [
-    'player', 'P', 'W', 'strokes', 'turns', 'won',
+    'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won',
     'switches[].latched', 'switches[target].position', 'crates[][]'
   ], 'STATE  undo contract names nested switch, target, and crate state');
   eq(contract.solverIdentity, [
-    'player', 'P', 'W', 'switches[].latched', 'targets[].position',
+    'player', 'P', 'W', 'polarity', 'switches[].latched', 'targets[].position',
     'crates[][]:id+colour+capabilities'
   ], 'STATE  solver identity contract names every gameplay-relevant entity/carrier value');
   ok(R.cloneState(state).seen !== state.seen && R.cloneState(state).crates !== state.crates,
@@ -90,15 +90,21 @@ function checkStateContract() {
   const before = R.snapshot(state);
   state.player.x = (state.player.x + 1) % state.width;
   state.P = 'red';
+  state.polarity = 'blue-open';
   state.strokes++;
   R.restore(state, before);
-  eq([state.player, state.P, state.strokes], [before.player, before.P, before.strokes],
+  eq([state.player, state.P, state.polarity, state.strokes],
+    [before.player, before.P, before.polarity, before.strokes],
     'STATE  restore replays the documented undo fields');
 
   const signature = R.snapshotSig(state);
   state.P = state.P === 'red' ? 'gre' : 'red';
   ok(R.snapshotSig(state) !== signature,
     'STATE  solver identity includes canonical color-carrier state');
+  const polaritySignature = R.snapshotSig(state);
+  state.polarity = state.polarity === 'red-open' ? 'blue-open' : 'red-open';
+  ok(R.snapshotSig(state) !== polaritySignature,
+    'STATE  solver identity distinguishes complementary global polarity');
 }
 
 function checkTileHookDispatch() {
@@ -314,6 +320,17 @@ function mkLevel(grid, over, par, objectOverrides) {
     overrides: over || null, object_overrides: objectOverrides || null, grid: grid
   }, 'test');
 }
+
+function polarityDocument(grid, initialPolarity) {
+  const level = {
+    name: 'Polarity fixture', goal: 'Test complementary global barriers.',
+    width: grid[0].length, height: grid.length, golf_score: 1, grid
+  };
+  if (initialPolarity !== undefined) level.initial_polarity = initialPolarity;
+  return { name: 'Polarity Test', world_id: 'polarity-test', num_level: 1,
+    levels: { level_1: level } };
+}
+
 function st(level) { return SM.RULES.newState(level); }
 function canonicalSnapshot(s) {
   const snap = SM.RULES.snapshot(s);
@@ -322,6 +339,131 @@ function canonicalSnapshot(s) {
 }
 function go(s, dir) { return SM.RULES.resolveTurn(s, { type: 'move', dir: dir }); }
 function act(s) { return SM.RULES.resolveTurn(s, { type: 'act' }); }
+
+function checkPolarityBarriers() {
+  const R = SM.RULES;
+  const grid = [[1, 46, 47, 3, 2]];
+  const defaultResult = SM.LEVELS.validate(polarityDocument(grid), { solve: false });
+  ok(defaultResult.ok, 'POLARITY  omitted initial state validates with the default');
+  const redOpen = st(defaultResult.levels[0]);
+  eq([redOpen.polarity, R.isSolid(redOpen, 1, 0), R.isSolid(redOpen, 2, 0)],
+    ['red-open', false, true], 'POLARITY  red-open admits red barriers and closes blue barriers');
+  eq([R.canEnter(redOpen, 1, 0), R.canEnter(redOpen, 2, 0), R.isSolid(redOpen, 3, 0)],
+    [true, false, true], 'POLARITY  player passability is complementary and ordinary walls stay solid');
+
+  const blueResult = SM.LEVELS.validate(polarityDocument(grid, 'blue-open'), { solve: false });
+  ok(blueResult.ok, 'POLARITY  blue-open is accepted as the alternate initial state');
+  const blueOpen = st(blueResult.levels[0]);
+  eq([blueOpen.polarity, R.isSolid(blueOpen, 1, 0), R.isSolid(blueOpen, 2, 0)],
+    ['blue-open', true, false], 'POLARITY  blue-open exchanges both barrier classes');
+
+  const colourResult = SM.LEVELS.validate(polarityDocument([[1, 31, 2]]), { solve: false });
+  const colourGate = st(colourResult.levels[0]);
+  colourGate.P = 'red';
+  eq(R.canEnter(colourGate, 1, 0), true, 'POLARITY  existing red aura gate admits matching P');
+  colourGate.polarity = 'blue-open';
+  eq(R.canEnter(colourGate, 1, 0), true,
+    'POLARITY  changing polarity does not affect ordinary color-gate carrier checks');
+
+  const crateResult = SM.LEVELS.validate(polarityDocument([[1, 70, 47, 2]]), { solve: false });
+  const crateState = st(crateResult.levels[0]);
+  const blockedPush = go(crateState, 'east');
+  eq([blockedPush.stroke, crateState.strokes, crateState.crates[0][1].id,
+    crateState.crates[0][2]], [false, 0, 70, null],
+  'POLARITY  a crate cannot be pushed into a closed barrier and no state or stroke changes');
+}
+
+function checkPolarityValidation() {
+  for (const value of ['red', 'blue', 'green', null, 1]) {
+    const result = SM.LEVELS.validate(polarityDocument([[1, 0, 2]], value), { solve: false });
+    ok(result.problems.some(problem => /initial_polarity.*red-open.*blue-open/.test(problem.message)),
+      'POLARITY YAML  invalid initial_polarity ' + JSON.stringify(value) + ' is rejected');
+  }
+  for (const value of ['red-open', 'blue-open']) {
+    const result = SM.LEVELS.validate(polarityDocument([[1, 0, 2]], value), { solve: false });
+    ok(result.ok && result.levels[0].initialPolarity === value,
+      'POLARITY YAML  valid initial_polarity ' + value + ' is normalized');
+  }
+}
+
+function checkPolaritySwitch() {
+  const R = SM.RULES;
+  const pack = SM.LEVELS.validate(polarityDocument([
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 48, 0, 0, 0],
+    [1, 70, 46, 0, 0, 2]
+  ]), { solve: false });
+  ok(pack.ok, 'POLARITY  switch/cargo fixture validates');
+  const state = st(pack.levels[0]);
+  go(state, 'east'); // Put a crate on the initially open red barrier.
+  eq([state.player, state.crates[0][2].id, state.polarity],
+    [{ x: 1, y: 0 }, 70, 'red-open'], 'POLARITY  crate can enter a barrier open in the initial state');
+  go(state, 'north');
+  const switchEntry = go(state, 'east');
+  eq([state.polarity, switchEntry.steps.some(step => step.type === 'polarity')],
+    ['red-open', false], 'POLARITY  walking onto the crystal switch does not flip state');
+  const beforeFlip = R.snapshot(state);
+  const flip = act(state);
+  eq([state.polarity, state.crates[0][2].id, R.isSolid(state, 2, 0)],
+    ['blue-open', 70, true], 'POLARITY  ACT closes the red barrier without moving its crate');
+  eq(flip.steps.filter(step => step.type === 'polarity').map(step => [step.from, step.to]),
+    [['red-open', 'blue-open']], 'POLARITY  one ACT emits exactly one ordered polarity transition');
+
+  const postFlipSignature = R.snapshotSig(state);
+  ok(R.cloneState(state).polarity === 'blue-open',
+    'POLARITY  solver clones retain the current polarity');
+  R.restore(state, beforeFlip);
+  eq([state.polarity, state.strokes, R.snapshotSig(state) === postFlipSignature],
+    ['red-open', beforeFlip.strokes, false],
+  'POLARITY  restore undoes the switch state, stroke count, and solver identity');
+  act(state); // Reapply the switch for the crate departure/re-entry path below.
+
+  // Approach the box from its west side and push it off the now-closed tile.
+  go(state, 'west');
+  go(state, 'south');
+  go(state, 'east');
+  eq([state.crates[0][3].id, state.player, R.isSolid(state, 2, 0)],
+    [70, { x: 2, y: 0 }, true], 'POLARITY  a crate may be pushed off a closed barrier');
+  go(state, 'north'); go(state, 'east'); go(state, 'east'); go(state, 'south');
+  const beforeRejectedPush = [state.strokes, state.crates[0][3], state.player];
+  const rejectedPush = go(state, 'west');
+  eq([rejectedPush.stroke, [state.strokes, state.crates[0][3], state.player]],
+    [false, beforeRejectedPush], 'POLARITY  crate cannot be pushed back onto its closed barrier');
+
+  // Defensive invariant: no normal switch action can close a barrier under
+  // the player, so construct that state directly and verify departure/re-entry.
+  const playerPack = SM.LEVELS.validate(polarityDocument([[1, 46, 0, 2]]), { solve: false });
+  const playerState = st(playerPack.levels[0]);
+  playerState.player.x = 1;
+  playerState.polarity = 'blue-open';
+  eq([playerState.player, R.isSolid(playerState, 1, 0)],
+    [{ x: 1, y: 0 }, true], 'POLARITY  defensive fixture keeps a player on a newly closed barrier');
+  const leave = go(playerState, 'east');
+  eq([leave.stroke, playerState.player], [true, { x: 2, y: 0 }],
+    'POLARITY  player may leave a barrier closed beneath them');
+  const reenter = go(playerState, 'west');
+  eq([reenter.stroke, playerState.strokes, playerState.player],
+    [false, 1, { x: 2, y: 0 }], 'POLARITY  player cannot re-enter a closed barrier');
+}
+
+function checkPolaritySolver() {
+  const R = SM.RULES;
+  const validated = SM.LEVELS.validate(polarityDocument([
+    [0, 48, 0, 3],
+    [1, 46, 47, 2]
+  ]), { solve: false });
+  ok(validated.ok, 'POLARITY BFS  switch-order fixture validates');
+  const level = validated.levels[0];
+  const solved = SM.LEVELS.solve(level);
+  eq(solved.status, 'solvable', 'POLARITY BFS  real resolver proves the switch-order fixture solvable');
+  ok(solved.path.some(action => action.type === 'act'),
+    'POLARITY BFS  winning route explicitly activates the global switch');
+  const replay = st(level);
+  for (const action of solved.path) R.resolveTurn(replay, action);
+  eq([replay.won, replay.polarity, replay.strokes],
+    [true, 'blue-open', solved.optimal],
+  'POLARITY BFS  replay uses the matching polarity and wins at the proven minimum');
+}
 
 function checkGeometryHelpers() {
   const R = SM.RULES;
@@ -729,6 +871,177 @@ function checkParRouteSelection() {
   ok(sawAutomaticMovement, 'PAR ROUTE  conveyor fixture includes automatic movement');
   eq(conveyorSearch.routeBalance.counts, SM.LEVELS.routeMetrics(conveyorSearch.path).counts,
     'PAR ROUTE  automatic conveyor hops do not enter command direction counts');
+}
+
+function checkChromaticContracts() {
+  const R = SM.RULES;
+
+  const replacement = st(mkLevel([[0, 0, 2], [1, 11, 12]]));
+  go(replacement, 'east');
+  eq([replacement.P, replacement.W], ['red', 'wht'],
+    'CHROMA CONTRACT  red prism sets P without changing W');
+  go(replacement, 'east');
+  eq([replacement.P, replacement.W], ['gre', 'wht'],
+    'CHROMA CONTRACT  entering a second prism replaces P');
+
+  const auraGate = st(mkLevel([[0, 0, 0], [1, 31, 2]]));
+  const wrongAura = go(auraGate, 'east');
+  eq([wrongAura.stroke, auraGate.player, auraGate.P, auraGate.strokes],
+    [false, { x: 0, y: 0 }, 'wht', 0],
+    'CHROMA CONTRACT  a player-color gate rejects the wrong P without a stroke');
+  auraGate.P = 'red';
+  R.resolveTurn(auraGate, { type: 'move', dir: 'east' });
+  eq(auraGate.player, { x: 1, y: 0 },
+    'CHROMA CONTRACT  a matching player aura opens its gate');
+
+  const worldGate = st(mkLevel([[0, 0, 0], [1, 34, 2]]));
+  worldGate.P = 'red';
+  const wrongWorld = go(worldGate, 'east');
+  eq([wrongWorld.stroke, worldGate.player, worldGate.P, worldGate.W, worldGate.strokes],
+    [false, { x: 0, y: 0 }, 'red', 'wht', 0],
+    'CHROMA CONTRACT  a world-color gate checks W rather than matching P');
+  worldGate.W = 'red';
+  R.resolveTurn(worldGate, { type: 'move', dir: 'east' });
+  eq(worldGate.player, { x: 1, y: 0 },
+    'CHROMA CONTRACT  a matching world color opens its gate');
+
+  const reset = st(mkLevel([[0, 0, 0, 2], [1, 20, 21, 0]]));
+  reset.P = 'blu';
+  go(reset, 'east');
+  eq([reset.W, reset.P], ['red', 'blu'],
+    'CHROMA CONTRACT  cycle dial changes W independently of P');
+  act(reset);
+  eq(reset.W, 'gre', 'CHROMA CONTRACT  ACT advances the world-color cycle');
+  go(reset, 'east');
+  eq([reset.W, reset.P], ['wht', 'blu'],
+    'CHROMA CONTRACT  reset returns W to white and preserves P');
+
+  const goal = st(mkLevel([[1, 0, 2]]));
+  goal.P = 'red';
+  go(goal, 'east');
+  go(goal, 'east');
+  eq(goal.won, false, 'CHROMA CONTRACT  a mismatched P/W pair cannot clear the goal');
+  goal.W = 'red';
+  act(goal);
+  eq(goal.won, true, 'CHROMA CONTRACT  matching P/W clears the occupied goal');
+
+  const unsupportedPalette = SM.LEVELS.validate({
+    name: 'Unsupported palette', world_id: 'unsupported-palette', num_level: 1,
+    levels: { level_1: { name: 'No fifth color', width: 3, height: 1,
+      golf_score: 1, grid: [[1, 11, 2]], overrides: { 11: { colour: 'yellow' } } } }
+  }, { solve: false });
+  ok(unsupportedPalette.problems.some(problem => /yellow.*not a gameplay colour/i.test(problem.message)),
+    'CHROMA CONTRACT  loader rejects a fifth gameplay color');
+}
+
+function checkReceiverVariants() {
+  const R = SM.RULES;
+  const receiverVariants = [
+    { id: 50, colour: 'red', link: 1 },
+    { id: 90, colour: 'gre', link: 1 },
+    { id: 91, colour: 'blu', link: 1 },
+    { id: 92, colour: 'wht', link: 1 },
+    { id: 93, colour: 'red', link: 2 },
+    { id: 94, colour: 'gre', link: 2 },
+    { id: 95, colour: 'blu', link: 2 },
+    { id: 96, colour: 'wht', link: 2 },
+    { id: 97, colour: 'red', link: 3 },
+    { id: 98, colour: 'gre', link: 3 },
+    { id: 99, colour: 'blu', link: 3 },
+    { id: 100, colour: 'wht', link: 3 }
+  ];
+  const crateFor = { wht: 70, red: 71, gre: 72, blu: 73 };
+  const gateFor = { 1: 10, 2: 26, 3: 27 };
+
+  for (const variant of receiverVariants) {
+    const level = mkLevel([[1, variant.id, crateFor[variant.colour], 0,
+      gateFor[variant.link], 2]]);
+    const state = st(level);
+    const receiver = state.switches.find(item => item.inst.id === variant.id);
+    ok(!!receiver, 'RECEIVER MATRIX  ID ' + variant.id + ' constructs a receiver');
+    eq([receiver.inst.params.colour, receiver.inst.params.link,
+      R.sensorLit(state, receiver).any, R.sensorLit(state, receiver).lit.e,
+      state.locked[0][4]],
+    [variant.colour, variant.link, true, true, false],
+    'RECEIVER MATRIX  ID ' + variant.id + ' detects its matching east crate and opens only its linked gate');
+
+    const beforeMove = R.snapshot(state);
+    go(state, 'east'); // Stand on the receiver.
+    const moved = go(state, 'east'); // Push the crate away from adjacency.
+    eq([moved.stroke, state.crates[0][3].id, R.sensorLit(state, receiver).any,
+      state.locked[0][4]],
+    [true, crateFor[variant.colour], false, true],
+    'RECEIVER MATRIX  ID ' + variant.id + ' deactivates immediately when its crate is pushed away');
+    const movedSignature = R.snapshotSig(state);
+    R.restore(state, beforeMove);
+    eq([state.crates[0][2].id, R.sensorLit(state, receiver).any,
+      state.locked[0][4], state.strokes, R.snapshotSig(state) === movedSignature],
+    [crateFor[variant.colour], true, false, 0, false],
+    'RECEIVER MATRIX  ID ' + variant.id + ' restore re-derives the dock, linked gate, and solver identity');
+
+    const wrongColour = Object.keys(crateFor).find(colour => colour !== variant.colour);
+    const wrongState = st(mkLevel([[1, variant.id, crateFor[wrongColour], 0,
+      gateFor[variant.link], 2]]));
+    const wrongReceiver = wrongState.switches.find(item => item.inst.id === variant.id);
+    eq([R.sensorLit(wrongState, wrongReceiver).any, wrongState.locked[0][4]], [false, true],
+      'RECEIVER MATRIX  ID ' + variant.id + ' ignores a wrong-color adjacent crate');
+  }
+
+  const diagonal = st(mkLevel([
+    [0, 0, 71],
+    [0, 50, 0],
+    [1, 0, 2]
+  ]));
+  const diagonalReceiver = diagonal.switches.find(item => item.inst.id === 50);
+  eq(R.sensorLit(diagonal, diagonalReceiver),
+    { lit: { n: false, e: false, s: false, w: false }, any: false },
+  'RECEIVER GEOMETRY  a diagonally adjacent matching crate is not contact');
+
+  const fourDirections = st(mkLevel([
+    [0, 71, 0],
+    [71, 50, 71],
+    [1, 71, 2]
+  ]));
+  const fourWayReceiver = fourDirections.switches.find(item => item.inst.id === 50);
+  eq(R.sensorLit(fourDirections, fourWayReceiver),
+    { lit: { n: true, e: true, s: true, w: true }, any: true },
+  'RECEIVER GEOMETRY  all four matching cardinal contacts report lit simultaneously');
+}
+
+function checkReceiverLinksAndSolver() {
+  const R = SM.RULES;
+  const redOnly = st(mkLevel([[1, 71, 50, 10, 0, 94, 26, 2]]));
+  eq([redOnly.locked[0][3], redOnly.locked[0][6]], [false, true],
+    'RECEIVER LINKS  red/link 1 opens its phase wall without affecting green/link 2');
+  const greenOnly = st(mkLevel([[1, 0, 50, 10, 72, 94, 26, 2]]));
+  eq([greenOnly.locked[0][3], greenOnly.locked[0][6]], [true, false],
+    'RECEIVER LINKS  green/link 2 opens its phase wall without affecting red/link 1');
+
+  const sameLinkOr = st(mkLevel([[1, 50, 0, 71, 50, 10, 2]]));
+  const sameLinkReceivers = sameLinkOr.switches.filter(item => item.inst.id === 50);
+  eq(sameLinkReceivers.map(receiver => R.switchActive(sameLinkOr, receiver)), [false, true],
+    'RECEIVER LINKS  same-link receivers retain independent derived activity');
+  eq(sameLinkOr.locked[0][5], false,
+    'RECEIVER LINKS  one active receiver is sufficient to open a shared link (OR semantics)');
+
+  const solverLevel = mkLevel([
+    [0, 50, 71, 0],
+    [1, 0, 10, 2]
+  ]);
+  const solved = SM.LEVELS.solve(solverLevel);
+  eq([solved.status, solved.optimal], ['solvable', 3],
+    'RECEIVER SOLVER  BFS finds the minimum route through a receiver-controlled gate');
+  const replay = st(solverLevel);
+  for (const action of solved.path) R.resolveTurn(replay, action);
+  eq([replay.won, replay.strokes, replay.locked[0][2]], [true, 3, false],
+    'RECEIVER SOLVER  the returned resolver path activates the sensor and wins at par');
+
+  const withoutReceiver = mkLevel([
+    [0, 0, 71, 0],
+    [1, 0, 10, 2]
+  ]);
+  eq(SM.LEVELS.solve(withoutReceiver).status, 'unsolvable',
+    'RECEIVER SOLVER  removing the receiver proves its gate is necessary');
 }
 
 function checkRules() {
@@ -1417,6 +1730,62 @@ function checkWorld2Content() {
   }
 }
 
+function checkWorld3Content() {
+  const file = path.join(ROOT, 'data/worlds/world-03-hyrule-flip-flop.levels.yaml');
+  ok(fs.existsSync(file), 'WORLD 3  independent Hyrule Flip-Flop pack exists');
+  if (!fs.existsSync(file)) return;
+
+  const text = fs.readFileSync(file, 'utf8');
+  const doc = SM.parseYAML(text);
+  const loaded = SM.LEVELS.load(text, { solve: true });
+  eq(loaded.problems.length, 0, 'WORLD 3  pack uses the shared parser, validator, and solver',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  eq([doc.world_id, doc.num_level, loaded.levels.length],
+    ['world-03-hyrule-flip-flop', 8, 8], 'WORLD 3  pack has stable identity and eight levels');
+
+  const expected = [
+    { name: 'Red First, Blue Next', width: 5, height: 5, par: 5, acts: 1 },
+    { name: 'Two-Switch Zigzag', width: 6, height: 6, par: 8, acts: 2 },
+    { name: 'Ordered Twin Chambers', width: 8, height: 8, par: 8, acts: 2 },
+    { name: 'Switch Loop', width: 10, height: 8, par: 12, acts: 2 },
+    { name: 'Palace of Darkness', width: 12, height: 8, par: 15, acts: 2 },
+    { name: 'Sixteen-Column Exchange', width: 16, height: 2, par: 20, acts: 5 },
+    { name: 'Barrier Blocker', width: 16, height: 9, par: 11, acts: 2 },
+    { name: 'Grand Inversion', width: 16, height: 9, par: 97, acts: 14 }
+  ];
+  const R = SM.RULES;
+  for (let i = 0; i < expected.length; i++) {
+    const level = loaded.levels[i];
+    const want = expected[i];
+    eq([level.key, level.name, level.width, level.height, level.par, level.initialPolarity],
+      ['level_' + (i + 1), want.name, want.width, want.height, want.par, 'red-open'],
+      'WORLD 3  level_' + (i + 1) + ' has the declared identity, dimensions, par, and start polarity');
+    ok(doc.levels[level.key].grid.length === want.height &&
+        doc.levels[level.key].grid.every(row => row.length === want.width),
+      'WORLD 3  level_' + (i + 1) + ' is rectangular within the 16×9 board limit');
+    ok(doc.levels[level.key].grid.flat().every(id => !!SM.getTile(id)),
+      'WORLD 3  level_' + (i + 1) + ' uses registered tile IDs only');
+    eq(level.solve.status, 'solvable',
+      'WORLD 3  level_' + (i + 1) + ' has a solver-proven route');
+    eq([level.solve.optimal, level.par, level.solve.routeBalance.complete],
+      [want.par, want.par, true],
+      'WORLD 3  level_' + (i + 1) + ' par is the complete solver-selected minimum');
+    eq(level.solve.path.filter(action => action.type === 'act').length, want.acts,
+      'WORLD 3  level_' + (i + 1) + ' shortest route exercises every intended polarity change');
+    const state = R.newState(level);
+    ok(!R.isSolid(state, state.start.x, state.start.y),
+      'WORLD 3  level_' + (i + 1) + ' starts on a safe, traversable cell');
+    for (const action of level.solve.path) R.resolveTurn(state, action);
+    const finalPolarity = want.acts % 2 ? 'blue-open' : 'red-open';
+    eq([state.won, state.strokes, state.polarity], [true, want.par, finalPolarity],
+      'WORLD 3  replay of level_' + (i + 1) + ' wins at par with the expected polarity');
+  }
+  eq([SM.TILES[46].params.openWhen, SM.TILES[47].params.openWhen],
+    ['red-open', 'blue-open'], 'WORLD 3  barrier classes retain complementary state declarations');
+  eq(doc.levels.level_7.grid.flat().filter(id => id === 70).length, 1,
+    'WORLD 3  level 7 uses its single movable blocker exactly once');
+}
+
 function checkWorld4Content() {
   const file = path.join(ROOT, 'data/worlds/world-04-pengo-vector.levels.yaml');
   ok(fs.existsSync(file), 'WORLD 4  independent Pengo Vector pack exists');
@@ -1565,6 +1934,338 @@ function checkWorld4Content() {
     'WORLD 4  mastery first input traverses the joined east/north/west vector network');
 }
 
+function checkWorld5Content() {
+  const file = path.join(ROOT, 'data/worlds/world-05-chips-chromatic.levels.yaml');
+  ok(fs.existsSync(file), 'WORLD 5  independent Chip chromatic pack exists');
+  if (!fs.existsSync(file)) return;
+
+  const source = fs.readFileSync(file, 'utf8');
+  const doc = SM.parseYAML(source);
+  const loaded = SM.LEVELS.load(source, { solve: true });
+  eq(loaded.problems.length, 0,
+    'WORLD 5  pack parses and validates through the shared loader and solver',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  eq([doc.world_id, doc.num_level, Object.keys(doc.levels).length, loaded.levels.length],
+    ['world-05-chips-chromatic', 8, 8, 8],
+    'WORLD 5  pack has stable identity and eight declared levels');
+  eq(Object.keys(doc.levels), Array.from({ length: 8 }, (_, i) => 'level_' + (i + 1)),
+    'WORLD 5  level keys are contiguous and ordered');
+  eq(new Set(Object.values(doc.levels).map(level => level.name)).size, 8,
+    'WORLD 5  each level has a unique display name');
+  ok(/white is still white/i.test(doc.levels.level_1.goal) &&
+     /yellow-key role/i.test(doc.levels.level_1.goal),
+    'WORLD 5  the yellow analogy explicitly retains the white gameplay identity');
+  eq(SM.PALETTE.wht, '#EDEAE3',
+    'WORLD 5  white retains its existing neutral-white presentation');
+
+  const palette = ['wht', 'red', 'gre', 'blu'];
+  for (const colour of palette) {
+    const valid = SM.LEVELS.validate({
+      name: 'Palette acceptance', world_id: 'palette-acceptance', num_level: 1,
+      levels: { level_1: { name: 'Existing color', width: 3, height: 1, golf_score: 1,
+        grid: [[1, 30, 2]], overrides: { 30: { colour } } } }
+    }, { solve: false });
+    ok(valid.ok, 'WORLD 5  shared validation accepts gameplay color ' + colour,
+      valid.problems.map(problem => problem.message).join(' | '));
+  }
+  for (const colour of ['yellow', 'red+blu', 'mixed']) {
+    const invalid = SM.LEVELS.validate({
+      name: 'Unsupported color', world_id: 'unsupported-color', num_level: 1,
+      levels: { level_1: { name: 'Unsupported state', width: 3, height: 1, golf_score: 1,
+        grid: [[1, 30, 2]], overrides: { 30: { colour } } } }
+    }, { solve: false });
+    ok(invalid.problems.some(problem => new RegExp(colour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+        '.*not a gameplay colour', 'i').test(problem.message)),
+      'WORLD 5  shared validation rejects unsupported color value ' + colour);
+  }
+
+  const expected = [
+    { name: 'The White Mark', width: 5, height: 5, par: 8, final: 'red',
+      prisms: [11], actuators: [20], gates: [31], essential: [11, 20] },
+    { name: 'Two Prisms', width: 7, height: 5, par: 10, final: 'blu',
+      prisms: [11, 13], actuators: [20], gates: [31, 33], essential: [11, 13, 20] },
+    { name: 'The Other Carrier', width: 9, height: 6, par: 9, final: 'blu',
+      prisms: [11, 13], actuators: [20], gates: [36], essential: [13, 20] },
+    { name: 'Guarded Spectrum', width: 10, height: 8, par: 7, final: 'gre',
+      prisms: [12], actuators: [22], gates: [32], essential: [12, 22, 41] },
+    { name: 'Three-Way Filter', width: 12, height: 8, par: 13, final: 'blu',
+      prisms: [11, 12, 13], actuators: [20], gates: [31, 32, 33], essential: [11, 12, 13, 20] },
+    { name: 'Chromatic Corridor', width: 16, height: 2, par: 15, final: 'blu',
+      prisms: [11, 12, 13], actuators: [20], gates: [31, 32, 33, 34, 35, 36],
+      essential: [11, 12, 13, 20] },
+    { name: 'Commit to Green', width: 16, height: 9, par: 27, final: 'blu',
+      prisms: [12, 13], actuators: [20], gates: [32, 33], essential: [12, 13, 20] },
+    { name: 'Spectrum Nexus', width: 16, height: 9, par: 15, final: 'blu',
+      prisms: [11, 12, 13], actuators: [20], gates: [30, 31, 32, 33, 34, 35, 36],
+      essential: [11, 12, 13, 20] }
+  ];
+  const wrongGate = { 30: 31, 31: 32, 32: 33, 33: 31, 34: 35, 35: 36, 36: 34 };
+
+  for (let i = 0; i < expected.length; i++) {
+    const want = expected[i];
+    const raw = doc.levels['level_' + (i + 1)];
+    const level = loaded.levels[i];
+    eq([level.key, level.name, level.width, level.height, level.worldId, level.par],
+      ['level_' + (i + 1), want.name, want.width, want.height,
+        'world-05-chips-chromatic', want.par],
+      'WORLD 5  level_' + (i + 1) + ' has its authored name, dimensions, identity, and par');
+    eq(raw.grid.length, want.height,
+      'WORLD 5  ' + level.key + ' has the declared number of top-first rows');
+    ok(raw.grid.every(row => row.length === want.width),
+      'WORLD 5  ' + level.key + ' is rectangular and within the 16×9 board limit');
+    ok(raw.grid.flat().every(id => Number.isInteger(id) && SM.TILES[id] &&
+        SM.TILES[id].implemented !== false),
+      'WORLD 5  ' + level.key + ' uses only registered, implemented tile IDs');
+    eq([level.solve.status, level.solve.optimal], ['solvable', want.par],
+      'WORLD 5  ' + level.key + ' has a solver-proven minimum par');
+
+    const state = SM.RULES.newState(level);
+    ok(!SM.RULES.isSolid(state, state.start.x, state.start.y),
+      'WORLD 5  ' + level.key + ' starts on a safe cell');
+    const visited = new Set([state.grid[state.player.y][state.player.x].id]);
+    const crossedGates = new Set();
+    for (const action of level.solve.path) {
+      const carriersBefore = { P: state.P, W: state.W };
+      const turn = SM.RULES.resolveTurn(state, action);
+      for (const step of turn.steps) {
+        if (step.type !== 'move' || !step.to) continue;
+        const tile = state.grid[step.to.y][step.to.x];
+        visited.add(tile.id);
+        if (tile.family === 'gate') {
+          crossedGates.add(tile.id);
+          eq(carriersBefore[tile.params.carrier], tile.params.colour,
+            'WORLD 5  ' + level.key + ' crosses gate ' + tile.id + ' using carrier ' + tile.params.carrier);
+        }
+      }
+    }
+    eq([state.won, state.strokes, state.P, state.W],
+      [true, want.par, want.final, want.final],
+      'WORLD 5  replay of ' + level.key + ' wins at par with matching final carriers');
+    eq(Array.from(want.prisms).every(id => visited.has(id)), true,
+      'WORLD 5  shortest route of ' + level.key + ' exercises each intended prism');
+    eq(Array.from(want.actuators).every(id => visited.has(id)), true,
+      'WORLD 5  shortest route of ' + level.key + ' exercises its world-color actuator');
+    eq(Array.from(want.gates).every(id => crossedGates.has(id)), true,
+      'WORLD 5  shortest route of ' + level.key + ' crosses each intended color gate');
+
+    for (const id of want.essential) {
+      const withoutMechanic = JSON.parse(JSON.stringify(raw));
+      for (const row of withoutMechanic.grid) {
+        for (let x = 0; x < row.length; x++) if (row[x] === id) row[x] = 0;
+      }
+      const result = SM.LEVELS.solve(SM.RULES.buildLevel(withoutMechanic, level.key + '-without-' + id));
+      eq(result.status, 'unsolvable',
+        'WORLD 5  ' + level.key + ' needs tile ' + id + ' for its color route and matching goal');
+    }
+
+    for (const id of want.gates) {
+      const wrongColor = JSON.parse(JSON.stringify(raw));
+      for (const row of wrongColor.grid) {
+        for (let x = 0; x < row.length; x++) if (row[x] === id) row[x] = wrongGate[id];
+      }
+      const result = SM.LEVELS.solve(SM.RULES.buildLevel(wrongColor, level.key + '-wrong-gate-' + id));
+      ok(result.status === 'unsolvable' ||
+         (result.status === 'solvable' && result.optimal > want.par),
+        'WORLD 5  ' + level.key + ' requires the authored color at gate ' + id,
+        'wrong-color variant status=' + result.status + ', optimum=' + result.optimal + ', par=' + want.par);
+    }
+  }
+
+  const level6 = loaded.levels[5];
+  eq([level6.width, level6.height], [16, 2],
+    'WORLD 5  corridor remix resolves the blueprint mismatch as 16 columns by 2 rows');
+}
+
+function checkWorld6Content() {
+  const file = path.join(ROOT, 'data/worlds/world-06-goof-proximity.levels.yaml');
+  ok(fs.existsSync(file), 'WORLD 6  independent Goof Proximity pack exists');
+  if (!fs.existsSync(file)) return;
+
+  const source = fs.readFileSync(file, 'utf8');
+  const doc = SM.parseYAML(source);
+  const loaded = SM.LEVELS.load(source, { solve: true });
+  eq(loaded.problems.length, 0,
+    'WORLD 6  complete pack validates atomically through the shared loader and solver',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  eq([doc.world_id, doc.num_level, Object.keys(doc.levels).length, loaded.levels.length],
+    ['world-06-goof-proximity', 8, 8, 8],
+  'WORLD 6  pack has stable identity and exactly eight loaded levels');
+  eq(Object.keys(doc.levels), Array.from({ length: 8 }, (_, index) => 'level_' + (index + 1)),
+    'WORLD 6  level keys are contiguous and ordered');
+  eq(new Set(Object.values(doc.levels).map(level => level.name)).size, 8,
+    'WORLD 6  all eight display names are unique');
+
+  const expected = [
+    { name: 'First Dock', width: 5, height: 5, par: 6, sensors: [50], gates: [10], route: 'N E S E E E' },
+    { name: 'Two Colors, Two Links', width: 7, height: 5, par: 6,
+      sensors: [50, 94], gates: [10, 26], route: 'E E E E E E' },
+    { name: 'Around the Corner', width: 9, height: 6, par: 12,
+      sensors: [50], gates: [10], route: 'N W N E E E S E S E E E' },
+    { name: 'Belt and Barrier', width: 10, height: 8, par: 8,
+      sensors: [50], gates: [10], route: 'E E E E E E E E' },
+    { name: 'Castle Basement Rooms', width: 12, height: 8, par: 11,
+      sensors: [50, 94], gates: [10, 26], route: 'E E E E E E E E E E E' },
+    { name: 'Railway Dock', width: 16, height: 6, par: 19,
+      sensors: [50], gates: [10], route: 'N N E E E E E E E E E E S S E E E E E' },
+    { name: 'Re-dock the Red Crate', width: 16, height: 9, par: 21,
+      sensors: [50, 93], gates: [10, 26], route: 'E E N E N W E S S E E E E E E E E E E E E' },
+    { name: 'Grand Dockworks', width: 16, height: 9, par: 21,
+      sensors: [50, 93, 99], gates: [10, 26, 27],
+      route: 'E E N E N W E S S E E E E E E E E E E E E' }
+  ];
+  const directionName = { north: 'N', south: 'S', west: 'W', east: 'E' };
+  const gateLinks = { 10: 1, 26: 2, 27: 3 };
+  const R = SM.RULES;
+
+  for (let index = 0; index < expected.length; index++) {
+    const want = expected[index];
+    const key = 'level_' + (index + 1);
+    const raw = doc.levels[key];
+    const level = loaded.levels[index];
+    eq([level.key, level.name, level.worldId, level.width, level.height, level.par],
+      [key, want.name, 'world-06-goof-proximity', want.width, want.height, want.par],
+    'WORLD 6  ' + key + ' has the authored name, identity, dimensions, and par');
+    ok(raw.grid.every(row => row.length === want.width) &&
+      raw.grid.flat().every(id => Number.isInteger(id) && SM.TILES[id] &&
+        SM.TILES[id].implemented !== false),
+    'WORLD 6  ' + key + ' is rectangular and uses only implemented tile IDs');
+    eq(level.solve.status, 'solvable',
+      'WORLD 6  ' + key + ' is solver-proven solvable');
+    eq([level.solve.optimal, level.par, level.solve.routeBalance.complete],
+      [want.par, want.par, true],
+    'WORLD 6  ' + key + ' declares the fully compared minimum-stroke PAR');
+    eq(level.solve.path.map(action => directionName[action.dir]), want.route.split(' '),
+      'WORLD 6  ' + key + ' retains its documented minimum route');
+
+    const sensorIds = Array.from(new Set(raw.grid.flat().filter(id =>
+      SM.TILES[id].strategies.activation === 'crateAdjacencySensor'))).sort((a, b) => a - b);
+    const gateIds = Array.from(new Set(raw.grid.flat().filter(id => gateLinks[id]))).sort((a, b) => a - b);
+    eq(sensorIds, want.sensors.slice().sort((a, b) => a - b),
+      'WORLD 6  ' + key + ' uses the planned receiver variants');
+    eq(gateIds, want.gates.slice().sort((a, b) => a - b),
+      'WORLD 6  ' + key + ' uses its planned link-specific phase walls');
+    ok(!raw.grid.flat().some(id => id >= 23 && id <= 25),
+      'WORLD 6  ' + key + ' does not substitute occupancy targets for receiver contact');
+
+    const sensorLinks = new Set(sensorIds.map(id => SM.TILES[id].params.link));
+    for (const id of sensorIds) {
+      const receiver = SM.TILES[id];
+      eq(receiver.params.mode, 'sensor',
+        'WORLD 6  receiver ' + id + ' derives adjacency instead of occupancy');
+      ok(receiver.params.colour === 'wht' || receiver.params.colour === 'red' ||
+        receiver.params.colour === 'gre' || receiver.params.colour === 'blu',
+      'WORLD 6  receiver ' + id + ' uses a supported crate color');
+    }
+    for (const id of gateIds) {
+      ok(sensorLinks.has(gateLinks[id]),
+        'WORLD 6  ' + key + ' wires phase wall ' + id + ' to an authored receiver link');
+    }
+
+    const state = R.newState(level);
+    ok(!R.isSolid(state, state.start.x, state.start.y),
+      'WORLD 6  ' + key + ' has a safe, traversable authored start');
+    const crossedGates = new Set();
+    const activeReceivers = new Set();
+    const cardinal = [
+      { dx: 0, dy: 1 }, { dx: 1, dy: 0 },
+      { dx: 0, dy: -1 }, { dx: -1, dy: 0 }
+    ];
+    function inspectReceivers() {
+      for (const receiver of state.switches.filter(item =>
+        item.inst.strategies.activation === 'crateAdjacencySensor')) {
+        const lit = R.sensorLit(state, receiver);
+        const active = R.switchActive(state, receiver);
+        eq(active, lit.any,
+          'WORLD 6  ' + key + ' derives receiver activity from settled crate positions');
+        if (!active) continue;
+        const matchingCrate = cardinal.some(direction => {
+          const crate = R.crateAt(state, receiver.x + direction.dx, receiver.y + direction.dy);
+          return !!crate && crate.params.colour === receiver.inst.params.colour;
+        });
+        eq(matchingCrate, true,
+          'WORLD 6  ' + key + ' activates only from an adjacent crate of the receiver color');
+        activeReceivers.add(receiver.x + ',' + receiver.y);
+      }
+    }
+    inspectReceivers();
+    for (const action of level.solve.path) {
+      const turn = R.resolveTurn(state, action);
+      for (const step of turn.steps) {
+        if (step.type !== 'move' || !step.to) continue;
+        const tile = state.grid[step.to.y][step.to.x];
+        if (gateLinks[tile.id]) crossedGates.add(tile.id);
+      }
+      inspectReceivers();
+    }
+    eq([state.won, state.strokes], [true, want.par],
+      'WORLD 6  replay of ' + key + ' wins at its recorded minimum par');
+    eq(Array.from(crossedGates).sort((a, b) => a - b),
+      want.gates.slice().sort((a, b) => a - b),
+    'WORLD 6  shortest route of ' + key + ' crosses every intended linked gate');
+
+    for (let row = 0; row < raw.grid.length; row++) {
+      for (let x = 0; x < raw.grid[row].length; x++) {
+        if (!sensorIds.includes(raw.grid[row][x])) continue;
+        const y = raw.grid.length - 1 - row;
+        ok(activeReceivers.has(x + ',' + y),
+          'WORLD 6  ' + key + ' shortest route exercises receiver ' + raw.grid[row][x] + ' at ' + x + ',' + y);
+      }
+    }
+
+    for (const id of sensorIds) {
+      const withoutReceiver = JSON.parse(JSON.stringify(raw));
+      for (const row of withoutReceiver.grid) {
+        for (let x = 0; x < row.length; x++) if (row[x] === id) row[x] = 0;
+      }
+      const result = SM.LEVELS.solve(R.buildLevel(withoutReceiver, key + '-without-receiver-' + id));
+      eq(result.status, 'unsolvable',
+        'WORLD 6  ' + key + ' requires receiver ' + id + ' and its linked gate');
+    }
+  }
+
+  const railway = loaded.levels[5];
+  eq([railway.width, railway.height], [16, 6],
+    'WORLD 6  Railway Dock is the full 16-column track within the 16×6 blueprint role');
+  const belt = loaded.levels[3];
+  const beltState = R.newState(belt);
+  const beltTurn = R.resolveTurn(beltState, belt.solve.path[0]);
+  ok(beltTurn.steps.filter(step => step.type === 'move').length > 1,
+    'WORLD 6  Belt and Barrier shortest route exercises automatic conveyor movement');
+
+  const corner = R.newState(loaded.levels[2]);
+  const cornerReceiver = corner.switches.find(item => item.inst.id === 50);
+  for (const action of loaded.levels[2].solve.path.slice(0, 5)) R.resolveTurn(corner, action);
+  eq([R.crateAt(corner, cornerReceiver.x, cornerReceiver.y).id,
+    R.sensorLit(corner, cornerReceiver).any], [71, false],
+  'WORLD 6  corner level proves a crate occupying the receiver does not count as adjacency');
+  R.resolveTurn(corner, loaded.levels[2].solve.path[5]);
+  eq([R.sensorLit(corner, cornerReceiver).any, corner.locked[0][6]], [true, false],
+  'WORLD 6  pushing that crate off the receiver re-docks it and opens the required gate');
+
+  const redocking = loaded.levels[6];
+  const redockingState = R.newState(redocking);
+  const sensorById = id => redockingState.switches.find(item => item.inst.id === id);
+  const firstGateOpen = !R.isLocked(redockingState, 2, 0);
+  for (const action of redocking.solve.path.slice(0, 6)) R.resolveTurn(redockingState, action);
+  eq([firstGateOpen, R.switchActive(redockingState, sensorById(50)),
+    R.switchActive(redockingState, sensorById(93)),
+    R.isLocked(redockingState, 2, 0), R.isLocked(redockingState, 5, 0)],
+  [true, false, true, true, false],
+  'WORLD 6  level 7 re-docks one red crate from link 1 onto link 2 after crossing gate 1');
+
+  const mastery = R.newState(loaded.levels[7]);
+  eq([50, 93, 99].map(id => R.switchActive(mastery,
+    mastery.switches.find(item => item.inst.id === id))), [true, false, true],
+  'WORLD 6  mastery starts with link 1 and the blue link 3 dock active');
+  for (const action of loaded.levels[7].solve.path.slice(0, 6)) R.resolveTurn(mastery, action);
+  eq([R.switchActive(mastery, mastery.switches.find(item => item.inst.id === 50)),
+    R.switchActive(mastery, mastery.switches.find(item => item.inst.id === 93)),
+    R.switchActive(mastery, mastery.switches.find(item => item.inst.id === 99)),
+    R.isLocked(mastery, 2, 0), R.isLocked(mastery, 5, 0), R.isLocked(mastery, 12, 0)],
+  [false, true, true, true, false, false],
+  'WORLD 6  mastery re-docks red from link 1 to link 2 while preserving the independent blue link 3 dock');
+}
+
 function checkVectorSolver() {
   const R = SM.RULES;
   const iceLevel = mkLevel([[1, 64, 5, 5, 0, 2]], null, 2);
@@ -1698,6 +2399,45 @@ function checkObjectOverrides() {
     eq([crate.capabilities.pushable, crate.capabilities.pullable, crate.capabilities.ray],
       [true, false, 'block'], 'OBJECT  default crate is push-only and ray-opaque');
   }
+}
+
+function checkReceiverValidation() {
+  function document(overrides) {
+    return {
+      name: 'Receiver validation', world_id: 'receiver-validation', num_level: 1,
+      levels: { level_1: {
+        name: 'Receiver validation', width: 3, height: 1, golf_score: 1,
+        grid: [[1, 50, 2]], overrides: overrides || {}
+      } }
+    };
+  }
+
+  for (const colour of ['wht', 'red', 'gre', 'blu']) {
+    for (const link of [1, 2, 3]) {
+      const result = SM.LEVELS.validate(document({ 50: { colour, link } }), { solve: false });
+      ok(result.ok,
+        'RECEIVER VALIDATION  supported color ' + colour + ' and configured link ' + link + ' are accepted',
+        result.problems.map(problem => problem.message).join(' | '));
+    }
+  }
+
+  for (const link of [0, 4]) {
+    const result = SM.LEVELS.validate(document({ 50: { link } }), { solve: false });
+    ok(result.problems.some(problem => /receiver tile id 50 link must be one of the configured links 1, 2, or 3/.test(problem.message)),
+      'RECEIVER VALIDATION  unsupported/dangling link ' + link + ' is rejected');
+  }
+
+  const malformedLink = SM.LEVELS.validate(document({ 50: { link: '2' } }), { solve: false });
+  ok(malformedLink.problems.some(problem => /link must be integer, got string/.test(problem.message)),
+    'RECEIVER VALIDATION  a non-integer link is rejected by the parameter schema');
+
+  const unsupportedColour = SM.LEVELS.validate(document({ 50: { colour: 'yellow' } }), { solve: false });
+  ok(unsupportedColour.problems.some(problem => /receiver tile id 50 colour must be a supported gameplay colour/.test(problem.message)),
+    'RECEIVER VALIDATION  a non-gameplay receiver color is rejected');
+
+  const danglingOverride = SM.LEVELS.validate(document({ 90: { link: 2 } }), { solve: false });
+  ok(danglingOverride.problems.some(problem => /override key "90" is dangling/.test(problem.message)),
+    'RECEIVER VALIDATION  a receiver configuration for an absent tile ID is rejected as dangling');
 }
 
 function checkTargetLayer() {
@@ -1929,11 +2669,11 @@ function checkLevels() {
   eq(validWorld.levels[0].worldName, 'Test World', 'PACK  normalized levels retain display name');
   const unknownTileWorld = SM.LEVELS.validate({
     name: 'Broken World', world_id: 'broken-world', num_level: 1,
-    levels: { level_1: { name: 'Bad cell', width: 2, height: 2, grid: [[1, 99], [0, 2]] } }
+    levels: { level_1: { name: 'Bad cell', width: 2, height: 2, grid: [[1, 999], [0, 2]] } }
   }, { solve: false });
   const unknownTileMessage = unknownTileWorld.problems[0] && unknownTileWorld.problems[0].message;
   ok(/World "Broken World" \(broken-world\), level_1:/.test(unknownTileMessage || '') &&
-     /tile id 99 at B2/.test(unknownTileMessage || '') && /registered, implemented tile ID/.test(unknownTileMessage || ''),
+      /tile id 999 at B2/.test(unknownTileMessage || '') && /registered, implemented tile ID/.test(unknownTileMessage || ''),
     'PACK  semantic tile diagnostics include world, level, ID, coordinate, and corrective action');
 
   const missingIdentity = SM.LEVELS.validate({
@@ -2225,9 +2965,12 @@ function checkStore() {
 const unitSuites = {
   registry: [checkTileRegistry],
   rules: [checkStateContract, checkTileHookDispatch, checkRules, checkRayQueries,
-    checkCatchTransitions, checkRayTransportTransitions, checkCatchSolver,
+    checkPolarityBarriers, checkPolaritySwitch, checkPolaritySolver,
+    checkCatchTransitions, checkRayTransportTransitions, checkCatchSolver, checkChromaticContracts,
+    checkReceiverVariants, checkReceiverLinksAndSolver,
     checkDirectObjectMovement, checkObjectForceChains],
-  levels: [checkYaml, checkObjectOverrides, checkTargetLayer,
+  levels: [checkYaml, checkPolarityValidation, checkObjectOverrides, checkTargetLayer,
+    checkReceiverValidation, checkWorld5Content, checkWorld6Content,
     checkTileMechanicsGuide, checkWorldPackGuide],
   helpers: [checkGeometryHelpers, checkRulesPurity, checkRulesTileDispatchPurity]
 };
@@ -2266,13 +3009,16 @@ if (unitArg) {
   checkRayTransportTransitions();
   checkCatchSolver();
   checkParRouteSelection();
+  checkChromaticContracts();
   checkRules();
   checkGeometryHelpers();
   checkLevels();
   checkWorldOneContent();
   checkWorld4Content();
+  checkWorld5Content();
   checkVectorSolver();
   checkWorld2Content();
+  checkWorld3Content();
   checkTileMechanicsGuide();
   checkObjectOverrides();
   checkTargetLayer();

@@ -320,6 +320,9 @@
       case 'colour':
         if (step.which === 'P') view.P = step.to; else view.W = step.to;
         break;
+      case 'polarity':
+        view.polarity = step.to;
+        break;
       case 'switch': {
         for (var i = 0; i < view.switches.length; i++) {
           if (view.switches[i].x === step.x && view.switches[i].y === step.y) {

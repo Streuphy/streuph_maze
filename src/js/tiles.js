@@ -59,6 +59,21 @@
     key: { inspection: 'Toggle {scope} link {link}; currently {latchLabel}.', codex: 'Latches link {link} on entry or ACT.' },
     masterLock: { inspection: 'Global lock override; currently {latchLabel}.', codex: 'When latched, closes every lock-controlled tile.' },
     masterVoid: { inspection: 'Toggles ordinary void tiles; currently {latchLabel}.', codex: 'When latched, ordinary void cells become solid.' },
+    polarityRedBarrier: {
+      inspection: 'Red polarity barrier; currently {solidLabel} under {polarityLabel}.',
+      codex: 'Red barrier class; open only while the global polarity is red-open.',
+      polarityClass: 'red'
+    },
+    polarityBlueBarrier: {
+      inspection: 'Blue polarity barrier; currently {solidLabel} under {polarityLabel}.',
+      codex: 'Blue barrier class; open only while the global polarity is blue-open.',
+      polarityClass: 'blu'
+    },
+    polaritySwitch: {
+      inspection: 'Crystal switch; global polarity is {polarityLabel}. Press ACT to flip it.',
+      codex: 'ACT flips the level-wide red-open / blue-open barrier polarity.',
+      polaritySwitch: true
+    },
     receiver: { inspection: 'Detects adjacent {colour} crates on link {link}; currently {activeLabel}.', codex: 'Lights when a matching crate is orthogonally adjacent.' },
     target: { inspection: 'movable floor target; link {link}; currently {activeLabel}.', codex: 'Momentary link {link}; active only while a crate occupies it.' },
     crateBelt: { inspection: 'Crate belt carries compatible objects {direction}.', codex: 'Crate-force belt directed {direction}.' },
@@ -214,6 +229,18 @@
        params: { mode: 'toggle', scope: 'global', key: 'master_void' },
        presentationKey: 'masterVoid', strategies: { onEnter: 'toggleLatched', onAct: 'toggleLatched', activation: 'toggleLatch' } });
 
+   // World 3 polarity barriers use a level-wide state, not color carriers or
+   // the existing linked/master switch network. ID 49 remains reserved.
+   add({ id: 46, family: 'barrier', name: 'polarity_barrier_red', glyph: 'polarityRed',
+        solid: 'polarity', walkable: 'polarity', params: { openWhen: 'red-open' },
+        presentationKey: 'polarityRedBarrier', strategies: { passability: 'binaryPolarityBarrier' } });
+   add({ id: 47, family: 'barrier', name: 'polarity_barrier_blue', glyph: 'polarityBlue',
+        solid: 'polarity', walkable: 'polarity', params: { openWhen: 'blue-open' },
+        presentationKey: 'polarityBlueBarrier', strategies: { passability: 'binaryPolarityBarrier' } });
+   add({ id: 48, family: 'switch', name: 'polarity_switch', glyph: 'polaritySwitch',
+        solid: false, walkable: true, params: {},
+        presentationKey: 'polaritySwitch', strategies: { onAct: 'flipPolarity' } });
+
   /* ===== SENSORS (crate-adjacency) ======================================= */
   // §8.3.  family='sensor' so the resolver knows to query crate adjacency.
 
@@ -221,9 +248,19 @@
        solid: false, walkable: true,
        params: { mode: 'sensor', scope: 'tagged', link: 1, colour: 'red' },
        presentationKey: 'receiver', strategies: { activation: 'crateAdjacencySensor' } });
-  // (Coloured sensor variants are produced by overrides; the default ID 50
-  //  is the canonical "sensor" with colour:red so the level-specific colour
-  //  is driven by overrides.colour. See §10.2 and the loader V1.)
+  // World 6 uses fixed variants because overrides are shared by every cell
+  // with an ID. Keep ID 50 as red/link 1; IDs 90–100 complete the finite
+  // color/link matrix for links 1–3 without adding per-cell behavior to YAML.
+  [
+    [90, 'gre', 1], [91, 'blu', 1], [92, 'wht', 1],
+    [93, 'red', 2], [94, 'gre', 2], [95, 'blu', 2], [96, 'wht', 2],
+    [97, 'red', 3], [98, 'gre', 3], [99, 'blu', 3], [100, 'wht', 3]
+  ].forEach(function (variant) {
+    add({ id: variant[0], family: 'sensor', name: 'receiver_' + variant[1] + '_link_' + variant[2],
+      glyph: 'receiver', solid: false, walkable: true,
+      params: { mode: 'sensor', scope: 'tagged', link: variant[2], colour: variant[1] },
+      presentationKey: 'receiver', strategies: { activation: 'crateAdjacencySensor' } });
+  });
 
   // 51–59 reserved
 
@@ -404,6 +441,12 @@
       writes: Object.freeze(['switches[].latched']),
       events: Object.freeze(['switch'])
     }),
+    flipPolarity: Object.freeze({
+      phases: Object.freeze(['onAct']),
+      reads: Object.freeze(['polarity']),
+      writes: Object.freeze(['polarity']),
+      events: Object.freeze(['polarity'])
+    }),
     teleport: Object.freeze({
       phases: Object.freeze(['onEnter', 'onAct']),
       reads: Object.freeze(['player', 'portals', 'tile.params.link']),
@@ -448,6 +491,7 @@
       ctx.engine.setColour('W', ctx.inst.params.colour);
     },
     toggleLatched: function (ctx) { ctx.engine.toggleSwitch(ctx); },
+    flipPolarity: function (ctx) { ctx.engine.flipPolarity(ctx); },
     teleport: function (ctx) { ctx.engine.teleportPlayer(ctx); }
   });
   SM.TILE_BEHAVIOR_HANDLERS = BEHAVIOR_HANDLERS;
@@ -467,10 +511,12 @@
   // expose a behavior deliberately bind the same named strategy to both.
   var behaviorStrategies = {};
   Object.keys(BEHAVIOR_HANDLERS).forEach(function (name) {
-    behaviorStrategies[name] = Object.freeze({
-      onEnter: BEHAVIOR_HANDLERS[name],
-      onAct: BEHAVIOR_HANDLERS[name]
-    });
+    behaviorStrategies[name] = name === 'flipPolarity'
+      ? Object.freeze({ onAct: BEHAVIOR_HANDLERS[name] })
+      : Object.freeze({
+        onEnter: BEHAVIOR_HANDLERS[name],
+        onAct: BEHAVIOR_HANDLERS[name]
+      });
   });
 
   var TILE_STRATEGIES = Object.freeze(Object.assign({}, behaviorStrategies, {
@@ -482,6 +528,11 @@
     }),
     masterVoid: Object.freeze({
       passability: function (ctx) { return { solid: !!ctx.masterVoidActive(ctx.state) }; }
+    }),
+    binaryPolarityBarrier: Object.freeze({
+      passability: function (ctx) {
+        return { solid: ctx.state.polarity !== ctx.inst.params.openWhen };
+      }
     }),
     colourGate: Object.freeze({
       passability: function (ctx) {
@@ -550,6 +601,10 @@
     colourGate: { hooks: ['passability'], reads: ['locked', 'P', 'W', 'tile.params'], writes: [], events: [] },
     playerOccupancy: { hooks: ['activation'], reads: ['player'], writes: [], events: [] },
     toggleLatch: { hooks: ['activation'], reads: ['switches[].latched'], writes: [], events: [] },
+    flipPolarity: { hooks: ['onAct'], reads: ['polarity'], writes: ['polarity'], events: ['polarity'] },
+    binaryPolarityBarrier: {
+      hooks: ['passability'], reads: ['polarity', 'tile.params.openWhen'], writes: [], events: []
+    },
     targetCrateOccupancy: { hooks: ['activation'], reads: ['crates[][]'], writes: [], events: [] },
     crateAdjacencySensor: { hooks: ['activation'], reads: ['crates[][]', 'tile.params.colour'], writes: [], events: [] },
     directionalFlow: { hooks: ['forcedMovement'], reads: ['tile.params.dir', 'tile.params.kind'], writes: [], events: [] },

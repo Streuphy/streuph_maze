@@ -101,6 +101,14 @@
         }
 
       case 'barrier':
+        var polarityClass = inst.presentation && inst.presentation.polarityClass;
+        if (polarityClass) {
+          var polarityColour = SM.PALETTE[polarityClass] || SM.PALETTE.wht;
+          return squareBacking(polarityColour, !!s.solid) +
+                 '<path d="M7 7 L17 17 M17 7 L7 17" fill="none" stroke="' +
+                 polarityColour + '" stroke-width="2" stroke-linecap="round" stroke-opacity="' +
+                 (s.solid ? 0.9 : 0.45) + '"/>';
+        }
         return squareBacking(SM.PALETTE.wht, !!s.locked);
 
       case 'aura':
@@ -114,6 +122,15 @@
       }
 
       case 'switch': {
+        if (inst.presentation && inst.presentation.polaritySwitch) {
+          var redOpen = (s.polarity || 'red-open') === 'red-open';
+          return '<path d="' + hexPath(0) + '" fill="none" stroke="' + SM.PALETTE.wht +
+                 '" stroke-width="2"/>' +
+                 '<path d="M12 5 L16 9 L12 12 L8 9 Z" fill="' + SM.PALETTE.red +
+                 '" fill-opacity="' + (redOpen ? 1 : 0.25) + '"/>' +
+                 '<path d="M12 12 L16 15 L12 19 L8 15 Z" fill="' + SM.PALETTE.blu +
+                 '" fill-opacity="' + (redOpen ? 0.25 : 1) + '"/>';
+        }
         if (inst.name === 'master_lock' || inst.name === 'master_void') {
           var masterMark = inst.name === 'master_lock'
             ? '<circle cx="12" cy="10" r="2" fill="' + SM.PALETTE.wht + '" fill-opacity="' + (s.latched ? 1 : 0.4) + '"/>' +
