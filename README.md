@@ -16,6 +16,9 @@ fetching a sibling file.
 
 ## Tile and level authoring
 
+See the [Tile Mechanics Reference](docs/level-design/tile-mechanics.md) for the
+complete live tile catalogue, object profiles, and standard turn-resolution rules.
+
 World 1 uses target IDs **23–25** for crate-occupancy links **1–3** and phase
 wall IDs **10, 26, and 27** for gates on links **1–3**. This registry supports
 three independent target/gate links without per-cell overrides; the current
@@ -32,27 +35,48 @@ in separate cells and push the crate onto the target during play.
 
 World 2 uses static cardinal ray emitters **81–84** (north, east, south, and
 west, respectively). A ray checks the settled board after a successful action,
-including forced movement and tile effects. Walls, crates, and currently
-closed/solid barriers stop it; open gates and target tiles are transparent. If
-the player is exposed, the resolver records the catch and returns only the
-player to the authored start before testing the goal. The action costs one
-stroke total, and undo restores the pre-action state. Crates, colors, and
-latched switches are not reset. Author every level with a start cell outside
-all active rays so a respawn is safe. Ray checks are turn-based and do not use
-timers, animation completion, or wall-clock movement.
+including forced movement and tile effects. Walls and currently solid tiles
+stop it. Movable entities use their `ray` profile: `block` shields, `transport`
+carries down the beam, and `ignore` is transparent; crates default to `block`
+and targets to `ignore`. Open gates are transparent. If the player is exposed,
+the resolver records the catch and returns only the player to the authored start
+before testing the goal. The action costs one stroke total, and undo restores
+the pre-action state. Crates, colors, and latched switches are not reset. Author
+every level with a start cell outside all active rays so a respawn is safe. Ray
+checks are turn-based and do not use timers, animation completion, or
+wall-clock movement.
 
 See [the world-pack authoring guide](docs/world-level-packs.md) for the
 canonical YAML shape, grid orientation, tile IDs, and local-file loading rules.
+See [Engine Architecture](docs/engine-architecture.md) for runtime ownership,
+state/event boundaries, and the Alpha 0 migration map.
 
 ## Verify
 
 ```sh
 npm install
-npm test
 ```
 
-`npm test` runs the resolver/YAML checks and the jsdom browser smoke test. To
-regenerate `data/levels.yaml` from the built-in level source:
+During implementation, run only the focused suite for the module being changed,
+or run the fast Node-only unit set:
+
+```sh
+npm run test:unit:registry
+npm run test:unit:rules
+npm run test:unit:levels
+npm run test:unit:helpers
+npm run test:unit
+```
+
+These commands use small fixtures and do not boot jsdom or solve every bundled
+level. `npm run test:rules` is the broader Node verification suite; use it for
+specific integration checks rather than routine edits. Run `npm test` only at
+final validation: it includes full resolver/YAML/solver verification and the
+jsdom browser smoke test. Do not use the browser suite during routine unit-test
+iteration. Rendering or local-file loading changes also require the separate
+real-Chromium `file://` check; `npm test` does not launch Chromium.
+
+To regenerate `data/levels.yaml` from the built-in level source:
 
 ```sh
 npm run levels:emit

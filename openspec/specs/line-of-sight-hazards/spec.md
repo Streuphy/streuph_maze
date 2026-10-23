@@ -7,15 +7,19 @@ Defines turn-based line-of-sight hazards that movable crates can shield, plus th
 ## Requirements
 
 ### Requirement: Cardinal rays threaten unobstructed cells
-The system SHALL evaluate each static ray emitter along its configured cardinal direction until the board edge or first opaque obstacle.
+The system SHALL evaluate each static ray emitter along its configured cardinal direction until the board edge, a solid barrier, or the first object whose ray profile is `block`. In Lolo's Castle, crates use the blocking profile and targets use the transparent (`ignore`) profile by default.
 
 #### Scenario: Player is in an unobstructed ray
-- **WHEN** a resolved player position lies on an emitter's active cardinal ray before any opaque obstacle
+- **WHEN** after capability-enabled ray transport, a resolved player position lies on an emitter's active cardinal ray before any opaque obstacle
 - **THEN** the player is considered caught by that hazard
 
 #### Scenario: Wall or crate blocks a ray
 - **WHEN** a wall or movable crate lies between an emitter and the player on the same row or column
 - **THEN** the ray does not catch the player beyond that obstacle
+
+#### Scenario: Target is transparent to a ray
+- **WHEN** a default target marker lies between an emitter and the player on the same row or column
+- **THEN** the target does not block the ray, and the player remains exposed if no later blocker intervenes
 
 #### Scenario: Player is not aligned with a ray
 - **WHEN** the player is not on the emitter's row or column in its configured direction
@@ -37,7 +41,7 @@ The system SHALL return a caught player to the level start after the resolved ac
 - **THEN** the level's authored start position does not immediately catch the respawned player in an unbounded loop
 
 ### Requirement: Hazard resolution is turn-based
-The system SHALL resolve ray checks synchronously as part of a player action and SHALL NOT depend on elapsed wall-clock time, animation completion, or an asynchronous timer.
+The system SHALL resolve capability-enabled ray transport, final ray visibility, and caught-player respawn synchronously as part of a player action, with catch before the final goal test, and SHALL NOT depend on elapsed wall-clock time, animation completion, or an asynchronous timer.
 
 #### Scenario: Catch is independent of rendering delay
 - **WHEN** identical game states receive the same action with different rendering delays

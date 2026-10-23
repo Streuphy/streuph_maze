@@ -178,7 +178,7 @@
       level_9: {
         name: 'Push chain',
         goal: 'A crate belt shoves whatever sits in front of it, one tile, for free — then carries you along.',
-        width: 8, height: 5, golf_score: 12,
+        width: 8, height: 5, golf_score: 11,
         grid: [
           [0, 0, 0, 0, 0, 0, 3, 2],   // row 5   G5 wall | H5 goal
           [0, 0, 0, 0, 0, 0, 0, 30],  // row 4   H4 aura_gate_wht (link 1)

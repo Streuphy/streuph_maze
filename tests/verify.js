@@ -16,6 +16,9 @@ const ROOT = path.resolve(__dirname, '..');
 const FILES = [
   'src/js/sm-yaml.js',
   'src/js/tiles.js',
+  'src/js/sm-glyphs.js',
+  'src/js/sm-board.js',
+  'src/js/sm-entities.js',
   'src/js/levels.default.js',
   'src/js/levels.js',
   'src/js/sm-rules.js',
@@ -52,67 +55,111 @@ function throws(fn, label) {
 }
 
 function checkTileRegistry() {
-  const ice = SM.TILES[5];
-  ok(!!ice, 'REG  ice ID 5 is registered');
-  if (ice) {
-    eq([ice.family, ice.name, ice.glyph, ice.solid, ice.walkable],
-      ['terrain', 'ice', 'ice', false, true], 'REG  ice is walkable terrain');
-    ok(SM.glyph(ice).length > 0, 'REG  ice has a rendered glyph');
-  }
+  require('./unit/registry')(SM);
+  ok(true, 'REG  shared registry unit suite passed');
+}
 
-  const targets = [
-    { id: 23, link: 1 },
-    { id: 24, link: 2 },
-    { id: 25, link: 3 }
-  ];
-  for (const item of targets) {
-    const tile = SM.TILES[item.id];
-    ok(!!tile, 'REG  target ID ' + item.id + ' is registered');
-    if (!tile) continue;
-    eq(tile.family, 'target', 'REG  target ID ' + item.id + ' has target family');
-    eq(tile.params, { mode: 'momentary', scope: 'tagged', link: item.link },
-      'REG  target ID ' + item.id + ' resolves to momentary link ' + item.link);
-    eq(tile.glyph, 'target', 'REG  target ID ' + item.id + ' selects target glyph');
-    eq([tile.solid, tile.walkable], [false, true],
-      'REG  target ID ' + item.id + ' is walkable terrain');
-  }
+/* ---------------------------------------------------------------------- */
+/* Canonical state contract                                                 */
+/* ---------------------------------------------------------------------- */
 
-  const rays = [
-    { id: 81, name: 'ray_north', glyph: 'rayNorth', direction: 'north', dir: { x: 0, y: 1 } },
-    { id: 82, name: 'ray_east', glyph: 'rayEast', direction: 'east', dir: { x: 1, y: 0 } },
-    { id: 83, name: 'ray_south', glyph: 'raySouth', direction: 'south', dir: { x: 0, y: -1 } },
-    { id: 84, name: 'ray_west', glyph: 'rayWest', direction: 'west', dir: { x: -1, y: 0 } }
-  ];
-  for (const item of rays) {
-    const tile = SM.TILES[item.id];
-    ok(!!tile, 'REG  ray emitter ID ' + item.id + ' is registered');
-    if (!tile) continue;
-    eq([tile.id, tile.family, tile.name, tile.glyph],
-      [item.id, 'hazard', item.name, item.glyph],
-      'REG  ray emitter ID ' + item.id + ' has its unique directional definition');
-    eq(tile.params, { dir: item.dir },
-      'REG  ray emitter ID ' + item.id + ' resolves to the intended cardinal direction');
-    eq(tile.presentation, { motion: 'static', direction: item.direction },
-      'REG  ray emitter ID ' + item.id + ' has static directional presentation metadata');
-    ok(SM.glyph(tile).length > 0,
-      'REG  ray emitter ID ' + item.id + ' has a rendered directional glyph');
-    ok(Object.keys(SM.TILES).filter(id => SM.TILES[id].name === item.name).length === 1,
-      'REG  ray emitter ' + item.name + ' has a unique registry entry');
-  }
-  eq(new Set(rays.map(item => SM.TILES[item.id].glyph)).size, 4,
-    'REG  cardinal ray emitters use four distinct glyph keys');
+function checkStateContract() {
+  const R = SM.RULES;
+  const contract = R.STATE_CONTRACT;
+  const state = R.newState(SM.LEVELS.boot({ solve: false }).levels[0]);
+  const roots = contract.fixed.concat(contract.mutable, contract.derived, contract.persistent).sort();
 
-  for (const item of [{ id: 10, link: 1 }, { id: 26, link: 2 }, { id: 27, link: 3 }]) {
-    const tile = SM.TILES[item.id];
-    ok(!!tile, 'REG  phase-wall ID ' + item.id + ' is registered');
-    if (!tile) continue;
-    eq(tile.family, 'barrier', 'REG  phase-wall ID ' + item.id + ' has barrier family');
-    eq(tile.params, { link: item.link, defaultLocked: true },
-      'REG  phase-wall ID ' + item.id + ' resolves to locked link ' + item.link);
-    eq(tile.glyph, 'phaseWall', 'REG  phase-wall ID ' + item.id + ' selects phase-wall glyph');
-    eq(SM.glyph(tile, { locked: true }), SM.glyph(SM.TILES[10], { locked: true }),
-      'REG  phase-wall ID ' + item.id + ' renders with the shared phase-wall glyph');
-  }
+  eq(Object.keys(state).sort(), roots,
+    'STATE  every runtime root field belongs to one documented lifecycle category');
+  eq(Object.keys(R.cloneState(state)).sort(), roots,
+    'STATE  solver clones preserve the canonical runtime root-field shape');
+  eq(Object.keys(R.snapshot(state)).sort(), [
+    'P', 'W', 'crates', 'latched', 'player', 'strokes', 'targets', 'turns', 'won'
+  ], 'STATE  undo snapshots contain the explicit reversible payload');
+  eq(contract.undo, [
+    'player', 'P', 'W', 'strokes', 'turns', 'won',
+    'switches[].latched', 'switches[target].position', 'crates[][]'
+  ], 'STATE  undo contract names nested switch, target, and crate state');
+  eq(contract.solverIdentity, [
+    'player', 'P', 'W', 'switches[].latched', 'targets[].position',
+    'crates[][]:id+colour+capabilities'
+  ], 'STATE  solver identity contract names every gameplay-relevant entity/carrier value');
+  ok(R.cloneState(state).seen !== state.seen && R.cloneState(state).crates !== state.crates,
+    'STATE  mutable discovery and entity grids are independent in solver clones');
+
+  const before = R.snapshot(state);
+  state.player.x = (state.player.x + 1) % state.width;
+  state.P = 'red';
+  state.strokes++;
+  R.restore(state, before);
+  eq([state.player, state.P, state.strokes], [before.player, before.P, before.strokes],
+    'STATE  restore replays the documented undo fields');
+
+  const signature = R.snapshotSig(state);
+  state.P = state.P === 'red' ? 'gre' : 'red';
+  ok(R.snapshotSig(state) !== signature,
+    'STATE  solver identity includes canonical color-carrier state');
+}
+
+function checkTileHookDispatch() {
+  const S = SM;
+  const defaults = S.TILE_HOOK_DEFAULTS;
+  eq(Object.keys(defaults).sort(), [
+    'activation', 'forcedMovement', 'onAct', 'onEnter', 'passability', 'rayInteraction'
+  ], 'HOOK  the registry publishes the complete documented hook vocabulary');
+  eq(S.resolveTileHook({ strategies: {} }, 'passability', {}), null,
+    'HOOK  missing passability strategy has the neutral fallback');
+  eq(S.resolveTileHook({ strategies: {} }, 'activation', {}), false,
+    'HOOK  missing activation strategy is inactive');
+  eq(S.resolveTileHook({ strategies: {} }, 'onEnter', {}), null,
+    'HOOK  missing entry strategy is a no-op');
+  eq(S.resolveTileHook({ strategies: {} }, 'onAct', {}), null,
+    'HOOK  missing ACT strategy is a no-op');
+  eq(S.resolveTileHook({ strategies: {} }, 'forcedMovement', {}), null,
+    'HOOK  missing forced-movement strategy stops automatically');
+  eq(S.resolveTileHook({ strategies: {} }, 'rayInteraction', {}), null,
+    'HOOK  missing ray strategy has no ray effect');
+
+  eq(S.resolveTileHook({ solid: true, strategies: { passability: 'solidTrait' } },
+    'passability', { inst: { solid: true } }), { solid: true },
+  'HOOK  passability strategy returns a declarative solid result');
+  const playerContext = { state: { player: { x: 2, y: 1 } }, x: 2, y: 1 };
+  eq(S.resolveTileHook({ strategies: { activation: 'playerOccupancy' } },
+    'activation', playerContext), true,
+  'HOOK  activation strategy reads player occupancy');
+  eq(S.resolveTileHook({ params: { dir: { x: 1, y: 0 }, kind: 'crate' },
+    strategies: { forcedMovement: 'directionalFlow' } }, 'forcedMovement',
+    { inst: { params: { dir: { x: 1, y: 0 }, kind: 'crate' } } }),
+  { type: 'flow', direction: { x: 1, y: 0 }, kind: 'crate' },
+  'HOOK  forced-movement strategy returns a direction/kind descriptor');
+  eq(S.resolveTileHook({ strategies: { forcedMovement: 'incomingIce' } },
+    'forcedMovement', { direction: { x: 0, y: -1 } }),
+  { type: 'ice', direction: { x: 0, y: -1 } },
+  'HOOK  ice strategy preserves the incoming direction');
+  eq(S.resolveTileHook({ strategies: { forcedMovement: 'linkedPortal' } },
+    'forcedMovement', { inst: { params: { link: 4 } } }),
+  { type: 'portal', link: 4 },
+  'HOOK  portal strategy returns its configured link');
+  eq(S.resolveTileHook({ params: { dir: { x: 0, y: -1 } },
+    strategies: { rayInteraction: 'cardinalRayEmitter' } }, 'rayInteraction',
+    { inst: { params: { dir: { x: 0, y: -1 } } } }),
+  { type: 'emitter', direction: { x: 0, y: -1 } },
+  'HOOK  ray strategy returns the static emitter direction');
+  throws(() => S.resolveTileHook({ strategies: { activation: 'missing' },
+    }, 'activation', {}), 'HOOK  unknown strategy reference fails loudly');
+  throws(() => S.resolveTileHook({}, 'unregistered-hook', {}),
+    'HOOK  unknown hook name fails loudly');
+
+  const state = { P: 'wht' };
+  const behaviorContext = { state, inst: { params: { colour: 'red' } }, press: false };
+  S.resolveTileHook({ strategies: { onEnter: 'setPlayerColour' } }, 'onEnter', behaviorContext);
+  eq(state.P, 'red', 'HOOK  entry phase dispatches its named behavior strategy');
+  state.P = 'wht';
+  behaviorContext.press = true;
+  S.runBehavior('setPlayerColour', behaviorContext);
+  eq(state.P, 'red', 'HOOK  ACT phase dispatches the same registered behavior');
+  throws(() => S.runBehavior('unknown-behavior', {}),
+    'HOOK  unknown behavior names fail loudly');
 }
 
 /* ---------------------------------------------------------------------- */
@@ -141,6 +188,23 @@ function checkRulesPurity() {
     ok(!/type\s*=\s*["']module["']/.test(html), 'S2  index.html uses no ES modules (file:// blocks them)');
     ok(!/\bfetch\s*\(/.test(html), 'S2  index.html does not fetch (file:// blocks it)');
   }
+}
+
+function checkRulesTileDispatchPurity() {
+  const source = fs.readFileSync(path.join(ROOT, 'src/js/sm-rules.js'), 'utf8');
+  const executable = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const violations = executable.split('\n').map((line, index) => ({ line, number: index + 1 }))
+    .filter(item => /\b(?:inst|tile|terrain|authoredInst)\.family\s*(?:===|!==|==|!=)/.test(item.line) ||
+      /\b(?:inst|tile|terrain|authoredInst)\.name\s*(?:===|!==|==|!=)/.test(item.line));
+  ok(violations.length === 0, 'ARCH  resolver has no tile family/name gameplay dispatch',
+    violations.map(item => item.number + ': ' + item.line.trim()).join('\n'));
+
+  const ui = fs.readFileSync(path.join(ROOT, 'src/js/sm-ui.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const uiViolations = ui.split('\n').map((line, index) => ({ line, number: index + 1 }))
+    .filter(item => /\b(?:inst|i|tile|def)\.(?:family|name)\s*(?:===|!==|==|!=)/.test(item.line));
+  ok(uiViolations.length === 0, 'ARCH  UI descriptions do not dispatch on tile family/name',
+    uiViolations.map(item => item.number + ': ' + item.line.trim()).join('\n'));
 }
 
 /* ---------------------------------------------------------------------- */
@@ -216,6 +280,24 @@ function checkYaml() {
   };
   ok(SM.LEVELS.validate(wrongSizeDoc, { solve: false }).problems.some(p => /250x250/.test(p.message)),
     'WIN  PNG with wrong dimensions is rejected');
+
+  const invalidParameterDoc = {
+    name: 'parameter schema', world_id: 'parameter-schema', num_level: 1,
+    levels: { level_1: { name: 'bad link type', width: 3, height: 1, golf_score: 1,
+      grid: [[1, 80, 2]], overrides: { 80: { link: 'one' } } } }
+  };
+  ok(SM.LEVELS.validate(invalidParameterDoc, { solve: false }).problems.some(p =>
+    /link must be integer, got string/.test(p.message)),
+  'V6  tile parameter values are checked against their registered defaults-derived schema');
+
+  const incompleteDirectionDoc = {
+    name: 'direction schema', world_id: 'direction-schema', num_level: 1,
+    levels: { level_1: { name: 'partial ray direction', width: 3, height: 1, golf_score: 1,
+      grid: [[1, 81, 2]], overrides: { 81: { dir: { x: 1 } } } } }
+  };
+  ok(SM.LEVELS.validate(incompleteDirectionDoc, { solve: false }).problems.some(p =>
+    /dir must contain exactly x, y/.test(p.message)),
+  'V6  nested parameter overrides must preserve the registered object shape');
   ok(SM.TILES[3].presentation.motion === 'static', 'ANIM  catalogue tiles default to static presentation');
   eq(SM.PLAYER_PRESENTATION.frames, 8, 'ANIM  player presentation has eight frames');
   eq(SM.PLAYER_PRESENTATION.frameMs, 250, 'ANIM  player presentation is 250ms per frame');
@@ -225,10 +307,11 @@ function checkYaml() {
 /* R1-R21 — the resolver                                                    */
 /* ---------------------------------------------------------------------- */
 
-function mkLevel(grid, over, par) {
+function mkLevel(grid, over, par, objectOverrides) {
   const h = grid.length, w = grid[0].length;
   return SM.RULES.buildLevel({
-    name: 'test', width: w, height: h, golf_score: par || 1, overrides: over || null, grid: grid
+    name: 'test', width: w, height: h, golf_score: par || 1,
+    overrides: over || null, object_overrides: objectOverrides || null, grid: grid
   }, 'test');
 }
 function st(level) { return SM.RULES.newState(level); }
@@ -240,7 +323,37 @@ function canonicalSnapshot(s) {
 function go(s, dir) { return SM.RULES.resolveTurn(s, { type: 'move', dir: dir }); }
 function act(s) { return SM.RULES.resolveTurn(s, { type: 'act' }); }
 
-function rayTestState(emitterId, blocker, overrides) {
+function checkGeometryHelpers() {
+  const R = SM.RULES;
+  const state = st(mkLevel([[1, 0, 70, 2]]));
+  eq(R.inBounds(state, 0, 0), true, 'HELPER  lower-left board cell is in bounds');
+  eq(R.inBounds(state, state.width, 0), false, 'HELPER  east edge is outside the board');
+  eq(R.tileAt(state, 1, 0).name, 'floor', 'HELPER  tileAt reads the normalized terrain layer');
+  eq(R.tileAt(state, -1, 0), null, 'HELPER  tileAt returns null out of bounds');
+  eq(R.crateAt(state, 2, 0).id, 70, 'HELPER  crateAt reads the movable entity layer');
+  eq(R.crateAt(state, 2, -1), null, 'HELPER  crateAt returns null out of bounds');
+  eq(R.cellLabel(0, 0), 'A1', 'HELPER  runtime coordinates retain bottom-left labels');
+
+  const matrix = SM.BOARD.createGrid(2, 2, false);
+  matrix[0][0] = state.crates[0][2];
+  const copied = SM.BOARD.copyGrid(matrix);
+  ok(copied !== matrix && copied[0] !== matrix[0],
+    'HELPER  board copies isolate matrix and row storage');
+  eq(copied[0][0], matrix[0][0],
+    'HELPER  board copies retain immutable entity-definition references');
+
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const scripts = ['tiles.js', 'sm-glyphs.js', 'sm-board.js', 'sm-entities.js', 'sm-rules.js'].map(name =>
+    html.indexOf('src/js/' + name));
+  ok(scripts.every(index => index >= 0) && scripts.every((index, i) => i === 0 || scripts[i - 1] < index),
+    'HELPER  classic scripts load tile presentation and helpers before rules');
+  const rulesFiles = FILES.filter(file => /(?:tiles|sm-glyphs|sm-board|sm-entities|sm-rules)\.js$/.test(file));
+  eq(rulesFiles, ['src/js/tiles.js', 'src/js/sm-glyphs.js', 'src/js/sm-board.js',
+    'src/js/sm-entities.js', 'src/js/sm-rules.js'],
+  'HELPER  VM test harness follows the same tile/presentation/helper dependency order');
+}
+
+function rayTestState(emitterId, blocker, overrides, objectOverrides) {
   const width = 5, height = 5;
   const grid = Array.from({ length: height }, () => Array(width).fill(0));
   const put = (x, y, id) => { grid[height - 1 - y][x] = id; };
@@ -248,7 +361,7 @@ function rayTestState(emitterId, blocker, overrides) {
   put(4, 4, 2);
   put(2, 2, emitterId);
   if (blocker) put(blocker.x, blocker.y, blocker.id);
-  return st(mkLevel(grid, overrides));
+  return st(mkLevel(grid, overrides, 1, objectOverrides));
 }
 
 function checkRayQueries() {
@@ -300,6 +413,30 @@ function checkRayQueries() {
   target.player = { x: 4, y: 2 };
   eq(R.traceRay(target, 2, 2), [{ x: 3, y: 2 }, { x: 4, y: 2 }],
     'RAY  target tiles do not block visibility');
+
+  const transportedCrate = rayTestState(82, { x: 3, y: 2, id: 70 }, null,
+    { D3: { ray: 'transport' } });
+  eq(R.traceRay(transportedCrate, 2, 2), [{ x: 3, y: 2 }, { x: 4, y: 2 }],
+    'RAY  transport-capable crate is transparent to the beam');
+  const transportTurn = go(transportedCrate, 'east');
+  eq(transportedCrate.crates[2][4].id, 70,
+    'RAY  crate on an active beam is carried in its cardinal direction');
+  ok(transportTurn.steps.some(step => step.type === 'push' && step.to.x === 4 && step.to.y === 2),
+    'RAY  transport movement is returned as a resolver event');
+
+  const ignoredCrate = rayTestState(82, { x: 3, y: 2, id: 70 }, null,
+    { D3: { ray: 'ignore' } });
+  eq(R.traceRay(ignoredCrate, 2, 2), [{ x: 3, y: 2 }, { x: 4, y: 2 }],
+    'RAY  ignored crate neither blocks nor consumes the ray');
+  go(ignoredCrate, 'east');
+  eq(ignoredCrate.crates[2][3].id, 70,
+    'RAY  ignored crate remains stationary on the ray');
+
+  const transportedTarget = rayTestState(82, { x: 3, y: 2, id: 23 }, null,
+    { D3: { ray: 'transport' } });
+  go(transportedTarget, 'east');
+  eq(R.targetAt(transportedTarget, 4, 2).inst.id, 23,
+    'RAY  a target with transport capability travels without losing its link identity');
 }
 
 function checkCatchTransitions() {
@@ -409,8 +546,12 @@ function checkRayTransportTransitions() {
   eq([result.stroke, state.strokes], [true, 1],
     'RAY TRANSPORT  an ACT with transport and catch costs one stroke total');
   ok(result.steps.findIndex(step => step.type === 'push') <
-      result.steps.findIndex(step => step.type === 'caught'),
-    'RAY TRANSPORT  crate movement resolves before player hazard catch');
+      result.steps.findIndex(step => step.type === 'ray') &&
+      result.steps.findIndex(step => step.type === 'ray') <
+      result.steps.findIndex(step => step.type === 'caught') &&
+      result.steps.findIndex(step => step.type === 'caught') <
+      result.steps.findIndex(step => step.type === 'respawn'),
+    'RAY TRANSPORT  object transport and final ray evaluation precede catch and respawn');
 
   R.restore(state, before);
   eq([state.player.x, state.player.y, state.crates[1][2].id,
@@ -468,6 +609,127 @@ function checkCatchSolver() {
   eq(replay.won, true, 'CATCH BFS  replay reaches the goal after strategic respawn');
 }
 
+function checkParRouteSelection() {
+  const R = SM.RULES;
+  const tieLevel = mkLevel([[0, 2], [1, 0]]);
+  const firstTie = SM.LEVELS.solve(tieLevel, { maxStates: 100, maxDepth: 10 });
+  const secondTie = SM.LEVELS.solve(tieLevel, { maxStates: 100, maxDepth: 10 });
+  eq(firstTie.path.map(a => a.dir), ['north', 'east'],
+    'PAR ROUTE  equal-score solutions keep the first BFS action order');
+  eq(secondTie.path, firstTie.path,
+    'PAR ROUTE  equal-score route selection is deterministic');
+  eq(firstTie.routeBalance, {
+    counts: { up: 1, down: 0, left: 0, right: 1 }, score: 1, complete: true
+  }, 'PAR ROUTE  tied route reports balanced directions');
+
+  const actionMetrics = SM.LEVELS.routeMetrics([
+    { type: 'move', dir: 'north' },
+    { type: 'pull', dir: 'west' },
+    { type: 'act' }
+  ]);
+  eq(actionMetrics, {
+    counts: { up: 1, down: 0, left: 1, right: 0 }, score: 1
+  }, 'PAR ROUTE  move and pull count once; ACT adds no direction count');
+
+  function routeTokens(path) {
+    return path.map(action => action.type === 'act' ? 'ACT' :
+      (action.type === 'pull' ? 'P' : '') +
+      ({ north: 'U', east: 'R', south: 'D', west: 'L' }[action.dir]));
+  }
+
+  const world1Path = path.join(ROOT, 'data/worlds/world-01-sokoban.levels.yaml');
+  const world1 = SM.LEVELS.load(fs.readFileSync(world1Path, 'utf8'), { solve: false });
+  ok(world1.ok, 'PAR ROUTE  World 1 example loads through the shared loader');
+  const world1Example = SM.LEVELS.solve(world1.levels[0]);
+  eq([world1Example.optimal, routeTokens(world1Example.path), world1Example.routeBalance], [
+    8, ['R', 'U', 'U', 'R', 'R', 'R', 'D', 'D'],
+    { counts: { up: 2, down: 2, left: 0, right: 4 }, score: 8, complete: true }
+  ], 'PAR ROUTE  documented World 1 example is solver-selected and balanced-optimal');
+  const world1Replay = st(world1.levels[0]);
+  for (const action of world1Example.path) R.resolveTurn(world1Replay, action);
+  eq([world1Replay.won, world1Replay.strokes], [true, world1Example.optimal],
+    'PAR ROUTE  World 1 example replays to a win at PAR');
+
+  /* Recreate the previous one-path-per-state BFS so this fixture proves the
+     new selector improves the representative without altering the optimum. */
+  function firstShortestPath(level) {
+    const actions = [
+      { type: 'move', dir: 'north' }, { type: 'move', dir: 'east' },
+      { type: 'move', dir: 'south' }, { type: 'move', dir: 'west' },
+      { type: 'pull', dir: 'north' }, { type: 'pull', dir: 'east' },
+      { type: 'pull', dir: 'south' }, { type: 'pull', dir: 'west' },
+      { type: 'act' }
+    ];
+    const start = R.newState(level);
+    const seen = { [R.snapshotSig(start)]: true };
+    const queue = [{ state: start, path: [] }];
+    for (let head = 0; head < queue.length; head++) {
+      const node = queue[head];
+      for (const action of actions) {
+        const next = R.cloneState(node.state);
+        let resolved;
+        try { resolved = R.resolveTurn(next, action); } catch (_) { continue; }
+        if (!resolved.stroke) continue;
+        const path = node.path.concat([action]);
+        if (next.player.x === next.goal.x && next.player.y === next.goal.y && next.P === next.W) {
+          return { optimal: next.strokes, path: path };
+        }
+        const key = R.snapshotSig(next);
+        if (seen[key]) continue;
+        seen[key] = true;
+        queue.push({ state: next, path: path });
+      }
+    }
+    return null;
+  }
+
+  const world2Path = path.join(ROOT, 'data/worlds/world-02-lolos-castle.levels.yaml');
+  const world2 = SM.LEVELS.load(fs.readFileSync(world2Path, 'utf8'), { solve: false });
+  ok(world2.ok, 'PAR ROUTE  World 2 fixture loads through the shared loader');
+  const level = world2.levels[4]; // Four Medusas has tied optimums with distinct direction balance.
+  const original = firstShortestPath(level);
+  const balanced = SM.LEVELS.solve(level, { maxStates: 10000, maxDepth: 100 });
+  eq(balanced.status, 'solvable', 'PAR ROUTE  balanced fixture remains solvable');
+  eq(balanced.optimal, original.optimal,
+    'PAR ROUTE  directional preference does not change the minimum PAR');
+  eq(balanced.routeBalance.complete, true,
+    'PAR ROUTE  fixture comparison completes within budget');
+  ok(balanced.routeBalance.score < SM.LEVELS.routeMetrics(original.path).score,
+    'PAR ROUTE  selected route is better balanced than the first shortest route');
+  eq(balanced.routeBalance.counts, SM.LEVELS.routeMetrics(balanced.path).counts,
+    'PAR ROUTE  reported counts agree with the selected action sequence');
+  eq([routeTokens(balanced.path), balanced.routeBalance], [
+    ['U', 'U', 'R', 'R', 'R', 'R', 'R', 'U', 'L', 'U', 'L', 'L', 'L', 'L'],
+    { counts: { up: 4, down: 0, left: 5, right: 5 }, score: 17, complete: true }
+  ], 'PAR ROUTE  documented World 2 example matches the selected route report');
+  const replay = st(level);
+  for (const action of balanced.path) R.resolveTurn(replay, action);
+  eq([replay.won, replay.strokes], [true, balanced.optimal],
+    'PAR ROUTE  selected balanced route replays to a win at PAR');
+
+  const limited = SM.LEVELS.solve(level, {
+    maxStates: 120, maxDepth: 100, maxRouteLabels: 10000
+  });
+  eq([limited.status, limited.optimal, limited.routeBalance.complete],
+    ['solvable', balanced.optimal, false],
+    'PAR ROUTE  exhausted tie-search budget preserves proven PAR and marks selection incomplete');
+  const limitedReplay = st(level);
+  for (const action of limited.path) R.resolveTurn(limitedReplay, action);
+  eq([limitedReplay.won, limitedReplay.strokes], [true, limited.optimal],
+    'PAR ROUTE  budget-limited fallback remains a replayable optimum');
+
+  const conveyorLevel = SM.LEVELS.boot({ solve: false }).levels[2];
+  const conveyorSearch = SM.LEVELS.solve(conveyorLevel);
+  const conveyorReplay = st(conveyorLevel);
+  let sawAutomaticMovement = false;
+  for (const action of conveyorSearch.path) {
+    const resolved = R.resolveTurn(conveyorReplay, action);
+    if (resolved.steps.filter(step => step.type === 'move').length > 1) sawAutomaticMovement = true;
+  }
+  ok(sawAutomaticMovement, 'PAR ROUTE  conveyor fixture includes automatic movement');
+  eq(conveyorSearch.routeBalance.counts, SM.LEVELS.routeMetrics(conveyorSearch.path).counts,
+    'PAR ROUTE  automatic conveyor hops do not enter command direction counts');
+}
 
 function checkRules() {
   const R = SM.RULES;
@@ -1098,6 +1360,9 @@ function checkWorld2Content() {
       'WORLD 2  level_' + (i + 1) + ' has its authored name, board bounds, and world identity');
 
     const state = SM.RULES.newState(level);
+    ok(!SM.RULES.isSolid(state, state.start.x, state.start.y) &&
+       !SM.RULES.crateAt(state, state.start.x, state.start.y),
+      'WORLD 2  level_' + (i + 1) + ' authored start is safe initially');
     let emitters = 0, crates = 0;
     const targetLinks = new Set();
     const gateLinks = new Set();
@@ -1333,6 +1598,321 @@ function checkVectorSolver() {
     'VECTOR BFS  loop fixture respects the board-derived forced-hop bound');
 }
 
+function checkTileMechanicsGuide() {
+  const guidePath = path.join(ROOT, 'docs/level-design/tile-mechanics.md');
+  ok(fs.existsSync(guidePath), 'DOC  level-designer tile mechanics guide exists');
+  if (!fs.existsSync(guidePath)) return;
+  const guide = fs.readFileSync(guidePath, 'utf8');
+  const documented = Array.from(guide.matchAll(/^\|\s*(\d+)\s*\|\s*`([^`]+)`/gm))
+    .map(match => [Number(match[1]), match[2]]);
+  const registered = Object.keys(SM.TILES).map(Number).sort((a, b) => a - b)
+    .map(id => [id, SM.TILES[id].name]);
+  eq(documented, registered,
+    'DOC  catalogue IDs and names match every registered runtime tile');
+
+  const example = guide.match(/```yaml\s*\n([\s\S]*?)\n```/);
+  ok(!!example, 'DOC  guide includes a fenced YAML authoring example');
+  if (!example) return;
+  const loaded = SM.LEVELS.validate(SM.parseYAML(example[1]), { solve: false });
+  ok(loaded.ok, 'DOC  YAML example passes the production level loader',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  if (loaded.ok) {
+    const crate = loaded.levels[0].cratesInit[0][2];
+    eq([crate.capabilities.pullable, crate.capabilities.conveyor, crate.capabilities.ray],
+      [false, true, 'transport'], 'DOC  example applies its per-cell profile to the named crate');
+  }
+}
+
+function checkWorldPackGuide() {
+  const guide = fs.readFileSync(path.join(ROOT, 'docs/world-level-packs.md'), 'utf8');
+  const example = guide.match(/```yaml\s*\n([\s\S]*?)\n```/);
+  ok(!!example, 'PACK DOC  canonical world pack example exists');
+  if (!example) return;
+  const loaded = SM.LEVELS.validate(SM.parseYAML(example[1]), { solve: false });
+  ok(loaded.ok, 'PACK DOC  canonical example passes the shared loader',
+    loaded.problems.map(problem => problem.message).join(' | '));
+}
+
+function checkObjectOverrides() {
+  function documentFor(objectOverrides, row) {
+    return {
+      name: 'Capability Test', world_id: 'capability-test', num_level: 1,
+      levels: { level_1: {
+        name: 'Profiles', width: row.length, height: 1,
+        grid: [row], object_overrides: objectOverrides
+      } }
+    };
+  }
+
+  const valid = SM.LEVELS.validate(documentFor({
+    B1: { pullable: false },
+    C1: { pullable: true, ray: 'transport' }
+  }, [1, 71, 71, 2]), { solve: false });
+  ok(valid.ok, 'OBJECT  per-cell movement capabilities validate',
+    valid.problems.map(problem => problem.message).join(' | '));
+  if (valid.ok) {
+    const crates = valid.levels[0].cratesInit[0];
+    eq(crates[1].capabilities.pullable, false,
+      'OBJECT  first crate receives only its own pull override');
+    eq(crates[2].capabilities.pullable, true,
+      'OBJECT  same-ID crate retains its independent default/override');
+    eq(crates[2].capabilities.ray, 'transport',
+      'OBJECT  ray transport override is retained by the authored entity');
+    eq(crates[1].capabilities.ray, 'block',
+      'OBJECT  unconfigured crate retains its ray-blocking default');
+  }
+
+  const nonEntity = SM.LEVELS.validate(documentFor({ A1: { pullable: false } }, [1, 71, 0, 2]), { solve: false });
+  ok(nonEntity.problems.some(problem => /does not contain a movable object/.test(problem.message)),
+    'OBJECT  override on non-object cell is rejected');
+
+  const outside = SM.LEVELS.validate(documentFor({ E1: { pullable: false } }, [1, 71, 0, 2]), { solve: false });
+  ok(outside.problems.some(problem => /outside this board/.test(problem.message)),
+    'OBJECT  out-of-bounds coordinate is rejected');
+
+  const unsupported = SM.LEVELS.validate(documentFor({ B1: { teleport: true } }, [1, 71, 0, 2]), { solve: false });
+  ok(unsupported.problems.some(problem => /does not support capability "teleport"/.test(problem.message)),
+    'OBJECT  unknown capability name is rejected');
+
+  const invalidValue = SM.LEVELS.validate(documentFor({ B1: { pullable: 'yes' } }, [1, 71, 0, 2]), { solve: false });
+  ok(invalidValue.problems.some(problem => /must be true or false/.test(problem.message)),
+    'OBJECT  non-boolean capability value is rejected');
+
+  const invalidRay = SM.LEVELS.validate(documentFor({ B1: { ray: 'bounce' } }, [1, 71, 0, 2]), { solve: false });
+  ok(invalidRay.problems.some(problem => /ray capability.*must be block, transport, or ignore/.test(problem.message)),
+    'OBJECT  unsupported ray mode is rejected');
+
+  const target = SM.LEVELS.validate(documentFor({}, [1, 23, 0, 2]), { solve: false });
+  ok(target.ok, 'OBJECT  target object defaults validate');
+  if (target.ok) {
+    const targetInst = target.levels[0].switchesInit[0].inst;
+    eq([targetInst.capabilities.pushable, targetInst.capabilities.pullable,
+      targetInst.capabilities.portal, targetInst.capabilities.ray],
+    [false, false, false, 'ignore'], 'OBJECT  target is stationary and transparent by default');
+  }
+
+  const crateDefaults = SM.LEVELS.validate(documentFor({}, [1, 71, 0, 2]), { solve: false });
+  ok(crateDefaults.ok, 'OBJECT  default crate profile validates');
+  if (crateDefaults.ok) {
+    const crate = crateDefaults.levels[0].cratesInit[0][1];
+    eq([crate.capabilities.pushable, crate.capabilities.pullable, crate.capabilities.ray],
+      [true, false, 'block'], 'OBJECT  default crate is push-only and ray-opaque');
+  }
+}
+
+function checkTargetLayer() {
+  const raw = {
+    name: 'Movable target layer', world_id: 'movable-target-layer', num_level: 1,
+    levels: { level_1: {
+      name: 'Target over floor', width: 4, height: 1,
+      grid: [[1, 71, 23, 2]]
+    } }
+  };
+  const loaded = SM.LEVELS.validate(raw, { solve: false });
+  ok(loaded.ok, 'TARGET LAYER  target feature level validates',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  if (!loaded.ok) return;
+
+  const level = loaded.levels[0];
+  const targetRecord = level.switchesInit.find(sw => sw.inst.family === 'target');
+  eq([targetRecord.x, targetRecord.y, targetRecord.inst.params.link], [2, 0, 1],
+    'TARGET LAYER  target marker becomes a coordinate-bearing link entity');
+  eq(level.tiles[0][2].family, 'target',
+    'TARGET LAYER  authored level view retains the target marker');
+  eq(level.runtimeTiles[0][2].name, 'floor',
+    'TARGET LAYER  runtime terrain retains ordinary floor beneath the target');
+
+  const state = SM.RULES.newState(level);
+  eq(state.grid[0][2].name, 'floor',
+    'TARGET LAYER  mutable board uses underlying floor at target coordinates');
+  const emptyView = SM.RULES.describeTile(state, 2, 0);
+  eq([emptyView.inst.family, emptyView.terrain.name, emptyView.active],
+    ['target', 'floor', false], 'TARGET LAYER  view composes target feature over its underlying terrain');
+
+  const crate = state.crates[0][1];
+  state.crates[0][1] = null;
+  state.crates[0][2] = crate;
+  const occupiedView = SM.RULES.describeTile(state, 2, 0);
+  eq([occupiedView.inst.family, occupiedView.crate.id], ['target', 71],
+    'TARGET LAYER  target feature and crate can share a cell');
+  eq(SM.RULES.switchActive(state, targetRecord), true,
+    'TARGET LAYER  crate co-location activates the target link');
+}
+
+function checkDirectObjectMovement() {
+  const R = SM.RULES;
+
+  const cratePush = st(mkLevel([[1, 71, 0, 2]]));
+  const pushedCrate = go(cratePush, 'east');
+  eq(cratePush.player, { x: 1, y: 0 }, 'OBJECT MOVE  pushing advances the player into the crate cell');
+  eq(cratePush.crates[0][2].id, 71, 'OBJECT MOVE  pushing moves one crate cell forward');
+  eq([pushedCrate.stroke, cratePush.strokes], [true, 1],
+    'OBJECT MOVE  a successful crate push costs one stroke');
+
+  const fixedTarget = st(mkLevel([[1, 23, 0, 2]]));
+  const fixedTargetMove = go(fixedTarget, 'east');
+  eq([fixedTarget.player.x, R.targetAt(fixedTarget, 1, 0) !== null,
+    fixedTargetMove.stroke, fixedTarget.strokes], [0, true, false, 0],
+  'OBJECT MOVE  target stays fixed unless movement is explicitly enabled');
+
+  const targetPush = st(mkLevel([[1, 23, 0, 2]], null, null,
+    { B1: { pushable: true } }));
+  const pushedTarget = go(targetPush, 'east');
+  eq(R.targetAt(targetPush, 2, 0).inst.id, 23,
+    'OBJECT MOVE  pushing relocates the target entity and preserves its ID');
+  eq([targetPush.player.x, targetPush.strokes, pushedTarget.stroke], [1, 1, true],
+    'OBJECT MOVE  target push and player step resolve as one stroke');
+  eq(targetPush.grid[0][1].name, 'floor',
+    'OBJECT MOVE  vacated target cell retains its underlying floor');
+
+  const blockedCrate = st(mkLevel([[1, 71, 3, 2]]));
+  const blockedCrateMove = go(blockedCrate, 'east');
+  eq([blockedCrate.player.x, blockedCrate.crates[0][1].id,
+    blockedCrateMove.stroke, blockedCrate.strokes], [0, 71, false, 0],
+  'OBJECT MOVE  wall-blocked crate push is atomic and costs no stroke');
+
+  const blockedTarget = st(mkLevel([[1, 23, 3, 2]], null, null,
+    { B1: { pushable: true } }));
+  const blockedTargetMove = go(blockedTarget, 'east');
+  eq([blockedTarget.player.x, R.targetAt(blockedTarget, 1, 0) !== null,
+    blockedTargetMove.stroke, blockedTarget.strokes], [0, true, false, 0],
+  'OBJECT MOVE  wall-blocked target push leaves player and target unchanged');
+
+  const gateBlocked = st(mkLevel([[1, 71, 31, 2]]));
+  const gatePush = go(gateBlocked, 'east');
+  eq([gateBlocked.player.x, gateBlocked.crates[0][1].id, gatePush.stroke], [0, 71, false],
+    'OBJECT MOVE  crate cannot be pushed through a wrong-color gate');
+
+  const blockedDefaultPull = st(mkLevel([[0, 71, 1, 0, 2]]));
+  const blockedDefaultPullResult = R.resolveTurn(blockedDefaultPull, { type: 'pull', dir: 'east' });
+  eq([blockedDefaultPull.player.x, blockedDefaultPull.crates[0][1].id,
+    blockedDefaultPullResult.stroke, blockedDefaultPull.strokes], [2, 71, false, 0],
+  'OBJECT MOVE  default crate profile rejects pulling without charging a stroke');
+
+  const cratePull = st(mkLevel([[1, 71, 0, 0, 2]], null, null,
+    { B1: { pullable: true } }));
+  cratePull.player.x = 2;
+  const pulledCrate = R.resolveTurn(cratePull, { type: 'pull', dir: 'east' });
+  eq([cratePull.player.x, cratePull.crates[0][1] && cratePull.crates[0][1].id,
+    cratePull.crates[0][2] && cratePull.crates[0][2].id], [3, null, 71],
+  'OBJECT MOVE  pull advances player and brings trailing crate into its old cell');
+  eq([pulledCrate.stroke, cratePull.strokes], [true, 1],
+    'OBJECT MOVE  pull is one movement stroke');
+
+  const targetPull = st(mkLevel([[1, 23, 0, 0, 2]], null, null,
+    { B1: { pullable: true } }));
+  targetPull.player.x = 2;
+  const pulledTarget = R.resolveTurn(targetPull, { type: 'pull', dir: 'east' });
+  eq([targetPull.player.x, R.targetAt(targetPull, 2, 0).inst.id], [3, 23],
+    'OBJECT MOVE  target can be pulled into the player\'s vacated cell');
+  eq([pulledTarget.stroke, targetPull.strokes], [true, 1],
+    'OBJECT MOVE  target pull is one movement stroke');
+
+  const targetState = st(mkLevel([[1, 23, 0, 0, 2]], null, null,
+    { B1: { pushable: true } }));
+  const targetBefore = R.snapshot(targetState);
+  const targetBeforeSignature = R.snapshotSig(targetState);
+  go(targetState, 'east');
+  const targetAfterSignature = R.snapshotSig(targetState);
+  ok(targetAfterSignature !== targetBeforeSignature,
+    'OBJECT STATE  solver identity includes the relocated target position');
+  const targetClone = R.cloneState(targetState);
+  eq(R.targetAt(targetClone, 2, 0).entityId, R.targetAt(targetState, 2, 0).entityId,
+    'OBJECT STATE  cloned target retains its stable identity');
+  go(targetClone, 'east');
+  eq(R.targetAt(targetClone, 3, 0) !== null, true,
+    'OBJECT STATE  cloned target can move independently');
+  eq(R.targetAt(targetState, 2, 0) !== null, true,
+    'OBJECT STATE  moving a clone does not move the source target');
+  R.restore(targetState, targetBefore);
+  eq([targetState.player.x, R.targetAt(targetState, 1, 0) !== null,
+    targetState.strokes, R.snapshotSig(targetState)], [0, true, 0, targetBeforeSignature],
+  'OBJECT STATE  undo snapshot restores target position, player, and stroke identity exactly');
+
+  let solverTriedPull = 0;
+  const resolveTurn = R.resolveTurn;
+  R.resolveTurn = function (state, action) {
+    if (action.type === 'pull') solverTriedPull++;
+    return resolveTurn(state, action);
+  };
+  const pullSearch = SM.LEVELS.solve(mkLevel([[1, 0, 2]]), { maxStates: 100, maxDepth: 10 });
+  R.resolveTurn = resolveTurn;
+  eq(pullSearch.status, 'solvable', 'OBJECT STATE  solver still resolves the ordinary movement route');
+  ok(solverTriedPull > 0, 'OBJECT STATE  BFS enumerates pull actions through the real resolver');
+
+  const blockedPull = st(mkLevel([[1, 71, 0, 3, 2]]));
+  blockedPull.player.x = 2;
+  const blockedPullResult = R.resolveTurn(blockedPull, { type: 'pull', dir: 'east' });
+  eq([blockedPull.player.x, blockedPull.crates[0][1].id,
+    blockedPullResult.stroke, blockedPull.strokes], [2, 71, false, 0],
+  'OBJECT MOVE  wall-blocked pull is atomic and costs no stroke');
+}
+
+function checkObjectForceChains() {
+  const R = SM.RULES;
+
+  const crateOnBelt = st(mkLevel([[1, 0, 71, 60, 0, 2]]));
+  go(crateOnBelt, 'east');
+  const beltPush = go(crateOnBelt, 'east');
+  eq([crateOnBelt.player.x, crateOnBelt.crates[0][4].id], [2, 71],
+    'OBJECT FORCE  crate pushed onto a compatible belt is carried onward');
+  eq(crateOnBelt.strokes, 2, 'OBJECT FORCE  forced crate belt hop costs no extra stroke');
+  ok(beltPush.steps.some(step => step.type === 'push'),
+    'OBJECT FORCE  crate belt movement is included in the initiating turn');
+
+  const crateOnIce = st(mkLevel([[1, 0, 71, 5, 5, 0, 2]]));
+  go(crateOnIce, 'east');
+  go(crateOnIce, 'east');
+  eq(crateOnIce.crates[0][5].id, 71,
+    'OBJECT FORCE  pushed crate preserves direction across ice and stops on floor');
+
+  const cratePortal = st(mkLevel([[1, 0, 71, 80, 0, 0, 80, 2]], { 80: { link: 1 } }, 1,
+    { C1: { portal: true } }));
+  go(cratePortal, 'east');
+  const portalResult = go(cratePortal, 'east');
+  eq(cratePortal.crates[0][6].entityId, 'crate@C1',
+    'OBJECT FORCE  portal transports the same crate identity to its pair');
+  ok(portalResult.steps.some(step => step.type === 'object-teleport' &&
+    step.objectType === 'crate' && step.to.x === 6),
+  'OBJECT FORCE  portal returns a typed object-teleport event');
+  eq([portalResult.stroke, cratePortal.strokes], [true, 2],
+    'OBJECT FORCE  crate portal transport adds no stroke beyond its push');
+
+  const immobileTarget = st(mkLevel([[1, 23, 60, 0, 2]], null, null,
+    { B1: { pushable: true } }));
+  go(immobileTarget, 'east');
+  eq(R.targetAt(immobileTarget, 2, 0) !== null, true,
+    'OBJECT FORCE  target default profile ignores conveyors');
+  const beltTarget = st(mkLevel([[1, 23, 60, 0, 2]], null, 1,
+    { B1: { pushable: true, conveyor: true } }));
+  go(beltTarget, 'east');
+  eq(R.targetAt(beltTarget, 3, 0) !== null, true,
+    'OBJECT FORCE  per-cell profile lets a target travel along a conveyor');
+
+  const beltLoop = st(mkLevel([
+    [0, 0, 63, 61, 2],
+    [1, 71, 60, 62, 3]
+  ]));
+  const firstLoopResult = go(beltLoop, 'east');
+  eq(beltLoop.crates[0][2].id, 71,
+    'OBJECT FORCE  repeated object route settles without losing its crate');
+  ok(firstLoopResult.steps.some(step => step.type === 'force-loop'),
+    'OBJECT FORCE  object chain reports repeated directed state termination');
+  const loopResult = go(beltLoop, 'east');
+  eq([beltLoop.crates.flat().filter(Boolean).length, beltLoop.strokes], [1, 2],
+    'OBJECT FORCE  interacting player/object loops retain one crate and one stroke per action');
+  ok(loopResult.steps.some(step => step.type === 'force-loop'),
+    'OBJECT FORCE  loop termination is reported to playback');
+  ok(loopResult.steps.length < beltLoop.width * beltLoop.height * 4 + 10,
+    'OBJECT FORCE  cyclic movement remains within a board-derived bound');
+
+  const iceWall = st(mkLevel([[1, 0, 71, 5, 3, 2]]));
+  go(iceWall, 'east');
+  go(iceWall, 'east');
+  eq(iceWall.crates[0][3].id, 71,
+    'OBJECT FORCE  crate stops on its last legal ice cell before a wall');
+}
+
 function checkLevels() {
   eq(SM.P_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  player palette remains the four existing colors');
   eq(SM.W_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  world palette remains the four existing colors');
@@ -1529,6 +2109,12 @@ function checkWorldOneContent() {
     eq(level.solve.optimal, expectation.par, 'W1  ' + expectation.key + ' par matches the solver optimum');
 
     const state = SM.RULES.newState(level);
+    const crates = level.cratesInit.reduce((all, row) => all.concat(row.filter(Boolean)), []);
+    const targets = level.switchesInit.filter(sw => sw.inst.family === 'target');
+    ok(crates.every(crate => crate.capabilities.pushable && !crate.capabilities.pullable),
+      'W1  ' + expectation.key + ' keeps every crate push-only');
+    ok(targets.every(target => !target.capabilities.pushable && !target.capabilities.pullable),
+      'W1  ' + expectation.key + ' keeps target markers stationary');
     ok(!SM.RULES.isSolid(state, state.start.x, state.start.y) &&
        !SM.RULES.crateAt(state, state.start.x, state.start.y) &&
        !SM.RULES.targetAt(state, state.start.x, state.start.y),
@@ -1588,6 +2174,7 @@ function checkWorldOneContent() {
     eq(state.strokes, level.par, 'W1  ' + expectation.key + ' replay ends at the recorded stroke count');
   }
 }
+
 function checkStore() {
   const store = SM.STORE;
   store.reset();
@@ -1635,24 +2222,65 @@ function checkStore() {
 
 /* ---------------------------------------------------------------------- */
 
-console.log('--- Streuph\'s Maze: verification ---');
-checkTileRegistry();
-checkYaml();
-checkRayQueries();
-checkCatchTransitions();
-checkCatchSolver();
-checkRules();
-const res = checkLevels();
-checkWorldOneContent();
-checkWorld4Content();
-checkVectorSolver();
-checkStore();
-try { checkRulesPurity(); }
-catch (e) { ok(false, 'A2  purity check ran', e.message); }
+const unitSuites = {
+  registry: [checkTileRegistry],
+  rules: [checkStateContract, checkTileHookDispatch, checkRules, checkRayQueries,
+    checkCatchTransitions, checkRayTransportTransitions, checkCatchSolver,
+    checkDirectObjectMovement, checkObjectForceChains],
+  levels: [checkYaml, checkObjectOverrides, checkTargetLayer,
+    checkTileMechanicsGuide, checkWorldPackGuide],
+  helpers: [checkGeometryHelpers, checkRulesPurity, checkRulesTileDispatchPurity]
+};
 
-console.log('---');
-console.log(pass + ' passed, ' + fail + ' failed');
-if (fail) {
-  for (const f of failures) console.log('  FAIL  ' + f);
-  process.exit(1);
+function report(label) {
+  console.log('---');
+  console.log(pass + ' passed, ' + fail + ' failed');
+  if (fail) {
+    for (const f of failures) console.log('  FAIL  ' + f);
+    process.exitCode = 1;
+  }
+}
+
+const unitArg = process.argv.find(arg => arg.indexOf('--suite=') === 0);
+if (unitArg) {
+  const name = unitArg.slice('--suite='.length);
+  const selected = name === 'all-unit'
+    ? Object.keys(unitSuites).reduce((all, key) => all.concat(unitSuites[key]), [])
+    : unitSuites[name];
+  if (!selected) {
+    console.error('Unknown test suite "' + name + '". Available: ' +
+      Object.keys(unitSuites).join(', ') + ', all-unit');
+    process.exit(2);
+  }
+  console.log('--- Streuph\'s Maze: ' + name + ' unit suite ---');
+  selected.forEach(fn => fn());
+  report(name);
+} else {
+  console.log('--- Streuph\'s Maze: verification ---');
+  checkTileRegistry();
+  checkStateContract();
+  checkTileHookDispatch();
+  checkYaml();
+  checkRayQueries();
+  checkCatchTransitions();
+  checkRayTransportTransitions();
+  checkCatchSolver();
+  checkParRouteSelection();
+  checkRules();
+  checkGeometryHelpers();
+  checkLevels();
+  checkWorldOneContent();
+  checkWorld4Content();
+  checkVectorSolver();
+  checkWorld2Content();
+  checkTileMechanicsGuide();
+  checkObjectOverrides();
+  checkTargetLayer();
+  checkDirectObjectMovement();
+  checkObjectForceChains();
+  checkStore();
+  try { checkRulesPurity(); }
+  catch (e) { ok(false, 'A2  purity check ran', e.message); }
+  checkRulesTileDispatchPurity();
+  report('full verification');
 }

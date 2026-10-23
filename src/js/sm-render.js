@@ -336,7 +336,7 @@
   function moveTargetInView(view, step) {
     for (var i = 0; i < view.switches.length; i++) {
       var target = view.switches[i];
-      if (target.inst.family !== 'target') continue;
+      if (target.inst.entityRole !== 'target') continue;
       var matchesId = step.entityId && target.entityId === step.entityId;
       var matchesPosition = target.x === step.from.x && target.y === step.from.y &&
         target.inst.id === step.id;

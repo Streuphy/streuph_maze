@@ -72,6 +72,21 @@ The pack is `data/worlds/world-02-lolos-castle.levels.yaml`. All eight starts ar
 
 Solver replay ends with every level won, all three gated levels become unsolvable when their target cells are removed, and replayed respawns always land on the authored safe start. The static ray layout—not a timer, animation, or sweeping phase—is the only hazard state.
 
+### Balanced PAR example
+
+For **Level 5 — Four Medusas**, `npm run levels:routes` selects this fully
+compared, replay-verified minimum route:
+
+```text
+PAR 14 | U U R R R R R U L U L L L L
+U=4 D=0 L=5 R=5 | balance=17 | comparison=complete
+```
+
+The selected route has a lower directional-balance score than the first
+shortest route found by the previous one-path-per-state BFS; both routes have
+the same PAR of 14. The example counts explicit player commands, excludes
+automatic movement, and replays through the intended shielding/catch solution.
+
 ## Risks / Trade-offs
 
 - [A crate moved during the same action can alter the ray line] → Check only the fully settled post-action board and test both shielding and unshielding pushes.

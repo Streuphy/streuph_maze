@@ -208,7 +208,7 @@
     // authoritative signature of the World 1 mechanic in its level data.
     for (var y = 0; y < level.tiles.length; y++) {
       for (var x = 0; x < level.tiles[y].length; x++) {
-        if (level.tiles[y][x].family === 'target') return true;
+        if (level.tiles[y][x].entityRole === 'target') return true;
       }
     }
     return false;
@@ -333,7 +333,7 @@
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) &&
           !(target.tagName === 'INPUT' && target.type === 'file')) return;
       var dir = KEYMAP[e.key];
-      if (dir) { e.preventDefault(); self.act({ type: 'move', dir: dir }); return; }
+      if (dir) { e.preventDefault(); self.act({ type: e.shiftKey ? 'pull' : 'move', dir: dir }); return; }
 
       switch (e.key) {
         case ' ': case 'Enter': case 'f': case 'F':
@@ -410,30 +410,9 @@
     var n = SM.RULES.cellLabel(x, y);
     var i = d.inst;
     var bits = [n + ' — ' + i.name + ' (id ' + i.id + ')'];
-    if (i.family === 'gate') {
-      var c = i.params.carrier === 'W' ? 'world' : 'player';
-      bits.push('needs the ' + c + ' to be ' + i.params.colour);
-      bits.push(d.locked ? 'currently locked' : 'currently open');
-    } else if (i.family === 'barrier') {
-      bits.push('solid while locked; link ' + i.params.link);
-      bits.push(d.locked ? 'currently locked' : 'currently open');
-    } else if (i.family === 'switch' || i.family === 'sensor') {
-      bits.push(i.params.mode + ', ' + i.params.scope + ', link ' + (i.params.link | 0));
-      bits.push(d.active ? 'ACTIVE' : 'idle');
-    } else if (i.family === 'crate') {
-      bits.push('pushable, colour ' + i.params.colour);
-    } else if (i.family === 'flow') {
-      bits.push('belt, carries ' + ((i.params.dir.x || 0) > 0 ? 'east' : (i.params.dir.x || 0) < 0 ? 'west' :
-        (i.params.dir.y || 0) > 0 ? 'north' : 'south'));
-    } else if (i.family === 'aura') {
-      bits.push('sets your colour to ' + i.params.colour);
-    } else if (i.family === 'actuator') {
-      bits.push(i.name === 'cycle_reset' ? 'world colour back to white' : 'changes a colour');
-    } else if (i.family === 'hazard') {
-      var rayCells = SM.RULES.traceRay(this.state, x, y);
-      bits.push('static ray points ' + cardinalDirection(i.params.dir));
-      bits.push(rayCells.length + ' unobstructed cells; stops at walls, crates, and closed barriers');
-    }
+    var description = formatPresentation(i.presentation && i.presentation.inspection,
+      d, this.state, x, y);
+    if (description) bits.push(description);
     var rays = SM.RULES.traceRays(this.state);
     for (var ri = 0; ri < rays.length; ri++) {
       var ray = rays[ri];
@@ -520,16 +499,23 @@
 
   Game.prototype.syncTutorial = function () {
     var lv = this.state.level;
-    var hasRay = lv.tiles.some(function (row) {
-      return row.some(function (tile) { return tile.family === 'hazard'; });
+    var tileTutorial = null;
+    lv.tiles.some(function (row) {
+      return row.some(function (tile) {
+        if (tile.presentation && tile.presentation.tutorial) {
+          tileTutorial = tile.presentation.tutorial;
+          return true;
+        }
+        return false;
+      });
     });
     this.el.tutorial.innerHTML =
       '<p class="goal-name">' + escapeHtml(lv.name) + '</p>' +
       '<p>' + escapeHtml(lv.goalText || '') + '</p>' +
-      (hasRay ? '<p><strong>Line of sight:</strong> Rays are static and resolve on turns. Push a crate into a ray to shield cells beyond it. If caught after an action, you return to the start for that one stroke; crates and switches remain, and undo restores the turn. There is no timer or sweeping beam.</p>' : '') +
+      (tileTutorial || '') +
       '<p><strong>Tile visuals:</strong> tiles are static unless explicitly marked animated. The player marker pulses through eight display frames, about 250 ms per frame; this never changes moves or game rules.</p>' +
       '<p><strong>Win picture:</strong> omit <code>win_picture</code> for the built-in 250×250 PASS image, or set a level-specific PNG data URI, for example <code>win_picture: "data:image/png;base64,…"</code>. It appears only after the goal is achieved.</p>' +
-      '<p style="color:var(--mute);font-size:.78rem">Arrows / WASD / HJKL move · Space presses (ACT) · ' +
+      '<p style="color:var(--mute);font-size:.78rem">Arrows / WASD / HJKL move · Shift+direction pulls · Space presses (ACT) · ' +
       'Z undo · R restart · N next · click a tile to inspect it.</p>';
   };
 
@@ -550,11 +536,8 @@
         locked: def.params ? def.params.defaultLocked !== false : false,
         active: on, latched: false, W: 'wht', lit: {}
       };
-      var detail = def.family === 'hazard'
-        ? '<small class="detail">Static ' + cardinalDirection(def.params.dir) + ' ray · crates shield it</small>'
-        : (def.name === 'ice'
-          ? '<small class="detail">Slides in the entering direction; belts set their own direction.</small>'
-          : '');
+      var codexText = formatPresentation(def.presentation && def.presentation.codex, ctx, null, null, null);
+      var detail = codexText ? '<small class="detail">' + escapeHtml(codexText) + '</small>' : '';
       html += '<div class="row' + (on ? '' : ' unseen') + '"' +
         (on ? '' : ' title="not yet seen in this level"') + '>' +
         wrapSvg(SM.glyph(def, ctx)) +
@@ -566,6 +549,38 @@
       '<p style="margin:.5rem 0 0;font-size:.72rem;color:var(--mute)">' + count + ' of ' + total +
       ' tile kinds seen in this level. Standing on one logs it.</p>';
   };
+
+  /** Format tile-authored display text from a read-only description. */
+  function formatPresentation(template, view, state, x, y) {
+    if (!template) return '';
+    var inst = view.inst || view;
+    var params = inst.params || {};
+    var presentation = inst.presentation || {};
+    var capabilities = inst.capabilities || {};
+    var mobility = capabilities.pushable ? 'pushable' : 'fixed';
+    if (capabilities.pullable) mobility += ', pullable';
+    var rayCount = '';
+    if (presentation.rayEmitter && state && x !== null && y !== null) {
+      rayCount = String(SM.RULES.traceRay(state, x, y).length);
+    }
+    var values = {
+      colour: params.colour || 'white',
+      link: params.link === undefined ? '0' : String(params.link | 0),
+      mode: params.mode || 'signal',
+      scope: params.scope || 'tagged',
+      carrierLabel: params.carrier === 'W' ? 'world' : 'player',
+      lockLabel: view.locked ? 'locked' : 'open',
+      activeLabel: view.active ? 'active' : 'idle',
+      latchLabel: view.latched ? 'latched' : 'idle',
+      mobilityLabel: mobility,
+      flowKind: params.kind || 'player',
+      direction: params.dir ? cardinalDirection(params.dir) : 'in its configured direction',
+      rayCount: rayCount
+    };
+    return String(template).replace(/\{([A-Za-z0-9_]+)\}/g, function (match, key) {
+      return values[key] === undefined ? '' : values[key];
+    });
+  }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {

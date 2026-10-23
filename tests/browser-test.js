@@ -62,8 +62,11 @@ function waitFor(cond, ms) {
   });
 }
 
-function key(k) {
-  const e = new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+function key(k, modifiers) {
+  const e = new window.KeyboardEvent('keydown', {
+    key: k, bubbles: true, cancelable: true,
+    shiftKey: !!(modifiers && modifiers.shiftKey)
+  });
   doc.dispatchEvent(e);
 }
 
@@ -130,13 +133,12 @@ function key(k) {
   ok(iceCodex && beltCodex && iceCodex.querySelector('svg').innerHTML !== beltCodex.querySelector('svg').innerHTML,
     'ice hatching and belt chevrons have visibly distinct glyphs');
 
-
   /* ---- play level 1 ---------------------------------------------------- */
   const g = () => SM.game;
   // A1 -> E1 -> E5, par 8.
   ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight',
    'ArrowUp', 'ArrowUp', 'ArrowUp', 'ArrowUp'].forEach(k => key(k));
-  await new Promise(r => setTimeout(r, 900));
+  await waitFor(() => !g().pending);
 
   eq(g().state.strokes, 8, 'eight key presses cost eight entries');
   ok(g().state.won, 'reaching the goal with matching colours wins');
@@ -149,10 +151,9 @@ function key(k) {
   /* ---- undo ------------------------------------------------------------ */
   key('Escape');
   g().load(0);
-  await new Promise(r => setTimeout(r, 60));
   key('ArrowRight');
   key('ArrowRight');
-  await new Promise(r => setTimeout(r, 400));
+  await waitFor(() => !g().pending);
   eq(g().state.strokes, 2, 'two moves cost two entries');
   key('z');
   eq(g().state.strokes, 1, 'undo removes exactly one entry');
@@ -164,7 +165,7 @@ function key(k) {
   const customPath = g().levels[1].solve.path;
   const keyFor = { north: 'ArrowUp', east: 'ArrowRight', south: 'ArrowDown', west: 'ArrowLeft' };
   customPath.forEach(a => key(a.type === 'act' ? ' ' : keyFor[a.dir]));
-  await new Promise(r => setTimeout(r, 500));
+  await waitFor(() => !g().pending);
   ok(g().state.won, 'the custom-picture tutorial level can be completed');
   ok(!doc.querySelector('#win-picture-panel').hidden, 'custom picture appears after the level is won');
   ok(doc.querySelector('#win-picture').src.indexOf('data:image/png;base64,') === 0, 'custom PNG data URI is displayed');
@@ -184,32 +185,29 @@ function key(k) {
   await waitFor(() => !voidCell.classList.contains('wall'));
   ok(!voidCell.classList.contains('wall'), 'ACT restores passable Void in the renderer');
   key('ArrowRight'); key('ArrowRight');
-  await new Promise(r => setTimeout(r, 300));
+  await waitFor(() => !g().pending);
   ok(g().state.won, 'the Void/Pass tutorial is solvable');
 
   /* ---- blocked moves are free ------------------------------------------ */
   g().load(0);
-  await new Promise(r => setTimeout(r, 60));
   key('ArrowLeft');           // A1 is the west edge
   eq(g().state.strokes, 0, 'a blocked move costs nothing');
   eq(g().history.length, 0, 'a blocked move does not enter the undo history');
 
   /* ---- ACT ------------------------------------------------------------- */
   g().load(1);                // Two colours: dial at C2
-  await new Promise(r => setTimeout(r, 60));
   key('ArrowRight'); key('ArrowRight'); key('ArrowUp'); // from A1 to the C2 dial
-  await new Promise(r => setTimeout(r, 300));
+  await waitFor(() => !g().pending);
   eq(g().state.W, 'red', 'stepping on a dial advances the world colour');
   key(' ');                   // ACT in place
-  await new Promise(r => setTimeout(r, 300));
+  await waitFor(() => !g().pending);
   eq(g().state.W, 'gre', 'ACT advances it again');
 
   /* ---- a colour gate refuses ------------------------------------------- */
   g().load(1);
-  await new Promise(r => setTimeout(r, 60));
   key('ArrowRight'); key('ArrowRight'); // to column C
   key('ArrowUp'); key('ArrowUp'); key('ArrowUp'); // onto the C4 prism
-  await new Promise(r => setTimeout(r, 400));
+  await waitFor(() => !g().pending);
   eq(g().state.P, 'red', 'the prism set the player colour');
 
   /* ---- persistence ----------------------------------------------------- */
@@ -384,7 +382,7 @@ function key(k) {
   ok(!/fill-opacity="0\.8"/.test(inactiveTargetMark), 'the inactive target has an unfilled center');
   ok(linkedGate.classList.contains('wall'), 'the linked gate renders as closed initially');
   key('ArrowRight');
-  await new Promise(r => setTimeout(r, 250));
+  await waitFor(() => !g().pending);
   eq(g().state.crates[0][2].id, 70, 'the crate moved onto the target');
   const sourceView = SM.RULES.describeTile(g().state, 1, 0);
   eq(sourceView.inst.name, 'floor', 'the crate source is described as floor');
@@ -407,7 +405,7 @@ function key(k) {
   g().load(0);
   ['ArrowRight', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowRight']
     .forEach(key);
-  await new Promise(r => setTimeout(r, 900));
+  await waitFor(() => !g().pending);
   ok(g().state.won, 'the World 1 sample route reaches its exit');
   ok(!doc.querySelector('#win-picture-panel').hidden, 'the generated World 1 picture appears after victory');
   eq(doc.querySelector('#win-picture').alt, 'Solved World 1 board',
@@ -433,7 +431,7 @@ function key(k) {
   await waitFor(() => doc.querySelectorAll('#board .cell').length === 12);
   ['ArrowRight', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowRight']
     .forEach(key);
-  await new Promise(r => setTimeout(r, 900));
+  await waitFor(() => !g().pending);
   ok(g().state.won, 'the custom-art World 1 sample route reaches its exit');
   eq(doc.querySelector('#win-picture').getAttribute('src'), customWorldPicture,
     'custom PNG art takes precedence over the generated World 1 snapshot');
@@ -573,6 +571,65 @@ function key(k) {
     'undo restores the pre-push player, crate, and stroke count after an ice chain');
   eq(g().r.view.crates[0][2].id, 71,
     'undo redraws the crate at its restored pre-force position');
+
+  const pullPack = [
+    'name: "Pull Browser Test"',
+    'world_id: pull-browser-test',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Pull the crate"',
+    '    width: 5',
+    '    height: 1',
+    '    golf_score: 3',
+    '    object_overrides:',
+    '      A1: { pullable: true }',
+    '    grid:',
+    '      - [70, 1, 0, 0, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(pullPack), 'a pull interaction browser pack loads');
+  await waitFor(() => doc.querySelectorAll('#board .cell').length === 5);
+  key('ArrowRight', { shiftKey: true });
+  await waitFor(() => !g().pending);
+  eq(g().state.player, { x: 2, y: 0 }, 'Shift+direction advances the player while pulling');
+  eq(g().state.crates[0][1].id, 70, 'Shift+direction pulls the crate into the vacated cell');
+  eq(g().state.strokes, 1, 'the pull and player step cost one stroke');
+
+  const targetPack = [
+    'name: "Movable Target Browser Test"',
+    'world_id: movable-target-browser-test',
+    'num_level: 1',
+    'levels:',
+    '  level_1:',
+    '    name: "Move the target"',
+    '    width: 5',
+    '    height: 1',
+    '    golf_score: 4',
+    '    object_overrides:',
+    '      B1: { pushable: true }',
+    '    grid:',
+    '      - [1, 23, 0, 0, 2]'
+  ].join('\n');
+  ok(SM.io.applyText(targetPack), 'a movable-target browser pack loads');
+  await waitFor(() => doc.querySelectorAll('#board .cell').length === 5);
+  key('ArrowRight');
+  await waitFor(() => !g().pending);
+  const targetRecord = g().state.switches.find(sw => sw.inst.family === 'target');
+  eq([targetRecord.x, targetRecord.y, g().state.player.x], [2, 0, 1],
+    'player pushes the target entity while entering its former cell');
+  eq(g().r.view.switches.find(sw => sw.inst.family === 'target').x, 2,
+    'renderer mirror replays the target movement event');
+  const movedTargetCell = doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
+  ok(movedTargetCell.querySelector('circle'), 'target glyph is drawn at its moved location');
+  movedTargetCell.click();
+  ok(/movable floor target/.test(doc.querySelector('#banner').textContent) &&
+      /link 1/.test(doc.querySelector('#banner').textContent),
+    'target inspection reports its movement role and linked behavior');
+  key('z');
+  eq(g().state.switches.find(sw => sw.inst.family === 'target').x, 1,
+    'undo restores the target position');
+  eq(g().r.view.switches.find(sw => sw.inst.family === 'target').x, 1,
+    'renderer mirror matches the restored target position');
 
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);

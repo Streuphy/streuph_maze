@@ -39,6 +39,13 @@ OpenCode work in this project.
   `golf_score` to the solver's minimum stroke count. Replay the returned path
   with the real resolver and confirm it ends in `won` with the recorded stroke
   count.
+- For a documented PAR example, run `npm run levels:routes` and use a route
+  among the minimum-stroke solutions with the closest U/D/L/R command counts.
+  Count explicit move and pull commands only; exclude ACT and automatic
+  movement. If balance scores tie, use the first route in solver discovery
+  order. Record the route, PAR, counts, and whether the comparison completed;
+  an incomplete balance comparison does not invalidate a proven minimum PAR,
+  but it must not be described as globally best-balanced.
 - Verify every authored start is safe under the initial ray/gate/crate state.
   Replay every caught transition and verify the respawn cell is safe in that
   resulting state as well.
@@ -55,7 +62,8 @@ OpenCode work in this project.
 ## World 2 ray-hazard checks
 
 - Test all four static emitter directions and verify ray traversal uses the
-  settled post-action board.
+  settled post-action board. Resolve configured ray transport first, in stable
+  emitter scan order, then test player exposure against the resulting board.
 - Confirm walls, crates, and closed/solid barriers stop rays; open gates and
   targets do not. Test pushes that both create and remove shielding.
 - Confirm exposed successful actions catch the player before the final goal
@@ -68,18 +76,22 @@ OpenCode work in this project.
 
 ## Required commands
 
-Run the focused rules suite while iterating if useful, then run the complete
-suite before declaring the work done:
+During iteration, use a focused Node unit suite for the changed area. For
+example, use `test:unit:levels` for schema/coordinate validation and
+`test:unit:rules` for resolver behavior. The jsdom browser suite is reserved for
+final validation rather than routine edits. Before declaring the work done, run
+the complete suite:
 
 ```sh
-npm run test:rules
-npm run test:browser
+npm run test:unit:levels
+npm run test:unit:rules
 npm test
 ```
 
-`npm test` runs both Node verification and the jsdom browser smoke suite. When
-the change affects real-browser rendering or local `file://` pack loading, also
-load the authored pack through the actual UI in Chromium, play a representative
-shield/catch/undo path, return to the Prologue, and verify no external resources
-or unintended game-over state. Record that check separately; do not imply that
-`npm test` launched Chromium.
+`npm test` runs both Node verification and the jsdom browser smoke suite. Use
+`npm run test:browser` only at final validation. When the change affects
+real-browser rendering or local `file://` pack loading, also load the authored
+pack through the actual UI in Chromium, play a representative shield/catch/undo
+path, return to the Prologue, and verify no external resources or unintended
+game-over state. Record that check separately; do not imply that `npm test`
+launched Chromium.

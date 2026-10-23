@@ -41,7 +41,7 @@ The system SHALL use target activity to satisfy the matching lock link, keeping 
 - **THEN** each target changes only the gates assigned to its own link
 
 ### Requirement: Sokoban crates can only be pushed
-The system SHALL let the player move a crate only by entering its cell while the next cell in that direction is in bounds, unoccupied by another crate, and not solid.
+World 1 SHALL use a push-only crate profile: the player can move a crate only by entering its cell while the next cell in that direction is in bounds, unoccupied by another crate, and not solid. World 1 crates SHALL NOT be pullable, and World 1 target markers SHALL remain stationary.
 
 #### Scenario: Successful push
 - **WHEN** the player moves toward a crate with a valid destination cell beyond it
@@ -54,6 +54,14 @@ The system SHALL let the player move a crate only by entering its cell while the
 #### Scenario: Blocked push
 - **WHEN** a crate's destination is outside the board, occupied by another crate, or solid
 - **THEN** neither crate nor player moves and the action costs no stroke
+
+#### Scenario: Pull is not part of World 1 Sokoban
+- **WHEN** the player issues a pull with a World 1 crate immediately behind
+- **THEN** the action is blocked without moving either entity or charging a stroke
+
+#### Scenario: World 1 target remains a floor marker
+- **WHEN** the player attempts to push or pull a World 1 target marker
+- **THEN** the target remains in place and the action is blocked without a stroke
 
 ### Requirement: Sokoban state is undoable and solver-visible
 The system SHALL include crate positions and derived target/gate activity in turn resolution, state cloning, undo restoration, and solvability search so that displayed play, undo, and computed par agree.

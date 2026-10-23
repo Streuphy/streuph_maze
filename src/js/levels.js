@@ -36,7 +36,7 @@
   var MAX_STATES = 250000;
   var MAX_DEPTH = 200;
 
-  var GAMECOLOURS = ['wht', 'red', 'gre', 'blu'];
+  var GAMECOLOURS = SM.GAME_COLOURS;
 
   /* ---------------------------------------------------------------------- */
   /* Diagnostics                                                            */
@@ -278,7 +278,8 @@
       return { error: diag(key, 0, 'V4: height ' + h + ' is out of range (' + MIN_HEIGHT + '..' + MAX_HEIGHT + ')') };
     }
 
-    /* V5 — known, implemented tile ids. */
+    /* V5 — IDs are resolved through the active catalogue. Validation consumes
+       only stable identity/metadata; it never executes tile strategies. */
     var starts = 0, goals = 0, actuators = 0;
     var used = {};
     for (var rr = 0; rr < h; rr++) {
@@ -304,7 +305,9 @@
         used[id] = true;
         if (id === 1) starts++;
         if (id === 2) goals++;
-        if (def.family === 'actuator' || def.family === 'aura') actuators++;
+        if (def.state && (def.state.writes.indexOf('P') !== -1 || def.state.writes.indexOf('W') !== -1)) {
+          actuators++;
+        }
       }
     }
 
@@ -350,8 +353,20 @@
               pk + '". Known: ' + (knownNames.length ? knownNames.join(', ') : '(none)') + '.') };
           }
         }
+        // The tile registry owns parameter keys and value shapes. This layer
+        // only adds world/level/cell context to its actionable diagnostic.
+        var parameterCheck = SM.validateTileParameters(SM.getTile(Number(oid)), ov);
+        if (!parameterCheck.ok) {
+          return { error: diag(key, 0, 'V6: tile id ' + oid + ' has an invalid parameter override: ' +
+            parameterCheck.errors[0]) };
+        }
       }
     }
+
+    /* V13 — per-entity movement capabilities use board coordinates. Their
+       accepted keys/domains come from the entity's registered profile. */
+    var objectOverrideError = validateObjectOverrides(key, raw, w, h);
+    if (objectOverrideError) return { error: objectOverrideError };
 
     /* V9 — colour overrides must be real gameplay colours. */
     var bad = checkColours(key, raw);
@@ -418,6 +433,42 @@
     return { level: level };
   }
 
+  function validateObjectOverrides(key, raw, width, height) {
+    var overrides = raw.object_overrides;
+    if (overrides === undefined || overrides === null) return null;
+    if (typeof overrides !== 'object' || Array.isArray(overrides)) {
+      return diag(key, 0, 'V13: "object_overrides" must be a mapping of board coordinate -> capabilities');
+    }
+
+    var coordinates = Object.keys(overrides);
+    for (var i = 0; i < coordinates.length; i++) {
+      var coordinate = coordinates[i];
+      var match = /^([A-P])([1-9])$/.exec(coordinate);
+      if (!match) {
+        return diag(key, 0, 'V13: object override coordinate "' + coordinate + '" must use board notation such as C2');
+      }
+      var x = match[1].charCodeAt(0) - 65;
+      var y = Number(match[2]) - 1;
+      if (x >= width || y >= height) {
+        return diag(key, 0, 'V13: object override coordinate "' + coordinate + '" is outside this board');
+      }
+
+      var gridId = raw.grid[height - 1 - y][x];
+      var def = SM.getTile(gridId);
+      if (!def || (def.entityRole !== 'crate' && def.entityRole !== 'target')) {
+        return diag(key, 0, 'V13: object override coordinate "' + coordinate + '" does not contain a movable object');
+      }
+
+      var profile = overrides[coordinate];
+      if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+        return diag(key, 0, 'V13: object override at ' + coordinate + ' must be a capability mapping');
+      }
+        var capabilityCheck = SM.validateTileCapabilities(def, profile, coordinate);
+      if (!capabilityCheck.ok) return diag(key, 0, 'V13: ' + capabilityCheck.errors[0]);
+    }
+    return null;
+  }
+
   function checkColours(key, raw) {
     var ids = Object.keys(raw.overrides || {});
     for (var i = 0; i < ids.length; i++) {
@@ -438,7 +489,7 @@
     for (var r = 0; r < raw.grid.length; r++) {
       for (var c = 0; c < raw.grid[r].length; c++) {
         var def = SM.getTile(raw.grid[r][c]);
-        if (!def || def.family !== 'portal') continue;
+        if (!def || !def.strategies || def.strategies.forcedMovement !== 'linkedPortal') continue;
         var ov = (raw.overrides && raw.overrides[raw.grid[r][c]]) || {};
         var link = ov.link !== undefined ? ov.link : def.params.link;
         var kk = String(link);
@@ -460,35 +511,94 @@
     { type: 'move', dir: 'east' },
     { type: 'move', dir: 'south' },
     { type: 'move', dir: 'west' },
+    { type: 'pull', dir: 'north' },
+    { type: 'pull', dir: 'east' },
+    { type: 'pull', dir: 'south' },
+    { type: 'pull', dir: 'west' },
     { type: 'act' }
   ];
+
+  function routeMetrics(path) {
+    var counts = { up: 0, down: 0, left: 0, right: 0 };
+    for (var i = 0; i < path.length; i++) {
+      var action = path[i];
+      if (action.type !== 'move' && action.type !== 'pull') continue;
+      if (action.dir === 'north') counts.up++;
+      else if (action.dir === 'south') counts.down++;
+      else if (action.dir === 'west') counts.left++;
+      else if (action.dir === 'east') counts.right++;
+    }
+    var total = counts.up + counts.down + counts.left + counts.right;
+    var mean = total / 4;
+    var score = Math.pow(counts.up - mean, 2) + Math.pow(counts.down - mean, 2) +
+      Math.pow(counts.left - mean, 2) + Math.pow(counts.right - mean, 2);
+    return { counts: counts, score: score };
+  }
 
   function solve(level, opts) {
     opts = opts || {};
     var maxStates = opts.maxStates || MAX_STATES;
     var maxDepth = opts.maxDepth || MAX_DEPTH;
+    var maxRouteLabels = opts.maxRouteLabels || maxStates;
 
     var start = SM.RULES.newState(level);
-    var seen = {};
-    seen[SM.RULES.snapshotSig(start)] = 0;
+    var startSig = SM.RULES.snapshotSig(start);
+    var stateDepth = {};
+    var labels = {};
+    stateDepth[startSig] = 0;
+    labels[startSig + '|0,0,0,0'] = true;
 
-    var queue = [{ st: start, depth: 0, path: [] }];
-    var head = 0, explored = 0;
+    var queue = [{ st: start, depth: 0, path: [], counts: [0, 0, 0, 0] }];
+    var head = 0, explored = 0, routeLabels = 1;
+    var goalDepth = null, best = null, budgetHit = false;
 
     function isGoal(st) {
       return st.player.x === st.goal.x && st.player.y === st.goal.y && st.P === st.W;
     }
 
+    function countDirection(counts, action) {
+      var next = counts.slice();
+      if (action.type !== 'move' && action.type !== 'pull') return next;
+      var index = action.dir === 'north' ? 0 : action.dir === 'south' ? 1 :
+        action.dir === 'west' ? 2 : 3;
+      next[index]++;
+      return next;
+    }
+
+    function balanceScore(counts) {
+      var total = counts[0] + counts[1] + counts[2] + counts[3];
+      var mean = total / 4;
+      var score = 0;
+      for (var i = 0; i < 4; i++) score += Math.pow(counts[i] - mean, 2);
+      return score;
+    }
+
+    function resultForBest(complete) {
+      var metrics = routeMetrics(best.path);
+      return {
+        status: 'solvable', optimal: best.depth, explored: explored,
+        routeLabels: routeLabels, path: best.path,
+        routeBalance: {
+          counts: metrics.counts,
+          score: metrics.score,
+          complete: complete
+        }
+      };
+    }
+
     if (isGoal(start)) {
-      return { status: 'solvable', optimal: 0, explored: 1, path: [] };
+      best = { depth: 0, path: [], counts: [0, 0, 0, 0], score: 0 };
+      return resultForBest(true);
     }
 
     while (head < queue.length) {
-      var node = queue[head++];
+      var node = queue[head];
+      /* BFS has expanded every possible predecessor at the winning depth once
+         the next queued label is itself at that depth. */
+      if (goalDepth !== null && node.depth >= goalDepth) break;
+      if (explored >= maxStates) { budgetHit = true; break; }
+      node = queue[head++];
       explored++;
-      if (explored > maxStates) {
-        return { status: 'unknown', optimal: null, explored: explored - 1, path: null };
-      }
       if (node.depth >= maxDepth) continue;
 
       for (var a = 0; a < ACTIONS.length; a++) {
@@ -502,17 +612,40 @@
         }
         if (!r.stroke) continue;
 
+        var nextDepth = node.depth + 1;
+        var nextCounts = countDirection(node.counts, action);
         var path = node.path.concat([action]);
         if (isGoal(next)) {
-          return { status: 'solvable', optimal: next.strokes, explored: explored, path: path };
+          var score = balanceScore(nextCounts);
+          if (goalDepth === null) goalDepth = nextDepth;
+          if (nextDepth === goalDepth && (!best || score < best.score)) {
+            best = { depth: next.strokes, path: path, counts: nextCounts, score: score };
+          }
+          continue;
         }
+
+        /* Once an optimum exists, only its predecessor layer can contain
+           another equal-length solution. */
+        if (goalDepth !== null && nextDepth >= goalDepth) continue;
         var k = SM.RULES.snapshotSig(next);
-        if (seen[k] !== undefined) continue;
-        seen[k] = next.strokes;
-        queue.push({ st: next, depth: node.depth + 1, path: path });
+        if (stateDepth[k] !== undefined && stateDepth[k] < nextDepth) continue;
+        if (stateDepth[k] === undefined) stateDepth[k] = nextDepth;
+        var labelKey = k + '|' + nextCounts.join(',');
+        if (labels[labelKey]) continue;
+        if (routeLabels >= maxRouteLabels) { budgetHit = true; break; }
+        labels[labelKey] = true;
+        routeLabels++;
+        queue.push({ st: next, depth: nextDepth, path: path, counts: nextCounts });
       }
+      if (budgetHit) break;
     }
 
+    if (best) return resultForBest(!budgetHit);
+    if (budgetHit) {
+      return { status: 'unknown', optimal: null, explored: explored,
+        routeLabels: routeLabels, path: null,
+        routeBalance: { counts: null, score: null, complete: false } };
+    }
     return { status: 'unsolvable', optimal: null, explored: explored, path: null };
   }
 
@@ -523,6 +656,7 @@
   SM.LEVELS = {
     validate: validate,
     solve: solve,
+    routeMetrics: routeMetrics,
     MAX_WIDTH: MAX_WIDTH,
     MAX_HEIGHT: MAX_HEIGHT,
     GAMECOLOURS: GAMECOLOURS,

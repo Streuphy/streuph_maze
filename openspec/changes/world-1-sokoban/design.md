@@ -155,6 +155,21 @@ resolver. The later-level pack tests replay each route, check the recorded
 minimum pars, confirm every target/gate link is visited, and prove each link is
 required by solving a variant with that link's target removed.
 
+### Balanced PAR example
+
+For **Level 1 — First Push**, `npm run levels:routes` selects this fully
+compared, replay-verified minimum route:
+
+```text
+PAR 8 | R U U R R R D D
+U=2 D=2 L=0 R=4 | balance=8 | comparison=complete
+```
+
+The first `R` is the required crate push. The route ends won after exactly eight
+strokes; the directional counts use explicit player commands only. PAR remains
+the minimum stroke count—the balance score only chooses this representative
+among equally short solutions.
+
 ## Risks / Trade-offs
 
 - [A crate-underlay normalization change can affect existing Prologue crate levels] → Add regression tests for all current crate pushes, vacated-cell traversal, renderer state, and Prologue solver results before updating shipped content.

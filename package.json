@@ -9,7 +9,13 @@
     "test": "node tests/verify.js && node tests/browser-test.js",
     "test:rules": "node tests/verify.js",
     "test:browser": "node tests/browser-test.js",
-    "levels:emit": "node scripts/emit-levels-yaml.js"
+    "test:unit:registry": "node tests/unit/registry.js",
+    "test:unit:rules": "node tests/verify.js --suite=rules",
+    "test:unit:levels": "node tests/verify.js --suite=levels",
+    "test:unit:helpers": "node tests/verify.js --suite=helpers",
+    "test:unit": "node tests/verify.js --suite=all-unit",
+    "levels:emit": "node scripts/emit-levels-yaml.js",
+    "levels:routes": "node scripts/report-par-routes.js"
   },
   "devDependencies": {
     "jsdom": "^30.1.3"

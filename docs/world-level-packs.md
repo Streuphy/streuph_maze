@@ -32,6 +32,26 @@ Every cell is an integer ID for a registered, implemented tile. `golf_score` is
 the minimum number of player strokes; the validator uses the same resolver and
 solver as gameplay to check it.
 
+## PAR route examples
+
+Run `npm run levels:routes` to print replay-checked optimal routes for the
+Prologue and every available `data/worlds/*.levels.yaml` pack. PAR remains the
+minimum stroke count. When several routes share that optimum, the solver chooses
+the one with the lowest squared deviation from an even split of up, down, left,
+and right commands. The score is
+`(U - T/4)^2 + (D - T/4)^2 + (L - T/4)^2 + (R - T/4)^2`, where
+`T = U + D + L + R`.
+
+Count each explicit move or pull command once in its commanded direction. ACT
+and automatic conveyor/ice/portal movement do not add a direction count. If
+multiple minimum routes have the same score, the first route found in the
+solver's fixed breadth-first action order wins. The report distinguishes a
+complete comparison from one stopped by the solver's route-search budget; an
+incomplete result is still a proven minimum route/PAR, but is not claimed to be
+the globally best-balanced route. Replay a printed route and keep mechanic,
+safety, and intended-lesson review separate from this direction-balance
+tie-break.
+
 ## Relevant tile IDs
 
 - `0` floor, `1` start, `2` exit, and `3` wall.
@@ -47,6 +67,12 @@ solver as gameplay to check it.
 Tile IDs and link defaults are defined in `src/js/tiles.js`. Because `overrides`
 are keyed by tile ID, every occurrence of one ID shares its override values;
 use link-specific variants when a level needs separate links.
+
+World YAML remains data-only: tile IDs select definitions and overrides select
+registered parameters or per-entity capabilities. Rule strategy names, handler
+code, and presentation descriptors are not authored in YAML. The shared
+`levels.js` loader validates values against the active tile catalogue before
+normalizing or activating a pack.
 
 ## Loading under `file://`
 
