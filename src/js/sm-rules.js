@@ -65,13 +65,13 @@
    */
   RULES.buildLevel = function (raw, key) {
     var w = raw.width, h = raw.height;
-    var tiles = [], crates = [], locked = [], switches = [];
+    var tiles = [], runtimeTiles = [], crates = [], locked = [], switches = [];
     var portals = {};
     var start = null, goal = null;
     var rx, ry, cx, cy, inst, ov;
 
     for (ry = 0; ry < h; ry++) {
-      tiles[ry] = []; crates[ry] = new Array(w); locked[ry] = [];
+      tiles[ry] = []; runtimeTiles[ry] = []; crates[ry] = new Array(w); locked[ry] = [];
       for (rx = 0; rx < w; rx++) {
         crates[ry][rx] = null;
         var rowIdx = h - 1 - ry;               // <-- the one and only flip (C4)
@@ -88,17 +88,23 @@
             'The resolver refuses to guess its behaviour.');
         }
         ov = (raw.overrides && raw.overrides[id]) || null;
+        var objectLabel = colName(rx) + (ry + 1);
+        var objectOv = (raw.object_overrides && raw.object_overrides[objectLabel]) || null;
         inst = {
           id: id,
           family: def.family,
           name: def.name,
           glyph: def.glyph,
+          entityId: (def.family === 'crate' || def.family === 'target')
+            ? def.family + '@' + objectLabel : null,
           solid: def.solid,
           walkable: def.walkable,
           pushable: !!def.pushable,
+          capabilities: mergeParams(def.capabilities, objectOv),
           behavior: def.behavior,
           params: mergeParams(def.params, ov)
         };
+        var authoredInst = inst;
         // Authoring convenience, stated once: a lock target that a level
         // WIRES INTO THE SWITCH NETWORK (an override supplies `link`) and
         // does not say otherwise defaults to CLOSED. Without this rule a
@@ -128,17 +134,37 @@
             params: mergeParams(floorDef.params, null)
           };
         }
-        tiles[ry][rx] = inst;
+        if (authoredInst.family === 'target') {
+          switches.push({ entityId: authoredInst.entityId, x: rx, y: ry,
+            inst: authoredInst, latched: false,
+            capabilities: mergeParams(authoredInst.capabilities, null) });
+          var targetFloorDef = SM.getTile(0);
+          inst = {
+            id: targetFloorDef.id,
+            family: targetFloorDef.family,
+            name: targetFloorDef.name,
+            glyph: targetFloorDef.glyph,
+            solid: targetFloorDef.solid,
+            walkable: targetFloorDef.walkable,
+            pushable: !!targetFloorDef.pushable,
+            behavior: targetFloorDef.behavior,
+            params: mergeParams(targetFloorDef.params, null)
+          };
+        }
+        // Preserve the catalogue-backed authored view for level inspection;
+        // the mutable runtime grid exposes floor beneath both entity types.
+        tiles[ry][rx] = authoredInst.family === 'target' ? authoredInst : inst;
+        runtimeTiles[ry][rx] = inst;
 
-        if (inst.name === 'start') { if (start) throw LevelError(key, 'more than one start tile'); start = { x: rx, y: ry }; }
-        if (inst.name === 'goal')  { if (goal)  throw LevelError(key, 'more than one goal tile');  goal  = { x: rx, y: ry }; }
+        if (authoredInst.name === 'start') { if (start) throw LevelError(key, 'more than one start tile'); start = { x: rx, y: ry }; }
+        if (authoredInst.name === 'goal')  { if (goal)  throw LevelError(key, 'more than one goal tile');  goal  = { x: rx, y: ry }; }
 
-        if (inst.family === 'portal') {
-          var pk = String(inst.params.link);
+        if (authoredInst.family === 'portal') {
+          var pk = String(authoredInst.params.link);
           (portals[pk] || (portals[pk] = [])).push({ x: rx, y: ry });
         }
-        if (inst.family === 'switch' || inst.family === 'sensor' || inst.family === 'target') {
-          switches.push({ x: rx, y: ry, inst: inst, latched: false });
+        if (authoredInst.family === 'switch' || authoredInst.family === 'sensor') {
+          switches.push({ x: rx, y: ry, inst: authoredInst, latched: false });
         }
       }
     }
@@ -158,6 +184,7 @@
       height: h,
       par: typeof raw.golf_score === 'number' ? raw.golf_score : null,
       tiles: tiles,
+      runtimeTiles: runtimeTiles,
       cratesInit: crates,
       switchesInit: switches,
       portals: portals,
@@ -181,11 +208,12 @@
       key: level.key,
       width: level.width,
       height: level.height,
-      grid: level.tiles,
+      grid: level.runtimeTiles || level.tiles,
       crates: deepCopyGrid(level.cratesInit),
       locked: newGrid(level.width, level.height, false),
       switches: level.switchesInit.map(function (sw) {
-        return { x: sw.x, y: sw.y, inst: sw.inst, latched: sw.latched };
+        return { entityId: sw.entityId, x: sw.x, y: sw.y, inst: sw.inst,
+          latched: sw.latched, capabilities: mergeParams(sw.capabilities, null) };
       }),
       portals: level.portals,
       player: { x: level.start.x, y: level.start.y },
@@ -199,7 +227,8 @@
       seen: {}
     };
     rebuildLocks(s);
-    s.seen[s.grid[s.player.y][s.player.x].id] = true;
+    var initialTarget = targetAt(s, s.player.x, s.player.y);
+    s.seen[(initialTarget ? initialTarget.inst : s.grid[s.player.y][s.player.x]).id] = true;
     return s;
   };
 
@@ -228,7 +257,8 @@
       crates: deepCopyGrid(s.crates),
       locked: deepCopyGrid(s.locked),
       switches: s.switches.map(function (sw) {
-        return { x: sw.x, y: sw.y, inst: sw.inst, latched: sw.latched };
+        return { entityId: sw.entityId, x: sw.x, y: sw.y, inst: sw.inst,
+          latched: sw.latched, capabilities: mergeParams(sw.capabilities, null) };
       }),
       portals: s.portals,
       player: { x: s.player.x, y: s.player.y },
@@ -246,6 +276,8 @@
       P: s.P, W: s.W,
       strokes: s.strokes, turns: s.turns, won: s.won,
       latched: s.switches.map(function (sw) { return sw.latched; }),
+      targets: s.switches.filter(function (sw) { return sw.inst.family === 'target'; })
+        .map(function (sw) { return { entityId: sw.entityId, x: sw.x, y: sw.y }; }),
       crates: s.crates.map(function (row) {
         // Crate instances are immutable level data; retaining their reference
         // preserves ID and parameter overrides without putting terrain back.
@@ -259,6 +291,18 @@
     s.P = snap.P; s.W = snap.W;
     s.strokes = snap.strokes; s.turns = snap.turns; s.won = snap.won;
     for (var i = 0; i < s.switches.length; i++) s.switches[i].latched = snap.latched[i];
+    if (snap.targets) {
+      for (var ti = 0; ti < snap.targets.length; ti++) {
+        var target = snap.targets[ti];
+        for (var si = 0; si < s.switches.length; si++) {
+          if (s.switches[si].inst.family === 'target' &&
+              s.switches[si].entityId === target.entityId) {
+            s.switches[si].x = target.x; s.switches[si].y = target.y;
+            break;
+          }
+        }
+      }
+    }
     for (var y = 0; y < s.height; y++) {
       for (var x = 0; x < s.width; x++) {
         s.crates[y][x] = snap.crates[y][x] || null;
@@ -280,6 +324,16 @@
   function crateAt(s, x, y) { return inBounds(s, x, y) ? s.crates[y][x] : null; }
   RULES.crateAt = crateAt;
 
+  function targetAt(s, x, y) {
+    if (!inBounds(s, x, y)) return null;
+    for (var i = 0; i < s.switches.length; i++) {
+      var sw = s.switches[i];
+      if (sw.inst.family === 'target' && sw.x === x && sw.y === y) return sw;
+    }
+    return null;
+  }
+  RULES.targetAt = targetAt;
+
   function isLocked(s, x, y) { return inBounds(s, x, y) ? !!s.locked[y][x] : true; }
   RULES.isLocked = isLocked;
 
@@ -300,7 +354,8 @@
   /* Static line-of-sight hazards                                           */
   /* ---------------------------------------------------------------------- */
 
-  // Return the visible, non-opaque cells in one emitter's cardinal ray.
+  // Return visible cells in one emitter's cardinal ray. Terrain solidity and
+  // each movable object's ray profile independently determine opacity.
   function traceRay(s, x, y) {
     if (!inBounds(s, x, y)) return [];
     var emitter = tileAt(s, x, y);
@@ -311,9 +366,11 @@
           (dy === 0 && (dx === 1 || dx === -1)))) return [];
 
     var cells = [], cx = x + dx, cy = y + dy;
+    // Cardinal validation guarantees termination at the edge. The explicit
+    // bound also protects this pure query if malformed state is supplied.
     var remaining = s.width + s.height;
     while (remaining-- > 0 && inBounds(s, cx, cy)) {
-      if (crateAt(s, cx, cy) || isSolid(s, cx, cy)) break;
+      if (isSolid(s, cx, cy) || rayObjectBlocks(s, cx, cy)) break;
       cells.push({ x: cx, y: cy });
       cx += dx;
       cy += dy;
@@ -335,6 +392,64 @@
     return rays;
   }
   RULES.traceRays = traceRays;
+
+  function rayObjectBlocks(s, x, y) {
+    var crate = crateAt(s, x, y);
+    if (crate && objectCapabilities(crate).ray === 'block') return true;
+    var target = targetAt(s, x, y);
+    return !!target && objectCapabilities(target).ray === 'block';
+  }
+
+  function rayTransportKey(object) {
+    return object.entityId || (isTargetEntity(object)
+      ? 'target:' + object.inst.id + '@' + object.x + ',' + object.y
+      : 'crate:' + object.id);
+  }
+
+  function transportObjectsOnRay(s, ray, steps) {
+    var processed = {};
+    var entityCount = 0;
+    for (var y = 0; y < s.height; y++) {
+      for (var x = 0; x < s.width; x++) if (crateAt(s, x, y)) entityCount++;
+    }
+    for (var i = 0; i < s.switches.length; i++) {
+      if (s.switches[i].inst.family === 'target') entityCount++;
+    }
+
+    for (var attempt = 0; attempt < entityCount; attempt++) {
+      var cells = traceRay(s, ray.x, ray.y);
+      var candidate = null;
+      var distance = -1;
+      for (var ci = 0; ci < cells.length; ci++) {
+        var cell = cells[ci];
+        var occupants = [crateAt(s, cell.x, cell.y), targetAt(s, cell.x, cell.y)];
+        for (var oi = 0; oi < occupants.length; oi++) {
+          var object = occupants[oi];
+          if (!object || objectCapabilities(object).ray !== 'transport') continue;
+          var key = rayTransportKey(object);
+          if (processed[key]) continue;
+          if (ci > distance) { candidate = { object: object, x: cell.x, y: cell.y, key: key }; distance = ci; }
+        }
+      }
+      if (!candidate) break;
+
+      processed[candidate.key] = true;
+      var xPos = candidate.x, yPos = candidate.y;
+      var nextX = xPos + ray.dir.x, nextY = yPos + ray.dir.y;
+      while (isLegalObjectDestination(s, candidate.object, nextX, nextY)) {
+        moveObjectEntity(s, candidate.object, xPos, yPos, nextX, nextY, steps, 'move');
+        xPos = nextX; yPos = nextY;
+        nextX += ray.dir.x; nextY += ray.dir.y;
+      }
+    }
+  }
+
+  function transportObjectsAlongRays(s, steps) {
+    var emitters = traceRays(s);
+    for (var i = 0; i < emitters.length; i++) {
+      transportObjectsOnRay(s, emitters[i], steps);
+    }
+  }
 
   function isCaught(s, player) {
     var target = player || s.player;
@@ -548,6 +663,76 @@
   }
   RULES.partnerPortal = partnerPortal;
 
+  function isTargetEntity(object) {
+    return !!(object && object.inst && object.inst.family === 'target');
+  }
+
+  function objectCapabilities(object) {
+    return object && (object.capabilities ||
+      (object.inst && object.inst.capabilities)) || {};
+  }
+
+  function moveObjectEntity(s, object, fromX, fromY, toX, toY, steps, eventType) {
+    if (isTargetEntity(object)) {
+      object.x = toX; object.y = toY;
+      steps.push({ type: eventType === 'teleport' ? 'object-teleport' : 'target-move',
+        objectType: 'target', entityId: object.entityId,
+        id: object.inst.id, from: { x: fromX, y: fromY }, to: { x: toX, y: toY } });
+    } else {
+      s.crates[fromY][fromX] = null;
+      s.crates[toY][toX] = object;
+      steps.push(eventType === 'teleport'
+        ? { type: 'object-teleport', objectType: 'crate', entityId: object.entityId,
+            id: object.id, from: { x: fromX, y: fromY }, to: { x: toX, y: toY } }
+        : { type: 'push', crate: { x: fromX, y: fromY }, to: { x: toX, y: toY } });
+    }
+  }
+
+  function runObjectForceChain(s, object, startX, startY, incoming, steps) {
+    var capabilities = objectCapabilities(object);
+    var x = startX, y = startY, d = incoming;
+    var hops = 0;
+    var cap = s.width * s.height * FORCE_CHAIN_STATES_PER_CELL;
+    var seen = {};
+
+    while (hops < cap) {
+      var inst = tileAt(s, x, y);
+      if (!inst) break;
+
+      if (inst.family === 'portal' && capabilities.portal) {
+        var partner = partnerPortal(s, x, y, inst.params.link);
+        if (!partner || !isLegalObjectDestination(s, object, partner.x, partner.y)) break;
+        moveObjectEntity(s, object, x, y, partner.x, partner.y, steps, 'teleport');
+        break; // teleport ends this entity's chain; the destination is not re-entered
+      }
+
+      if (inst.family === 'flow' && capabilities.conveyor) {
+        d = inst.params.dir || { x: 1, y: 0 };
+      } else if (inst.name !== 'ice' || !capabilities.conveyor || !d) {
+        break;
+      }
+
+      var stateKey = (object.entityId || object.id) + ':' + x + ',' + y + ',' + d.x + ',' + d.y;
+      if (seen[stateKey]) {
+        steps.push({ type: 'force-loop', entityId: object.entityId, x: x, y: y,
+          dir: { x: d.x, y: d.y } });
+        break;
+      }
+      seen[stateKey] = true;
+
+      var tx = x + d.x, ty = y + d.y;
+      if (!isLegalObjectDestination(s, object, tx, ty)) break;
+      moveObjectEntity(s, object, x, y, tx, ty, steps, 'move');
+      x = tx; y = ty;
+      hops++;
+    }
+
+    if (hops >= cap) {
+      steps.push({ type: 'object-force-cap', entityId: object.entityId,
+        cap: cap, x: x, y: y });
+    }
+  }
+
   /* ---------------------------------------------------------------------- */
   /* Player force chains (conveyors and ice)                               */
   /*                                                                        */
@@ -580,15 +765,15 @@
       if (!inBounds(s, tx, ty) || isSolid(s, tx, ty)) break;
 
       var c = crateAt(s, tx, ty);
-      if (c) {
-        if (inst.family !== 'flow' || (inst.params.kind || 'player') !== 'crate') break;
+      var feature = targetAt(s, tx, ty);
+      var object = c || feature;
+      if (object) {
+        if (inst.family !== 'flow' || (inst.params.kind || 'player') !== 'crate' ||
+            !objectCapabilities(object).conveyor) break;
         var bx = tx + d.x, by = ty + d.y;
-        if (!inBounds(s, bx, by)) break;
-        if (crateAt(s, bx, by)) break;
-        if (isSolid(s, bx, by)) break;
-        s.crates[ty][tx] = null;
-        s.crates[by][bx] = c;
-        steps.push({ type: 'push', crate: { x: tx, y: ty }, to: { x: bx, y: by } });
+        if (!isLegalObjectDestination(s, object, bx, by)) break;
+        moveObjectEntity(s, object, tx, ty, bx, by, steps, 'move');
+        runObjectForceChain(s, object, bx, by, d, steps);
       } else {
         var target = tileAt(s, tx, ty);
         if (target.family === 'gate') {
@@ -629,6 +814,11 @@
       for (i = 0; i < DIRS.length; i++) if (DIRS[i].name === action.dir) d = DIRS[i];
       if (!d) throw LevelError(s.key, 'resolveTurn: unknown direction "' + action.dir + '"');
       moveOne(s, d, steps, engine);
+    } else if (action.type === 'pull') {
+      var pullDir = null, pi;
+      for (pi = 0; pi < DIRS.length; pi++) if (DIRS[pi].name === action.dir) pullDir = DIRS[pi];
+      if (!pullDir) throw LevelError(s.key, 'resolveTurn: unknown pull direction "' + action.dir + '"');
+      pullOne(s, pullDir, steps, engine);
     } else if (action.type === 'act') {
       var here = tileAt(s, s.player.x, s.player.y);
       steps.push({ type: 'press', x: s.player.x, y: s.player.y });
@@ -639,13 +829,20 @@
       throw LevelError(s.key, 'resolveTurn: unknown action "' + action.type + '"');
     }
 
-    // Resolve line-of-sight only after movement, forced effects, entry effects,
-    // and the first derived-lock rebuild have settled.
+    // Selected turn order: settle the direct action, forced movement, and
+    // entry effects; derive locks; transport ray-compatible objects in stable
+    // emitter order; derive locks and final rays again; then catch/respawn
+    // before the final goal test below.
     rebuildLocks(s);
     var actionChanged = before !== snapshotSig(s);
-    var resolvedAction = action.type === 'act' ||
-      (action.type === 'move' && actionChanged);
-    var rayRecords = resolvedAction ? traceRays(s) : [];
+    var movementAction = action.type === 'move' || action.type === 'pull';
+    var resolvedAction = action.type === 'act' || (movementAction && actionChanged);
+    var rayRecords = [];
+    if (resolvedAction) {
+      transportObjectsAlongRays(s, steps);
+      rebuildLocks(s);
+      rayRecords = traceRays(s);
+    }
     for (var ri = 0; ri < rayRecords.length; ri++) {
       steps.push({ type: 'ray', emitter: { x: rayRecords[ri].x, y: rayRecords[ri].y },
         dir: rayRecords[ri].dir, cells: rayRecords[ri].cells });
@@ -654,6 +851,10 @@
     if (caught) {
       var caughtAt = { x: s.player.x, y: s.player.y };
       var respawnAt = { x: s.start.x, y: s.start.y };
+
+      // Goal entry effects run synchronously as part of movement. If the same
+      // settled position is exposed to a ray, retract that provisional win so
+      // the catch takes precedence over the final goal test below.
       s.won = wasWon;
       for (var si = steps.length - 1; si >= 0; si--) {
         if (steps[si].type === 'goal') steps.splice(si, 1);
@@ -667,10 +868,12 @@
 
     s.turns++;
     var inst = tileAt(s, s.player.x, s.player.y);
+    var seenTarget = targetAt(s, s.player.x, s.player.y);
+    if (seenTarget) inst = seenTarget.inst;
     if (inst) s.seen[inst.id] = true;
 
-    var moved = actionChanged || caught;
-    var stroke = (action.type === 'move' && (actionChanged || caught)) || action.type === 'act';
+    var moved = before !== snapshotSig(s) || caught;
+    var stroke = (movementAction && (actionChanged || caught)) || action.type === 'act';
     if (stroke) s.strokes++;
 
     // Goal is re-tested every turn; it is cheap and it means a colour change
@@ -691,21 +894,40 @@
       return;
     }
 
-    var target = s.grid[ty][tx];
+    var target = tileAt(s, tx, ty);
     var c = crateAt(s, tx, ty);
+    var feature = targetAt(s, tx, ty);
+    var forcedObject = null, forcedObjectX = -1, forcedObjectY = -1;
 
     if (c) {
       var bx = tx + d.x, by = ty + d.y;
-      if (!inBounds(s, bx, by) || crateAt(s, bx, by) || isSolid(s, bx, by)) {
+      if (!c.capabilities.pushable || !isLegalObjectDestination(s, c, bx, by)) {
         steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'crate' });
         return;
       }
       s.crates[ty][tx] = null;
       s.crates[by][bx] = c;
       steps.push({ type: 'push', crate: { x: tx, y: ty }, to: { x: bx, y: by } });
+      forcedObject = c; forcedObjectX = bx; forcedObjectY = by;
       var from = { x: s.player.x, y: s.player.y };
       s.player.x = tx; s.player.y = ty;
       steps.push({ type: 'move', from: from, to: { x: tx, y: ty } });
+    } else if (feature) {
+      var targetX = tx + d.x, targetY = ty + d.y;
+      var targetCapabilities = feature.capabilities || feature.inst.capabilities || {};
+      if (!targetCapabilities.pushable || !isLegalObjectDestination(s, feature, targetX, targetY)) {
+        steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'target' });
+        return;
+      }
+      var targetFrom = { x: feature.x, y: feature.y };
+      feature.x = targetX; feature.y = targetY;
+      steps.push({ type: 'target-move', objectType: 'target',
+        entityId: feature.entityId, id: feature.inst.id,
+        from: targetFrom, to: { x: targetX, y: targetY } });
+      forcedObject = feature; forcedObjectX = targetX; forcedObjectY = targetY;
+      var targetStepFrom = { x: s.player.x, y: s.player.y };
+      s.player.x = tx; s.player.y = ty;
+      steps.push({ type: 'move', from: targetStepFrom, to: { x: tx, y: ty } });
     } else if (isSolid(s, tx, ty)) {
       steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'wall' });
       return;
@@ -718,14 +940,69 @@
       }
     }
 
-    if (c) { /* already moved above */ }
-    else {
+    if (!c && !feature) {
       var f2 = { x: s.player.x, y: s.player.y };
       s.player.x = tx; s.player.y = ty;
       steps.push({ type: 'move', from: f2, to: { x: tx, y: ty } });
     }
 
+    finishPlayerMove(s, d, steps, engine, forcedObject, forcedObjectX, forcedObjectY);
+  }
+
+  function pullOne(s, d, steps, engine) {
+    var tx = s.player.x + d.x, ty = s.player.y + d.y;
+    if (!canEnter(s, tx, ty)) {
+      steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'pull' });
+      return;
+    }
+
+    var bx = s.player.x - d.x, by = s.player.y - d.y;
+    var object = crateAt(s, bx, by) || targetAt(s, bx, by);
+    if (!object || !(object.capabilities || object.inst.capabilities).pullable ||
+        !isLegalObjectDestination(s, object, s.player.x, s.player.y, true)) {
+      steps.push({ type: 'blocked', x: bx, y: by, dir: d.name, reason: 'pull' });
+      return;
+    }
+
+    var fromObject = { x: bx, y: by };
+    var forcedObjectX = s.player.x, forcedObjectY = s.player.y;
+    if (object.inst && object.inst.family === 'target') {
+      object.x = s.player.x; object.y = s.player.y;
+      steps.push({ type: 'target-move', objectType: 'target',
+        entityId: object.entityId, id: object.inst.id,
+        from: fromObject, to: { x: s.player.x, y: s.player.y } });
+    } else {
+      s.crates[by][bx] = null;
+      s.crates[s.player.y][s.player.x] = object;
+      steps.push({ type: 'pull', crate: fromObject,
+        to: { x: s.player.x, y: s.player.y } });
+    }
+
+    var fromPlayer = { x: s.player.x, y: s.player.y };
+    s.player.x = tx; s.player.y = ty;
+    steps.push({ type: 'move', from: fromPlayer, to: { x: tx, y: ty } });
+    finishPlayerMove(s, d, steps, engine, object, forcedObjectX, forcedObjectY);
+  }
+
+  function isLegalObjectDestination(s, object, x, y, allowCurrentPlayerCell) {
+    if (!inBounds(s, x, y) || isSolid(s, x, y) || crateAt(s, x, y)) return false;
+    if (!isTargetEntity(object) && !allowCurrentPlayerCell &&
+        s.player.x === x && s.player.y === y) return false;
+    var feature = targetAt(s, x, y);
+    if (feature && feature !== object && object.inst && object.inst.family === 'target') return false;
+    var terrain = tileAt(s, x, y);
+    if (terrain && terrain.family === 'gate') {
+      var carrier = terrain.params.carrier === 'W' ? s.W : s.P;
+      if (carrier !== terrain.params.colour) return false;
+    }
+    return true;
+  }
+
+  function finishPlayerMove(s, d, steps, engine, forcedObject, forcedObjectX, forcedObjectY) {
     // Forced movement, then the single on_enter pass of the FINAL resting tile.
+    if (forcedObject) {
+      runObjectForceChain(s, forcedObject, forcedObjectX, forcedObjectY, d, steps);
+    }
     runPlayerForceChain(s, d, steps);
 
     var rest = tileAt(s, s.player.x, s.player.y);
@@ -746,16 +1023,29 @@
   /** Cheap identity of the mutable parts of the state. */
   function snapshotSig(s) {
     var sig = s.player.x + ',' + s.player.y + '|' + s.P + '|' + s.W;
-    for (var i = 0; i < s.switches.length; i++) sig += '|' + (s.switches[i].latched ? 1 : 0);
+    for (var i = 0; i < s.switches.length; i++) {
+      var sw = s.switches[i];
+      sig += '|' + (sw.latched ? 1 : 0);
+      if (sw.inst.family === 'target') sig += '@' + sw.entityId + ':' + sw.x + ',' + sw.y +
+        ':' + capabilitySignature(sw.capabilities || sw.inst.capabilities);
+    }
     for (var y = 0; y < s.height; y++) {
       for (var x = 0; x < s.width; x++) {
         var crate = s.crates[y][x];
-        sig += crate ? '[' + crate.id + ':' + (crate.params.colour || '') + ']' : '[]';
+        sig += crate ? '[' + crate.entityId + ':' + crate.id + ':' +
+          (crate.params.colour || '') + ':' + capabilitySignature(crate.capabilities) + ']' : '[]';
       }
     }
     return sig;
   }
   RULES.snapshotSig = snapshotSig;
+
+  function capabilitySignature(capabilities) {
+    if (!capabilities) return '';
+    return ['pushable', 'pullable', 'conveyor', 'portal', 'ray'].map(function (key) {
+      return key + '=' + String(capabilities[key]);
+    }).join(',');
+  }
 
   /* ---------------------------------------------------------------------- */
   /* Read-only views for the renderer / UI                                  */
@@ -764,9 +1054,13 @@
   RULES.describeTile = function (s, x, y) {
     var inst = tileAt(s, x, y);
     if (!inst) return null;
+    var target = targetAt(s, x, y);
+    if (target) inst = target.inst;
     var sw = findSwitch(s, inst, x, y);
     var view = {
       inst: inst,
+      terrain: tileAt(s, x, y),
+      target: target,
       crate: crateAt(s, x, y),
       locked: isLocked(s, x, y),
       solid: isSolid(s, x, y),
