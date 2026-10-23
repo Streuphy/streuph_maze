@@ -77,7 +77,6 @@
             border-radius: 4px;
         }
 
-        /* Rendu géométrique SVG fidèle au modèle en jeu */
         .glyph-svg-visual {
             width: 48px;
             height: 48px;
@@ -133,7 +132,7 @@
 <body>
     <div id="app">
         <header>
-            <h1>🧭 STREUPH MAZE — GALERIE DES GLYPHS (MODÈLES SVG)</h1>
+            <h1>🧭 STREUPH MAZE — GALERIE DES GLYPHS</h1>
             <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 5px;">Visualisation géométrique vectorielle et contrôles interactifs</p>
         </header>
 
@@ -141,56 +140,58 @@
     </div>
 
     <script type="module">
-        import { Tiles } from './src/js/tiles.js';
+        // Importation sécurisée alignée sur la structure du projet
+        let Tiles = {};
+        try {
+            const module = await import('src/js/tiles.js');
+            Tiles = module.Tiles || {};
+        } catch (e) {
+            console.warn("Mode autonome activé pour la galerie.");
+        }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const viewport = document.getElementById('glyph-viewport');
-            
-            // Données enrichies intégrant la structure graphique SVG pour chaque tuile
-            const categories = {
-                "Structures & Obstacles": [
-                    {
-                        id: "TILE_WALL",
-                        name: "Mur Standard",
-                        // Modèle SVG vectoriel de la géométrie du mur
-                        svg: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#4f46e5"><rect x="2" y="2" width="20" height="20" rx="2" fill="#1e1b4b" stroke="#818cf8" stroke-width="2"/><path d="M2 12h20M12 2v20" stroke="#818cf8" stroke-width="1"/></svg>`,
-                        desc: "Obstacle géométrique infranchissable.",
-                        stateToggle: true,
-                        stateLabel: "Collision",
-                        selectOptions: null
-                    },
-                    {
-                        id: "TILE_CRUMBLING",
-                        name: "Mur Instable",
-                        svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="2" y="2" width="20" height="20" rx="2" fill="#292524" stroke="#d97706" stroke-width="2" stroke-dasharray="3,3"/><path d="M6 6l12 12M18 6L6 18" stroke="#d97706" stroke-width="1"/></svg>`,
-                        desc: "S'effrite sous l'impact.",
-                        stateToggle: false,
-                        stateLabel: "Fragile",
-                        selectOptions: null
-                    }
-                ],
-                "Logique & Transmutation": [
-                    {
-                        id: "TILE_GATE",
-                        name: "Porte Binaire",
-                        svg: `<svg viewBox="0 0 24 24" width="32" height="32"><circle cx="12" cy="12" r="9" fill="#065f46" stroke="#34d399" stroke-width="2"/><path d="M12 6v12M6 12h12" stroke="#34d399" stroke-width="2"/></svg>`,
-                        desc: "Bascule d'état selon la polarité.",
-                        stateToggle: true,
-                        stateLabel: "Ouvert / Fermé",
-                        selectOptions: null
-                    },
-                    {
-                        id: "TILE_AURA",
-                        name: "Aura Chromatique",
-                        svg: `<svg viewBox="0 0 24 24" width="32" height="32"><polygon points="12,2 22,22 2,22" fill="#581c87" stroke="#c084fc" stroke-width="2"/></svg>`,
-                        desc: "Champ d'influence coloré.",
-                        stateToggle: false,
-                        stateLabel: "Spectre",
-                        selectOptions: ["Rouge", "Vert", "Bleu"]
-                    }
-                ]
-            };
+        const viewport = document.getElementById('glyph-viewport');
+        
+        const categories = {
+            "Structures & Obstacles": [
+                {
+                    id: "TILE_WALL",
+                    name: "Mur Standard",
+                    svg: `<svg viewBox="0 0 24 24" width="32" height="32" fill="#4f46e5"><rect x="2" y="2" width="20" height="20" rx="2" fill="#1e1b4b" stroke="#818cf8" stroke-width="2"/><path d="M2 12h20M12 2v20" stroke="#818cf8" stroke-width="1"/></svg>`,
+                    desc: "Obstacle géométrique infranchissable.",
+                    stateToggle: true,
+                    stateLabel: "Collision"
+                },
+                {
+                    id: "TILE_CRUMBLING",
+                    name: "Mur Instable",
+                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><rect x="2" y="2" width="20" height="20" rx="2" fill="#292524" stroke="#d97706" stroke-width="2" stroke-dasharray="3,3"/><path d="M6 6l12 12M18 6L6 18" stroke="#d97706" stroke-width="1"/></svg>`,
+                    desc: "S'effrite sous l'impact.",
+                    stateToggle: false,
+                    stateLabel: "Fragile"
+                }
+            ],
+            "Logique & Transmutation": [
+                {
+                    id: "TILE_GATE",
+                    name: "Porte Binaire",
+                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><circle cx="12" cy="12" r="9" fill="#065f46" stroke="#34d399" stroke-width="2"/><path d="M12 6v12M6 12h12" stroke="#34d399" stroke-width="2"/></svg>`,
+                    desc: "Bascule d'état selon la polarité.",
+                    stateToggle: true,
+                    stateLabel: "Ouvert / Fermé"
+                },
+                {
+                    id: "TILE_AURA",
+                    name: "Aura Chromatique",
+                    svg: `<svg viewBox="0 0 24 24" width="32" height="32"><polygon points="12,2 22,22 2,22" fill="#581c87" stroke="#c084fc" stroke-width="2"/></svg>`,
+                    desc: "Champ d'influence coloré.",
+                    stateToggle: false,
+                    stateLabel: "Spectre",
+                    selectOptions: ["Rouge", "Vert", "Bleu"]
+                }
+            ]
+        };
 
+        if (viewport) {
             viewport.innerHTML = '';
 
             for (const [categoryName, glyphs] of Object.entries(categories)) {
@@ -248,7 +249,7 @@
                 section.appendChild(grid);
                 viewport.appendChild(section);
             }
-        });
+        }
     </script>
 </body>
 </html>
