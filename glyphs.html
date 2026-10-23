@@ -3,162 +3,267 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streuph Maze - Registre Complet des Glyphs (1-256)</title>
+    <title>Streuph Maze - Rendu 1x1 & Attributs des Glyphs (1-256)</title>
     <link rel="stylesheet" href="src/css/sm.css">
     <style>
         :root {
-            --bg-color: #0f111a;
-            --card-bg: #1a1e29;
-            --border-color: #2f364d;
-            --accent-color: #4f46e5;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
+            --bg-color: #0b0f19;
+            --card-bg: #131b2e;
+            --border-color: #1e293b;
+            --accent-color: #6366f1;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
         }
+
         body {
             background-color: var(--bg-color);
             color: var(--text-main);
             font-family: 'Courier New', Courier, monospace;
             margin: 0;
-            padding: 15px;
+            padding: 20px;
         }
+
         header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
             border-bottom: 2px dashed var(--border-color);
-            padding-bottom: 10px;
+            padding-bottom: 15px;
         }
-        .grid {
+
+        .inspector-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
         }
-        .tile-card {
+
+        .glyph-inspector-card {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 10px;
+            border-radius: 8px;
+            padding: 15px;
             display: flex;
-            align-items: center;
-            gap: 12px;
+            gap: 15px;
+            align-items: flex-start;
         }
-        .tile-card.unimplemented {
-            opacity: 0.3;
-            background: #111318;
-            border-style: dashed;
-        }
-        .engine-view {
-            width: 48px;
-            height: 48px;
-            background: #000;
-            border: 1px solid #374151;
+
+        /* Conteneur 1x1 Field inspiré du rendu de plateau index.html */
+        .field-1x1 {
+            width: 56px;
+            height: 56px;
+            background: #020617;
+            border: 2px solid #334155;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            position: relative;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
         }
-        .tile-info {
-            font-size: 0.75rem;
+
+        .glyph-details {
+            flex-grow: 1;
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 6px;
+            font-size: 0.8rem;
             overflow: hidden;
+        }
+
+        .glyph-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 4px;
+        }
+
+        .glyph-name {
+            font-weight: bold;
+            color: #fff;
+            font-size: 0.95rem;
+        }
+
+        .glyph-id-badge {
+            background: #1e293b;
+            color: #38bdf8;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .glyph-category {
+            color: #a78bfa;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .attributes-list {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 4px;
+            padding: 6px;
+            max-height: 90px;
+            overflow-y: auto;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .attr-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 1px 0;
+            border-bottom: 1px dashed rgba(255,255,255,0.05);
+        }
+
+        .attr-key { color: #94a3b8; }
+        .attr-val { color: #f1f5f9; font-weight: bold; }
+
+        #status-bar {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            font-size: 0.85rem;
         }
     </style>
 </head>
 <body>
     <div id="app">
         <header>
-            <h2>🧭 STREUPH MAZE — REGISTRE DES TILES (1 - 256)</h2>
-            <p style="color: var(--text-muted); font-size: 0.75rem;">Introspection par primitive d'ID native du moteur</p>
+            <h1>🧭 STREUPH MAZE — REGISTRE DES GLYPHS (1-256)</h1>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 5px;">Rendu 1x1 inspiré du moteur principal et introspection des attributs</p>
         </header>
 
-        <main id="viewport">
-            <p style="text-align: center; color: var(--text-muted);">Chargement du registre en cours...</p>
-        </main>
+        <div id="status-bar">Chargement des modules du moteur...</div>
+        <main id="inspector-viewport" class="inspector-grid"></main>
     </div>
 
     <script type="module">
-        import * as TilesMod from './src/js/tiles.js';
-        import * as GlyphsMod from './src/js/sm-glyphs.js';
+        import * as TilesModule from './src/js/tiles.js';
+        import * as GlyphsModule from './src/js/sm-glyphs.js';
+        import * as RenderModule from './src/js/sm-render.js';
 
-        const viewport = document.getElementById('viewport');
+        const viewport = document.getElementById('inspector-viewport');
+        const statusBar = document.getElementById('status-bar');
 
-        async function renderRegistry() {
-            viewport.innerHTML = '';
-            const grid = document.createElement('div');
-            grid.className = 'grid';
+        async function initInspector() {
+            let registry = new Map();
 
-            // Consolidation des sources du moteur
-            const tilesData = TilesMod.Tiles || TilesMod.default || TilesMod;
-            const glyphsData = GlyphsMod.Glyphs || GlyphsMod.default || GlyphsMod;
+            // Harvester pour récupérer toutes les tuiles définies de 1 à 256
+            function harvest(mod) {
+                if (!mod) return;
+                const candidateContainers = [
+                    mod.Tiles, mod.Glyphs, mod.tiles, mod.glyphs, 
+                    mod.TILE_TYPES, mod.GLYPH_TYPES, mod.default, mod
+                ];
 
-            // Fonction robuste pour récupérer une tuile par son ID (1 à 256)
-            function getTileById(id) {
-                try {
-                    // 1. Accès direct si tableau ou dictionnaire indicé
-                    if (tilesData && tilesData[id]) return tilesData[id];
-                    if (glyphsData && glyphsData[id]) return glyphsData[id];
-
-                    // 2. Appel de méthode getter si disponible
-                    if (tilesData && typeof tilesData.get === 'function') {
-                        const res = tilesData.get(id);
-                        if (res) return res;
+                candidateContainers.forEach(container => {
+                    if (!container) return;
+                    if (Array.isArray(container)) {
+                        container.forEach((item, idx) => {
+                            if (item && typeof item === 'object') {
+                                const id = item.id !== undefined ? item.id : idx;
+                                if (id >= 1 && id <= 256) registry.set(Number(id), item);
+                            }
+                        });
+                    } else if (typeof container === 'object') {
+                        Object.entries(container).forEach(([key, val], idx) => {
+                            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                const id = val.id !== undefined ? val.id : idx;
+                                if (id >= 1 && id <= 256) registry.set(Number(id), val);
+                            }
+                        });
                     }
-
-                    // 3. Recherche par correspondance de propriété .id ou .index
-                    const allValues = [
-                        ...(Array.isArray(tilesData) ? tilesData : Object.values(tilesData || {})),
-                        ...(Array.isArray(glyphsData) ? glyphsData : Object.values(glyphsData || {}))
-                    ];
-
-                    const found = allValues.find(item => item && (item.id === id || item.index === id));
-                    if (found) return found;
-
-                    return null;
-                } catch (e) {
-                    return null;
-                }
+                });
             }
 
-            let activeCount = 0;
+            harvest(TilesModule);
+            harvest(GlyphsModule);
+            harvest(RenderModule);
 
-            // Boucle séquentielle stricte de 1 à 256
+            statusBar.textContent = `Analyse réussie : ${registry.size} glyphe(s) actif(s) détecté(s) dans le registre (1-256).`;
+            viewport.innerHTML = '';
+
+            let renderedCount = 0;
+
+            // Boucle séquentielle stricte de ID 1 à 256 (affichage uniquement des implémentés)
             for (let id = 1; id <= 256; id++) {
+                const tileData = registry.get(id);
+                if (!tileData) continue; // Ignore les IDs non implémentés
+
+                renderedCount++;
                 const card = document.createElement('div');
-                const tile = getTileById(id);
+                card.className = 'glyph-inspector-card';
 
-                if (tile) {
-                    activeCount++;
-                    card.className = 'tile-card';
-                    const name = tile.name || tile.label || `Tile_${id}`;
-                    const visual = tile.svg || (tile.char ? `<span style="font-size:1.4rem; color:#fff;">${tile.char}</span>` : `<span style="color:#34d399">#${id}</span>`);
-                    const desc = tile.description || tile.desc || 'Actif dans le moteur';
+                // Boîte de rendu 1x1 Field
+                const fieldBox = document.createElement('div');
+                fieldBox.className = 'field-1x1';
 
-                    card.innerHTML = `
-                        <div class="engine-view">${visual}</div>
-                        <div class="tile-info">
-                            <span style="background:#111827; padding:1px 4px; color:#9ca3af; width:fit-content;">ID: ${id}</span>
-                            <strong style="color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</strong>
-                            <span style="color:var(--text-muted); font-size:0.65rem;">${desc}</span>
-                        </div>
-                    `;
-                } else {
-                    card.className = 'tile-card unimplemented';
-                    card.innerHTML = `
-                        <div class="engine-view"><span style="color:#6b7280; font-size:0.6rem;">N/A</span></div>
-                        <div class="tile-info">
-                            <span style="color:#6b7280;">ID: ${id}</span>
-                            <span style="color:#6b7280; font-style:italic;">Non implémenté</span>
-                        </div>
-                    `;
+                // Tentative d'utilisation du renderer officiel du moteur si disponible
+                let renderedVisual = null;
+                if (RenderModule && typeof RenderModule.renderTile === 'function') {
+                    try {
+                        renderedVisual = RenderModule.renderTile(id, tileData);
+                    } catch (e) {}
                 }
-                grid.appendChild(card);
+
+                if (renderedVisual instanceof Element) {
+                    fieldBox.appendChild(renderedVisual);
+                } else if (tileData.svg && typeof tileData.svg === 'string') {
+                    fieldBox.innerHTML = tileData.svg;
+                } else if (tileData.char || tileData.symbol) {
+                    fieldBox.innerHTML = `<span style="font-size:1.8rem; color:#fff;">${tileData.char || tileData.symbol}</span>`;
+                } else {
+                    fieldBox.innerHTML = `<span style="font-size:0.8rem; color:#38bdf8;">#${id}</span>`;
+                }
+
+                // Nom et Catégorie
+                const name = tileData.name || tileData.label || tileData.title || `Glyph_${id}`;
+                const category = tileData.category || tileData.type || tileData.group || 'Général';
+
+                // Attributs connus (filtrage des fonctions et objets lourds)
+                const skipKeys = ['svg', 'render', 'draw', 'callback', 'handler'];
+                const attributesHtml = Object.entries(tileData)
+                    .filter(([k, v]) => !skipKeys.includes(k) && v !== null && typeof v !== 'function')
+                    .map(([k, v]) => `
+                        <div class="attr-item">
+                            <span class="attr-key">${k}:</span>
+                            <span class="attr-val">${typeof v === 'object' ? JSON.stringify(v) : v}</span>
+                        </div>
+                    `).join('');
+
+                card.innerHTML = `
+                    <div class="field-preview-placeholder"></div>
+                    <div class="glyph-details">
+                        <div class="glyph-title-row">
+                            <span class="glyph-name">${name}</span>
+                            <span class="glyph-id-badge">ID: ${id}</span>
+                        </div>
+                        <div class="glyph-category">Catégorie : ${category}</div>
+                        <div class="attributes-list">
+                            ${attributesHtml || '<div style="color:var(--text-muted); font-style:italic;">Aucun attribut additionnel</div>'}
+                        </div>
+                    </div>
+                `;
+
+                card.querySelector('.field-preview-placeholder').replaceWith(fieldBox);
+                viewport.appendChild(card);
             }
 
-            viewport.appendChild(grid);
+            if (renderedCount === 0) {
+                viewport.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; color: #ef4444; padding: 30px;">
+                        <p>⚠️ Aucun glyphe n'a pu être extrait des modules source.</p>
+                        <p style="font-size: 0.8rem; color: var(--text-muted);">Vérifiez les exportations dans <code>src/js/tiles.js</code> et <code>src/js/sm-glyphs.js</code>.</p>
+                    </div>`;
+            }
         }
 
-        renderRegistry();
+        initInspector().catch(err => {
+            statusBar.textContent = "Erreur critique : " + err.message;
+            statusBar.style.color = "#ef4444";
+        });
     </script>
 </body>
 </html>
