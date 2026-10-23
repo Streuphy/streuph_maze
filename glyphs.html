@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streuph Maze - Rendu Moteur (IDs 1-100)</title>
+    <title>Streuph Maze - Debugger & Registre (IDs 1-100)</title>
     <link rel="stylesheet" href="src/css/sm.css">
     <style>
         :root {
@@ -20,15 +20,34 @@
             color: var(--text-main);
             font-family: 'Courier New', Courier, monospace;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
         }
 
         header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             border-bottom: 2px dashed var(--border-color);
-            padding-bottom: 15px;
+            padding-bottom: 10px;
         }
+
+        /* Console de debug visuelle intégrée pour iOS */
+        #debug-console {
+            background: #030712;
+            border: 1px solid #ef4444;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 20px;
+            font-size: 0.7rem;
+            max-height: 180px;
+            overflow-y: auto;
+            color: #f87171;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+        }
+
+        .log-entry { margin-bottom: 3px; border-bottom: 1px solid #1f2937; padding-bottom: 2px; }
+        .log-ok { color: #34d399; }
+        .log-info { color: #60a5fa; }
+        .log-error { color: #f87171; font-weight: bold; }
 
         .grid {
             display: grid;
@@ -47,12 +66,12 @@
         }
 
         .tile-card.unimplemented {
-            opacity: 0.4;
+            opacity: 0.3;
             background: #111318;
             border-style: dashed;
         }
 
-        .engine-tile-view {
+        .engine-view {
             width: 48px;
             height: 48px;
             background: #000;
@@ -61,134 +80,153 @@
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            position: relative;
         }
 
         .tile-info {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 3px;
             overflow: hidden;
-        }
-
-        .tile-id {
-            font-size: 0.75rem;
-            background: #111827;
-            padding: 1px 5px;
-            border-radius: 3px;
-            color: var(--text-muted);
-            width: fit-content;
         }
     </style>
 </head>
 <body>
     <div id="app">
         <header>
-            <h1>🧭 STREUPH MAZE — MOTEUR DE RENDU (IDS 1 - 100)</h1>
-            <p style="color: var(--text-muted); font-size: 0.8rem;">Inspection séquentielle avec gestion des exceptions par ID</p>
+            <h2>🐛 CONSOLE DE DEBUG EMBARQUÉE (iOS)</h2>
+            <p style="color: var(--text-muted); font-size: 0.75rem;">Analyse des modules et rendu séquentiel (1 - 100)</p>
         </header>
 
-        <main id="viewport">
-            <p style="text-align: center; color: var(--text-muted);">Initialisation du pipeline de rendu...</p>
-        </main>
+        <!-- Fenêtre de log visible directement sur l'écran du mobile -->
+        <div id="debug-console">
+            <div class="log-entry log-info">[INIT] Démarrage du script d'introspection...</div>
+        </div>
+
+        <main id="viewport"></main>
     </div>
 
     <script type="module">
-        import * as TilesMod from './src/js/tiles.js';
-        import * as GlyphsMod from './src/js/sm-glyphs.js';
-
+        const consoleEl = document.getElementById('debug-console');
         const viewport = document.getElementById('viewport');
 
-        async function renderEnginePipeline() {
-            viewport.innerHTML = '';
-            const grid = document.createElement('div');
-            grid.className = 'grid';
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log-entry log-${type}`;
+            div.textContent = `> ${msg}`;
+            consoleEl.appendChild(div);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
 
-            // Résolution des exports potentiels
-            const tilesSource = TilesMod.Tiles || TilesMod.default || TilesMod;
-            const glyphsSource = GlyphsMod.Glyphs || GlyphsMod.default || GlyphsMod;
+        async function initDebugPipeline() {
+            let TilesMod = null;
+            let GlyphsMod = null;
 
-            // Fonction utilitaire pour récupérer une tuile par ID de manière sécurisée
-            function resolveTileData(id) {
-                try {
-                    // Stratégie 1 : Recherche directe si c'est un tableau ou un objet indexé
-                    if (tilesSource[id]) return tilesSource[id];
-                    if (glyphsSource[id]) return glyphsSource[id];
-
-                    // Stratégie 2 : Recherche par fonction getter si elle existe
-                    if (typeof tilesSource.get === 'function') {
-                        const res = tilesSource.get(id);
-                        if (res) return res;
-                    }
-                    if (typeof glyphsSource.get === 'function') {
-                        const res = glyphsSource.get(id);
-                        if (res) return res;
-                    }
-
-                    // Stratégie 3 : Recherche par propriété .id dans les objets exportés
-                    const allEntries = [...Object.values(tilesSource), ...Object.values(glyphsSource)];
-                    const found = allEntries.find(item => item && (item.id === id || item.index === id));
-                    if (found) return found;
-
-                    throw new Error(`ID ${id} non implémenté dans les modules`);
-                } catch (e) {
-                    throw e; // Propager pour capture
-                }
+            // 1. Test du module tiles.js
+            try {
+                log("Importation de './src/js/tiles.js'...", "info");
+                TilesMod = await import('./src/js/tiles.js');
+                log("Succès tiles.js ! Clés: " + Object.keys(TilesMod).join(', '), "ok");
+            } catch (err) {
+                log("ERREUR tiles.js : " + err.message, "error");
             }
 
-            // Boucle explicite de 1 à 100 comme demandé
+            // 2. Test du module sm-glyphs.js
+            try {
+                log("Importation de './src/js/sm-glyphs.js'...", "info");
+                GlyphsMod = await import('./src/js/sm-glyphs.js');
+                log("Succès sm-glyphs.js ! Clés: " + Object.keys(GlyphsMod).join(', '), "ok");
+            } catch (err) {
+                log("ERREUR sm-glyphs.js : " + err.message, "error");
+            }
+
+            // 3. Extraction et normalisation des données
+            let registry = new Map();
+
+            function harvest(modName, mod) {
+                if (!mod) return;
+                const containers = [mod.Tiles, mod.Glyphs, mod.tiles, mod.glyphs, mod.default, mod];
+                containers.forEach((container, idxCont) => {
+                    if (!container) return;
+                    if (Array.isArray(container)) {
+                        log(`[${modName}] Conteneur #${idxCont} est un tableau (${container.length} éléments)`, "info");
+                        container.forEach((item, idx) => {
+                            if (item && typeof item === 'object') {
+                                const id = item.id !== undefined ? item.id : idx;
+                                registry.set(id, item);
+                            }
+                        });
+                    } else if (typeof container === 'object') {
+                        const keys = Object.keys(container);
+                        log(`[${modName}] Conteneur #${idxCont} est un objet (${keys.length} clés)`, "info");
+                        Object.entries(container).forEach(([k, val], idx) => {
+                            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                const id = val.id !== undefined ? val.id : idx;
+                                registry.set(id, val);
+                                registry.set(k, val);
+                            }
+                        });
+                    }
+                });
+            }
+
+            harvest("tiles.js", TilesMod);
+            harvest("sm-glyphs.js", GlyphsMod);
+
+            log(`Registre total alimenté : ${registry.size} entrées trouvées.`, "ok");
+
+            // 4. Rendu de 1 à 100 avec logs individuels
+            const grid = document.createElement('div');
+            grid.className = 'grid';
+            let displayedCount = 0;
+
             for (let id = 1; id <= 100; id++) {
                 const card = document.createElement('div');
-                let tileData = null;
-                let isImplemented = true;
+                let tileData = registry.get(id);
 
-                try {
-                    tileData = resolveTileData(id);
-                } catch (err) {
-                    isImplemented = false;
+                // Recherche alternative par propriété .id interne si non mappé par index direct
+                if (!tileData) {
+                    for (const [k, v] of registry.entries()) {
+                        if (v && (v.id === id || v.index === id)) {
+                            tileData = v;
+                            break;
+                        }
+                    }
                 }
 
-                if (isImplemented && tileData) {
+                if (tileData) {
+                    displayedCount++;
                     card.className = 'tile-card';
-                    
-                    let visualHTML = `<span style="font-size:0.9rem; color:#34d399;">#${id}</span>`;
-                    if (tileData.svg && typeof tileData.svg === 'string') {
-                        visualHTML = tileData.svg;
-                    } else if (tileData.char || tileData.symbol) {
-                        visualHTML = `<span style="font-size:1.4rem; color:#fff;">${tileData.char || tileData.symbol}</span>`;
-                    }
-
                     const name = tileData.name || tileData.label || `Tile_${id}`;
-                    const desc = tileData.description || tileData.desc || 'Propriété active du moteur';
+                    const visual = tileData.svg || `<span style="color:#34d399">#${id}</span>`;
+                    const desc = tileData.description || tileData.desc || 'Actif';
 
                     card.innerHTML = `
-                        <div class="engine-tile-view">${visualHTML}</div>
+                        <div class="engine-view">${visual}</div>
                         <div class="tile-info">
-                            <span class="tile-id">ID: ${id}</span>
-                            <span style="font-weight:bold; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
-                            <span style="color:var(--text-muted); font-size:0.7rem;">${desc}</span>
+                            <span style="background:#111827; padding:1px 4px; color:#9ca3af; width:fit-content;">ID: ${id}</span>
+                            <strong style="color:#fff; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${name}</strong>
+                            <span style="color:var(--text-muted); font-size:0.65rem;">${desc}</span>
                         </div>
                     `;
                 } else {
-                    // ID non implémenté ou capturé par exception
                     card.className = 'tile-card unimplemented';
                     card.innerHTML = `
-                        <div class="engine-tile-view"><span style="font-size:0.7rem; color:#6b7280;">N/A</span></div>
+                        <div class="engine-view"><span style="color:#6b7280; font-size:0.6rem;">N/A</span></div>
                         <div class="tile-info">
-                            <span class="tile-id">ID: ${id}</span>
+                            <span style="color:#6b7280;">ID: ${id}</span>
                             <span style="color:#6b7280; font-style:italic;">Non implémenté</span>
                         </div>
                     `;
                 }
-
                 grid.appendChild(card);
             }
 
             viewport.appendChild(grid);
+            log(`Rendu de 1 à 100 terminé. Tuiles actives affichées : ${displayedCount}`, "ok");
         }
 
-        renderEnginePipeline();
+        initDebugPipeline().catch(e => log("ERREUR CRITIQUE GLOBALE : " + e.message, "error"));
     </script>
 </body>
 </html>
