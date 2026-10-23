@@ -71,8 +71,9 @@
     var rx, ry, cx, cy, inst, ov;
 
     for (ry = 0; ry < h; ry++) {
-      tiles[ry] = []; crates[ry] = []; locked[ry] = [];
+      tiles[ry] = []; crates[ry] = new Array(w); locked[ry] = [];
       for (rx = 0; rx < w; rx++) {
+        crates[ry][rx] = null;
         var rowIdx = h - 1 - ry;               // <-- the one and only flip (C4)
         var id = raw.grid[rowIdx][rx];
         var def = SM.getTile(id);

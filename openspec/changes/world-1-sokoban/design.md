@@ -84,6 +84,77 @@ The blueprint's level-6 text says a conveyor alley forces backward pulls/pushes,
 
 Use solver validation plus human route review. A solver-proven level is not enough: verify each intended gate is unavoidable, target/link pairs are correct, no crate can be pushed through a closed gate, and the teaching point matches the slot. A complete deadlock detector is deferred; undo/restart remain recovery tools.
 
+### Route review: levels 1–4
+
+Coordinates below use A1 at the bottom-left. The route and gate checks were
+replayed with the shipped resolver; the headless World 1 assertions also remove
+each target link in turn and confirm that the corresponding exit route becomes
+unsolvable.
+
+- **Level 1 — First Push (5×5, par 8):** push B3→C3, then take B4–B5–C5–D5–E5,
+  enter the link-1 phase wall at E4, and finish at E3. D3 is a wall and E5 is
+  enclosed from the goal side, so E4 is the only entrance to the exit. C3 is a
+  safe target pocket: its other push destinations are walls. The crate cannot
+  be pushed onto the gate.
+- **Level 2 — Corridor Pivot (6×6, par 8):** push the first crate C3→D3, which
+  opens link 1. The second crate at C4 blocks the direct north lane; push it
+  north into the intentional C5 parking pocket, then go D4–E4–F4–F5 through the
+  gate to F6. E5 and the cells beside the goal are walls, so the gate cannot be
+  bypassed. C5 is a deliberate non-target parking cell that does not block the
+  exit. The second crate cannot be pushed sideways into the gate corridor or
+  farther north from its parking cell.
+- **Level 3 — Corner Check (8×6, par 9):** push C3→D3, then go C4–D4–E4–F4–G4,
+  enter the link-1 gate at G5, and reach H5. H4 and the cells south of the
+  target are walls, leaving no route around G5. The crate's only useful push is
+  onto its safe target; the sealed wall corners are not reachable crate lanes.
+- **Level 4 — Two-Chamber Detour (10×6, par 13):** push B4→C4 to open link 1,
+  detour via B5–C5–D5–E5, cross E4, then push G4→H4 to open link 2. Finish by
+  taking G5–H5–I5, crossing J5, and entering J4. The wall at F5 separates the
+  chambers, D4 blocks a bypass around the first gate, and I4 blocks a bypass
+  around the second. Both crates are stopped by the wall immediately beyond
+  their target cells and cannot be pushed into a gate.
+
+Levels 1–3 were reviewed specifically for required-crate deadlocks: the tutorial
+crate reaches a terminal target pocket, level 2's second crate is intentionally
+parked outside the exit lane, and level 3 has no required push into a corner.
+The loader proves start-state solvability and exact par; it does not claim to
+detect every optional dead-end push, so undo remains the recovery mechanism.
+
+### Route review: levels 5–8
+
+The same solver replay was used for the later levels. Their shortest paths make
+the target occupancy and gate order explicit, and the content test verifies
+that removing any target link makes the level unsolvable.
+
+- **Level 5 — Warehouse No. 3 (12×8, par 15):** push B2→C2 (link 1), take the
+  upper aisle to F3, then pass through gate F3 into the second chamber. Push
+  H2→I2 (link 2), take the upper aisle through gate L3, and finish at L2. The
+  wall at G4 separates the upper aisles, so neither gate can be bypassed. Both
+  target cells are terminal pockets; neither crate has a route onto a gate.
+- **Level 6 — Long Alley Remix (14×6, par 17):** push B3→C3, then traverse the
+  asymmetric B5-to-N5 horizontal alley, turn south to M4, and enter gate N4
+  before reaching N3. The wall at M3 prevents a bypass. The source blueprint's
+  “backward pulls/pushes” conveyor concept conflicts with Sokoban's push-only
+  rule, so this remix uses no conveyor IDs and asks only for a forward crate
+  push followed by walking; pulling is neither represented nor required.
+- **Level 7 — Four-Crate Shuffle (16×9, par 21):** the four pushes are B2→C2
+  (link 1), G2→G1 (safe blocker parking), I2→J2 (link 2), and M2→N2 (link 3).
+  The player crosses gates F3, L2, and P3 in order. E2, K2, and O2 wall cells
+  keep crates out of the gate route; G1 is a bounded non-target parking pocket.
+  The required target crates are parked against walls beyond their plates, and
+  each link is necessary to reach the next chamber.
+- **Level 8 — Master Warehouse (16×9, par 23):** the same four-crate/three-link
+  sorting sequence opens gates F3, L2, and P5. After target N2 is occupied, the
+  player takes the final switchback M3→N3→N4→O4→O5→P5→P6. P4 and O6 are walls,
+  so the final gate cannot be bypassed. The 16×9 board adds a longer exit
+  detour without introducing pulling or real-time movement.
+
+Levels 5–8 contain no belt/conveyor tiles. Every solver route consists solely
+of player moves and valid forward crate pushes; there is no pull action in the
+resolver. The later-level pack tests replay each route, check the recorded
+minimum pars, confirm every target/gate link is visited, and prove each link is
+required by solving a variant with that link's target removed.
+
 ## Risks / Trade-offs
 
 - [A crate-underlay normalization change can affect existing Prologue crate levels] → Add regression tests for all current crate pushes, vacated-cell traversal, renderer state, and Prologue solver results before updating shipped content.

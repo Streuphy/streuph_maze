@@ -967,6 +967,127 @@ function checkLevels() {
   return res;
 }
 
+function checkWorldOneContent() {
+  const worldPath = path.join(ROOT, 'data/worlds/world-01-sokoban.levels.yaml');
+  const source = fs.readFileSync(worldPath, 'utf8');
+  const doc = SM.parseYAML(source);
+  eq(doc.world_id, 'world-01-sokoban', 'W1  pack declares stable World 1 identity');
+  eq(doc.num_level, Object.keys(doc.levels).length, 'W1  declared count matches all authored level records');
+  const packKeys = Object.keys(doc.levels);
+  eq(packKeys.slice(0, 4), ['level_1', 'level_2', 'level_3', 'level_4'],
+    'W1  first four levels remain contiguous and ordered');
+  eq(packKeys, Array.from({ length: doc.num_level }, (_, index) => 'level_' + (index + 1)),
+    'W1  all authored levels are contiguous and ordered');
+  eq(new Set(Object.values(doc.levels).map(level => level.name)).size, doc.num_level,
+    'W1  all eight levels have unique display names');
+
+  const result = SM.LEVELS.load(source, { solve: true });
+  ok(result.ok, 'W1  levels 1–4 pass the same loader used by the UI',
+    result.problems.map(p => p.message).join(' | '));
+  eq(result.levels.length, Object.keys(doc.levels).length, 'W1  loader returns every declared level');
+  const expected = [
+    { key: 'level_1', width: 5, height: 5, crates: 1, pushes: 1, par: 8 },
+    { key: 'level_2', width: 6, height: 6, crates: 2, pushes: 2, par: 8 },
+    { key: 'level_3', width: 8, height: 6, crates: 1, pushes: 1, par: 9 },
+    { key: 'level_4', width: 10, height: 6, crates: 2, pushes: 2, par: 13 },
+    { key: 'level_5', width: 12, height: 8, crates: 2, pushes: 2, par: 15 },
+    { key: 'level_6', width: 14, height: 6, crates: 1, pushes: 1, par: 17 },
+    { key: 'level_7', width: 16, height: 9, crates: 4, pushes: 4, par: 21 },
+    { key: 'level_8', width: 16, height: 9, crates: 4, pushes: 4, par: 23 }
+  ];
+  for (const expectation of expected) {
+    const raw = doc.levels[expectation.key];
+    const level = result.levels.find(item => item.key === expectation.key);
+    ok(!!level, 'W1  ' + expectation.key + ' is normalized');
+    if (!level) continue;
+    eq([level.width, level.height], [expectation.width, expectation.height],
+      'W1  ' + expectation.key + ' uses its intended rectangular dimensions');
+    const flat = raw.grid.reduce((cells, row) => cells.concat(row), []);
+    eq(raw.grid.filter(row => row.length === expectation.width).length, expectation.height,
+      'W1  ' + expectation.key + ' has a rectangular integer grid');
+    eq(flat.filter(id => id === 1).length, 1, 'W1  ' + expectation.key + ' has one start');
+    eq(flat.filter(id => id === 2).length, 1, 'W1  ' + expectation.key + ' has one exit');
+    eq(flat.filter(id => id >= 70 && id <= 73).length, expectation.crates,
+      'W1  ' + expectation.key + ' has the intended crate count');
+    ok(flat.every(id => Number.isInteger(id) && SM.TILES[id] && SM.TILES[id].implemented !== false),
+      'W1  ' + expectation.key + ' uses only registered integer tile IDs');
+    ok(level.solve.path.every(action => action.type === 'move' || action.type === 'act'),
+      'W1  ' + expectation.key + ' uses only actions supported by the push-only resolver');
+    if (expectation.key === 'level_6') {
+      ok(flat.every(id => SM.TILES[id].family !== 'flow'),
+        'W1  level_6 remix contains no conveyor mechanic');
+    }
+
+    const targetLinks = Array.from(new Set(flat.map(id => SM.TILES[id])
+      .filter(tile => tile.family === 'target').map(tile => tile.params.link))).sort();
+    const gateLinks = Array.from(new Set(flat.map(id => SM.TILES[id])
+      .filter(tile => tile.family === 'barrier').map(tile => tile.params.link))).sort();
+    eq(targetLinks, gateLinks, 'W1  ' + expectation.key + ' target links match its phase-wall links');
+    ok(targetLinks.length > 0, 'W1  ' + expectation.key + ' includes a target-controlled gate');
+    eq(level.solve.status, 'solvable', 'W1  ' + expectation.key + ' has a solver-proven route');
+    eq(level.par, expectation.par, 'W1  ' + expectation.key + ' records its reviewed par');
+    eq(level.solve.optimal, expectation.par, 'W1  ' + expectation.key + ' par matches the solver optimum');
+
+    const state = SM.RULES.newState(level);
+    ok(!SM.RULES.isSolid(state, state.start.x, state.start.y) &&
+       !SM.RULES.crateAt(state, state.start.x, state.start.y) &&
+       !SM.RULES.targetAt(state, state.start.x, state.start.y),
+      'W1  ' + expectation.key + ' authored start is safe initially');
+    let pushes = 0;
+    const activeLinks = {};
+    const openedLinks = {};
+    const crossedLinks = {};
+    for (const action of level.solve.path) {
+      const resolution = SM.RULES.resolveTurn(state, action);
+      pushes += resolution.steps.filter(step => step.type === 'push').length;
+      for (const step of resolution.steps) {
+        if (step.type !== 'move' || !state.grid[step.to.y] || !state.grid[step.to.y][step.to.x]) continue;
+        const tile = state.grid[step.to.y][step.to.x];
+        if (tile.family === 'barrier') {
+          crossedLinks[tile.params.link] = true;
+          ok(!state.locked[step.to.y][step.to.x] && !state.crates[step.to.y][step.to.x],
+            'W1  ' + expectation.key + ' player crosses an open gate without a crate on it');
+        }
+      }
+      for (const sw of state.switches) {
+        if (sw.inst.family === 'target' && SM.RULES.switchActive(state, sw)) {
+          activeLinks[sw.inst.params.link] = true;
+        }
+      }
+      for (let y = 0; y < state.height; y++) {
+        for (let x = 0; x < state.width; x++) {
+          const tile = state.grid[y][x];
+          if (tile.family === 'barrier' && !state.locked[y][x]) openedLinks[tile.params.link] = true;
+        }
+      }
+    }
+    if (expectation.pushes !== undefined) {
+      eq(pushes, expectation.pushes, 'W1  ' + expectation.key + ' solver route makes its planned pushes');
+    }
+    eq(Object.keys(activeLinks).map(Number).sort(), targetLinks,
+      'W1  ' + expectation.key + ' solver route occupies every target link');
+    eq(Object.keys(openedLinks).map(Number).sort(), gateLinks,
+      'W1  ' + expectation.key + ' solver route opens each linked phase wall');
+    eq(Object.keys(crossedLinks).map(Number).sort(), gateLinks,
+      'W1  ' + expectation.key + ' solver route must pass every linked gate');
+
+    for (const link of targetLinks) {
+      const withoutLinkTarget = JSON.parse(JSON.stringify(raw));
+      for (let row = 0; row < withoutLinkTarget.grid.length; row++) {
+        for (let col = 0; col < withoutLinkTarget.grid[row].length; col++) {
+          const tile = SM.TILES[withoutLinkTarget.grid[row][col]];
+          if (tile.family === 'target' && tile.params.link === link) withoutLinkTarget.grid[row][col] = 0;
+        }
+      }
+      const variant = SM.RULES.buildLevel(withoutLinkTarget, expectation.key + '-without-link-' + link);
+      const blockedRoute = SM.LEVELS.solve(variant);
+      eq(blockedRoute.status, 'unsolvable',
+        'W1  ' + expectation.key + ' link ' + link + ' is necessary (no-target route cannot bypass gate)');
+    }
+    eq(state.won, true, 'W1  ' + expectation.key + ' replay of the solver path wins');
+    eq(state.strokes, level.par, 'W1  ' + expectation.key + ' replay ends at the recorded stroke count');
+  }
+}
 function checkStore() {
   const store = SM.STORE;
   store.reset();
@@ -1019,6 +1140,7 @@ checkTileRegistry();
 checkYaml();
 checkRules();
 const res = checkLevels();
+checkWorldOneContent();
 checkStore();
 try { checkRulesPurity(); }
 catch (e) { ok(false, 'A2  purity check ran', e.message); }
