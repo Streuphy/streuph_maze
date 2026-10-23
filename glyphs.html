@@ -46,7 +46,7 @@
             align-items: flex-start;
         }
 
-        /* Conteneur 1x1 Field identique au moteur de index.html */
+        /* Conteneur 1x1 Field aligné sur le moteur */
         .field-1x1 {
             width: 48px;
             height: 48px;
@@ -102,61 +102,69 @@
     <div id="app">
         <header>
             <h2>🧭 STREUPH MAZE — GALERIE DES GLYPHS (ID 1 - 256)</h2>
-            <p style="color: var(--text-muted); font-size: 0.8rem;">Affichage séquentiel par ID croissant avec gestion des exceptions (inspiré de index.html)[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)</p>
+            <p style="color: var(--text-muted); font-size: 0.8rem;">Affichage séquentiel par ID croissant avec gestion des exceptions (ES Modules)</p>
         </header>
 
-        <div id="status" style="text-align: center; color: var(--text-muted); margin-bottom: 20px;">Chargement des registres du moteur...</div>
+        <div id="status" style="text-align: center; color: var(--text-muted); margin-bottom: 20px;">Chargement des modules ES...</div>
         <main id="gallery-viewport" class="gallery-grid"></main>
     </div>
 
-    <!-- Chargement des scripts globaux du moteur aligné sur index.html -->
-    <script src="src/js/tiles.js"></script>
-    <script src="src/js/sm-glyphs.js"></script>
-    <script src="src/js/sm-entities.js"></script>
-    <script src="src/js/sm-render.js"></script>
-    <script src="src/js/sm-board.js"></script>
+    <script type="module">
+        import * as TilesMod from './src/js/tiles.js';
+        import * as GlyphsMod from './src/js/sm-glyphs.js';
+        import * as RenderMod from './src/js/sm-render.js';
 
-    <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const viewport = document.getElementById('gallery-viewport');
-            const statusEl = document.getElementById('status');
-            
+        const viewport = document.getElementById('gallery-viewport');
+        const statusEl = document.getElementById('status');
+
+        async function initGallery() {
             viewport.innerHTML = '';
+            let registry = new Map();
+
+            // Moissonneur universel pour extraire les entités des modules ES
+            function harvest(mod) {
+                if (!mod) return;
+                const targets = [mod.Tiles, mod.Glyphs, mod.tiles, mod.glyphs, mod.default, mod];
+                targets.forEach(t => {
+                    if (!t) return;
+                    if (Array.isArray(t)) {
+                        t.forEach((item, idx) => {
+                            if (item && typeof item === 'object') {
+                                const id = item.id !== undefined ? item.id : idx;
+                                registry.set(Number(id), item);
+                            }
+                        });
+                    } else if (typeof t === 'object') {
+                        Object.entries(t).forEach(([k, val], idx) => {
+                            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                const id = val.id !== undefined ? val.id : idx;
+                                registry.set(Number(id), val);
+                                registry.set(k, val);
+                            }
+                        });
+                    }
+                });
+            }
+
+            harvest(TilesMod);
+            harvest(GlyphsMod);
+            harvest(RenderMod);
+
             let displayedCount = 0;
 
-            // Fonction de résolution sécurisée par ID
-            function getTileDataSafe(id) {
+            // Boucle séquentielle stricte de 1 à 256 par ordre croissant
+            for (let id = 1; id <= 256; id++) {
                 try {
-                    const registries = [
-                        window.Tiles, window.Glyphs, window.Entities, 
-                        window.SM?.Tiles, window.SM?.Glyphs, window.SM
-                    ];
-
-                    for (const reg of registries) {
-                        if (!reg) continue;
-                        if (reg[id]) return reg[id];
-                        for (const val of Object.values(reg)) {
-                            if (val && typeof val === 'object' && (val.id === id || val.index === id)) {
-                                return val;
+                    let tile = registry.get(id);
+                    if (!tile) {
+                        for (const v of registry.values()) {
+                            if (v && (v.id === id || v.index === id)) {
+                                tile = v;
+                                break;
                             }
                         }
                     }
 
-                    if (typeof window.getTile === 'function') {
-                        const tile = window.getTile(id);
-                        if (tile) return tile;
-                    }
-
-                    return null;
-                } catch (err) {
-                    return null;
-                }
-            }
-
-            // Itération séquentielle stricte par ordre d'ID croissant de 1 à 256
-            for (let id = 1; id <= 256; id++) {
-                try {
-                    const tile = getTileDataSafe(id);
                     if (!tile) continue; // Skip silencieux des IDs non implémentés
 
                     displayedCount++;
@@ -167,9 +175,9 @@
                     fieldBox.className = 'field-1x1';
 
                     let rendered = false;
-                    if (typeof window.renderTile === 'function') {
+                    if (RenderMod && typeof RenderMod.renderTile === 'function') {
                         try {
-                            const res = window.renderTile(id, tile);
+                            const res = RenderMod.renderTile(id, tile);
                             if (res instanceof Element) {
                                 fieldBox.appendChild(res);
                                 rendered = true;
@@ -193,7 +201,7 @@
                     const skipKeys = ['svg', 'render', 'draw', 'callback', 'handler'];
                     const attrHtml = Object.entries(tile)
                         .filter(([k, v]) => !skipKeys.includes(k) && v !== null && typeof v !== 'function')
-                        .map(([k, v]) => `
+                        .map(([k, v] ) => `
                             <div class="attr-row">
                                 <span class="attr-k">${k}:</span>
                                 <span class="attr-v">${typeof v === 'object' ? JSON.stringify(v) : v}</span>
@@ -217,17 +225,17 @@
                     viewport.appendChild(card);
 
                 } catch (err) {
-                    // Skip par exception comme exigé
-                    continue;
+                    continue; // Skip par exception
                 }
             }
 
-            statusEl.textContent = `Galerie générée avec succès : ${displayedCount} glyphe(s) affiché(s) par ordre d'ID croissant (1-256)[span_8](start_span)[span_8](end_span)[span_9](start_span)[span_9](end_span).`;
-
+            statusEl.textContent = `Galerie générée : ${displayedCount} glyphe(s) affiché(s) par ordre d'ID croissant (1-256)[span_1](start_span)[span_1](end_span).`;
             if (displayedCount === 0) {
-                statusEl.textContent = "Aucun glyphe n'a pu être résolu. Vérifiez l'attachement des registres sur l'objet window[span_10](start_span)[span_10](end_span)[span_11](start_span)[span_11](end_span).";
+                statusEl.textContent = "Aucun glyphe résolu. Vérifiez les structures exportées dans les modules source[span_2](start_span)[span_2](end_span).";
             }
-        });
+        }
+
+        initGallery();
     </script>
 </body>
 </html>
