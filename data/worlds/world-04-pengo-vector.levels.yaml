@@ -1,0 +1,124 @@
+# World 4: Pengo Vector — deterministic belts, ice, and safe momentum stops.
+name: "Pengo Vector"
+world_id: world-04-pengo-vector
+num_level: 8
+levels:
+  level_1:
+    name: "First Current"
+    goal: "Ride the eastbound belt, then step north from the safe floor stop."
+    width: 5
+    height: 5
+    golf_score: 2
+    grid:
+      - [3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 2]
+      - [1, 64, 64, 64, 0]
+      - [3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3]
+
+  level_2:
+    name: "Double Circuit"
+    goal: "Each loop returns to a belt tile; leave it with a deliberate manual step."
+    width: 7
+    height: 5
+    golf_score: 8
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3]
+      - [3, 67, 65, 3, 67, 65, 3]
+      - [1, 64, 66, 3, 64, 66, 2]
+      - [3, 0, 0, 0, 0, 0, 3]
+      - [3, 3, 3, 3, 3, 3, 3]
+
+  level_3:
+    name: "Ice Launch"
+    goal: "Push the block across ice onto its crate belt; follow the cleared lane to the upper exit."
+    width: 9
+    height: 6
+    golf_score: 7
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 0, 0, 0, 0, 2, 3]
+      - [3, 3, 3, 3, 3, 0, 0, 0, 3]
+      - [3, 3, 3, 3, 3, 0, 0, 0, 3]
+      - [1, 0, 71, 5, 5, 60, 0, 0, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
+
+  level_4:
+    name: "Wall Channel"
+    goal: "A northbound belt redirects the run over ice; a wall stops it safely before the eastbound exit channel."
+    width: 10
+    height: 8
+    golf_score: 7
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 2, 3, 3]
+      - [3, 3, 3, 5, 0, 3, 3, 0, 3, 3]
+      - [3, 3, 3, 5, 0, 0, 64, 0, 3, 3]
+      - [1, 64, 64, 66, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+
+  level_5:
+    name: "Compression Chamber"
+    goal: "Slide the block into the wall-bounded pocket. Nothing is crushed; the vacated cell opens the upper route."
+    width: 12
+    height: 8
+    golf_score: 13
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+      - [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+      - [3, 3, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 71, 5, 5, 5, 5, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+
+  level_6:
+    name: "Long Alley"
+    goal: "Cross the full-width eastbound channel in one turn, stop on floor, then take the north exit."
+    width: 16
+    height: 6
+    golf_score: 2
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2]
+      - [1, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 5, 0]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+
+  level_7:
+    name: "Circuit Exit"
+    goal: "Ride the four-way loop back to its junction, push the block out of the only exit lane, then cross the long corridor."
+    width: 16
+    height: 9
+    golf_score: 17
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 67, 65, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 64, 66, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 71, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+      - [3, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+
+  level_8:
+    name: "Absolute Momentum"
+    goal: "Traverse the east–north–west vector network, stop safely before the crate, and finish along the upper 16-cell route."
+    width: 16
+    height: 9
+    golf_score: 4
+    grid:
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
+      - [3, 3, 3, 0, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 5, 0]
+      - [3, 3, 0, 0, 0, 70, 65, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 64, 64, 64, 64, 64, 66, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]

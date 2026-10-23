@@ -73,6 +73,64 @@ Author all eight pack levels using the `world_id`/name/`num_level` world-pack sh
 
 Rollback removes the World 4 pack and ice definition in a later change. Existing belt tile definitions and Prologue behavior must remain operational.
 
+## Authored World 4 Route Review
+
+All coordinates use A1 at the bottom-left. Each pack route was replayed through
+the shared resolver; the content tests verify solvability, exact minimum par,
+forced-chain endpoints, and safe stops.
+
+- **Level 1 — First Current (5×5, par 2):** move east from A3. The player belt
+  carries the player through D3 and stops on floor at E3; move north to E4.
+  There are no crates or alternate branches in this tutorial.
+- **Level 2 — Double Circuit (7×5, par 8):** enter the west circuit from A3 and
+  use a second east input to leave it at C3. Take the lower connector to E2,
+  enter the east circuit, then step east twice to G3. The optimal route triggers
+  both finite loop detectors; it never needs the safety hop cap. The loops are
+  recoverable because the player can choose a manual exit after the resolver
+  reports the repeated directed state.
+- **Level 3 — Ice Launch (9×6, par 7):** walk A2–B2, then push C2 east. The
+  crate crosses D2–E2 ice, follows the F2 east crate-force belt, and stops
+  safely at G2; the player follows into C2. On the next input the player slides
+  to F2, where the crate-force belt shoves the crate one more safe cell to H2
+  and carries the player into G2. The player turns north through G3–G5, then
+  east to H5. The source blueprint calls
+  this a “bridge”; the engine has no bridgeable gap tile, so the authored level
+  teaches a safe crate stop and a cleared vector lane instead. An optional extra
+  eastward push is recoverable through the F-column upper passage, so it cannot
+  irreversibly softlock this early level.
+- **Level 4 — Wall Channel (10×8, par 7):** the opening east input turns north
+  at D3, slides over D4–D5, and stops against the wall at D6. The player walks
+  east, enters the second east belt at G4, and is carried to H4 before taking
+  the two north steps to H6. The blueprint's “wall redirector” is deliberately
+  represented by a wall stop plus an explicit belt direction; walls do not
+  contain hidden or scripted redirection behavior.
+- **Level 5 — Compression Chamber (12×8, par 13):** push the crate from C3
+  across D3–G3 ice until the wall at H3 stops it on G3. The player enters C3,
+  climbs to the upper corridor, and walks east to L5. This is a safe block
+  compression puzzle, not a crushing or death mechanic; a wrong push can be
+  undone, and no entity is deleted.
+- **Level 6 — Long Alley (16×6, par 2):** one east input traverses the
+  16-column belt/ice channel and naturally stops on P3 floor; one north input
+  reaches P4. “High speed” is expressed as a long deterministic chain, with no
+  animation timing or frame-speed condition.
+- **Level 7 — Circuit Exit (16×9, par 17):** enter the four-way loop from A4;
+  its finite chain returns to B4. Push the block south from B3 to B2 and again
+  to the safe B1 parking cell, opening the only lower exit from the loop. Walk
+  east across the long corridor to P2. The two pushes are valid, one-object
+  pushes; neither belt collision pushes one crate into another.
+- **Level 8 — Absolute Momentum (16×9, par 4):** enter the eastbound channel at
+  A2, turn north at G2, continue over G3–G4 ice, and follow the westbound belt
+  to G5. The fixed crate at F5 is the safe stop. Move north to G6; the upper
+  eastbound channel carries the player to P6, then two north inputs reach P8.
+  The network is finite and the route does not rely on hitting the chain cap.
+
+The source blueprint's “crushing chamber,” “wall redirector,” “gap bridge,”
+“high-speed,” and “zero safe footing” phrases are adapted to the accepted
+turn-based contract: blockers stop vectors safely, belts explicitly set
+directions, ice preserves incoming direction, and every authored solution has
+a stable stopping cell. No level adds wall-clock speed, destructive movement,
+or implicit wall scripts.
+
 ## Open Questions
 
 - None blocking. The force-queue ordering and board-derived cap above are the implementation contract for the first version.

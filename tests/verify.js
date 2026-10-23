@@ -1152,6 +1152,187 @@ function checkWorld2Content() {
   }
 }
 
+function checkWorld4Content() {
+  const file = path.join(ROOT, 'data/worlds/world-04-pengo-vector.levels.yaml');
+  ok(fs.existsSync(file), 'WORLD 4  independent Pengo Vector pack exists');
+  if (!fs.existsSync(file)) return;
+
+  const text = fs.readFileSync(file, 'utf8');
+  const doc = SM.parseYAML(text);
+  const loaded = SM.LEVELS.load(text, { solve: true });
+  eq(loaded.problems.length, 0, 'WORLD 4  pack loads through the shared parser, validator, and solver',
+    loaded.problems.map(problem => problem.message).join(' | '));
+  eq([doc.world_id, doc.num_level, loaded.levels.length],
+    ['world-04-pengo-vector', 8, 8], 'WORLD 4  pack has stable identity and eight levels');
+
+  const expected = [
+    { name: 'First Current', width: 5, height: 5, par: 2 },
+    { name: 'Double Circuit', width: 7, height: 5, par: 8 },
+    { name: 'Ice Launch', width: 9, height: 6, par: 7 },
+    { name: 'Wall Channel', width: 10, height: 8, par: 7 },
+    { name: 'Compression Chamber', width: 12, height: 8, par: 13 },
+    { name: 'Long Alley', width: 16, height: 6, par: 2 },
+    { name: 'Circuit Exit', width: 16, height: 9, par: 17 },
+    { name: 'Absolute Momentum', width: 16, height: 9, par: 4 }
+  ];
+
+  for (let i = 0; i < expected.length; i++) {
+    const level = loaded.levels[i];
+    const want = expected[i];
+    eq([level.key, level.name, level.width, level.height, level.worldId, level.par],
+      ['level_' + (i + 1), want.name, want.width, want.height, 'world-04-pengo-vector', want.par],
+      'WORLD 4  level_' + (i + 1) + ' has its authored name, bounds, identity, and par');
+    eq(level.raw.grid.length, want.height,
+      'WORLD 4  ' + level.key + ' has the declared number of top-first grid rows');
+    ok(level.raw.grid.every(row => row.length === want.width),
+      'WORLD 4  ' + level.key + ' has a rectangular grid within 16×9');
+    ok(level.raw.grid.flat().every(id => Number.isInteger(id) && SM.TILES[id] &&
+        SM.TILES[id].implemented !== false),
+      'WORLD 4  ' + level.key + ' uses only implemented registered tile IDs');
+    eq([level.solve.status, level.solve.optimal], ['solvable', want.par],
+      'WORLD 4  ' + level.key + ' has a solver-proven minimum par');
+
+    const state = SM.RULES.newState(level);
+    const turns = [];
+    for (const action of level.solve.path) turns.push(SM.RULES.resolveTurn(state, action));
+    eq([state.won, state.strokes], [true, want.par],
+      'WORLD 4  replay of ' + level.key + ' wins at the recorded par');
+    const steps = turns.flatMap(turn => turn.steps);
+    ok(!steps.some(step => step.type === 'destroy' || step.type === 'crush'),
+      'WORLD 4  ' + level.key + ' resolves without crushing or deleting an entity');
+    ok(!steps.some(step => step.type === 'belt-cap' || step.type === 'object-force-cap'),
+      'WORLD 4  ' + level.key + ' shortest route ends naturally without depending on a safety cap');
+  }
+
+  const levels = loaded.levels;
+  const first = SM.RULES.newState(levels[0]);
+  const firstTurn = SM.RULES.resolveTurn(first, { type: 'move', dir: 'east' });
+  eq([first.player, firstTurn.steps.filter(step => step.type === 'move').length],
+    [{ x: 4, y: 2 }, 4], 'WORLD 4  tutorial rides one east vector to the safe floor stop');
+
+  const doubleCircuit = SM.RULES.newState(levels[1]);
+  const loopEvents = [];
+  for (const action of levels[1].solve.path) {
+    const turn = SM.RULES.resolveTurn(doubleCircuit, action);
+    loopEvents.push(...turn.steps.filter(step => step.type === 'force-loop'));
+  }
+  ok(loopEvents.some(step => step.x === 1 || step.x === 2) &&
+      loopEvents.some(step => step.x === 4 || step.x === 5),
+    'WORLD 4  level_2 shortest route exercises both bounded cardinal loops');
+
+  const launch = SM.RULES.newState(levels[2]);
+  eq(levels[2].tiles[1][5].id, 60,
+    'WORLD 4  crate ice route uses the crate-force belt rather than a player-only belt');
+  SM.RULES.resolveTurn(launch, { type: 'move', dir: 'east' });
+  const launchPush = SM.RULES.resolveTurn(launch, { type: 'move', dir: 'east' });
+  eq([launch.player, launch.crates[1][6] && launch.crates[1][6].id],
+    [{ x: 2, y: 1 }, 71], 'WORLD 4  pushed ice block reaches its safe belt endpoint as the player follows');
+  ok(launchPush.steps.filter(step => step.type === 'push').length >= 3,
+    'WORLD 4  crate slide records each forced ice/belt hop');
+  const playerFollowIndex = launchPush.steps.findIndex(step =>
+    step.type === 'move' && step.to.x === 2 && step.to.y === 1);
+  const firstIcePushIndex = launchPush.steps.findIndex(step =>
+    step.type === 'push' && step.crate.x === 3 && step.to.x === 4);
+  ok(playerFollowIndex >= 0 && firstIcePushIndex > playerFollowIndex,
+    'WORLD 4  player follow event precedes the pushed crate ice events');
+  const crateBeltTurn = SM.RULES.resolveTurn(launch, { type: 'move', dir: 'east' });
+  eq([launch.player, launch.crates[1][7] && launch.crates[1][7].id],
+    [{ x: 6, y: 1 }, 71], 'WORLD 4  crate belt advances its block while the player follows the vacated cell');
+  ok(crateBeltTurn.steps.some(step => step.type === 'push' && step.crate.x === 6 && step.to.x === 7),
+    'WORLD 4  explicit crate-force effect is represented by an undoable push event');
+
+  const recoverablePush = SM.RULES.newState(levels[2]);
+  for (const action of [
+    { type: 'move', dir: 'east' }, { type: 'move', dir: 'east' },
+    { type: 'move', dir: 'east' }, { type: 'move', dir: 'east' },
+    { type: 'move', dir: 'north' }, { type: 'move', dir: 'north' },
+    { type: 'move', dir: 'north' }, { type: 'move', dir: 'east' }
+  ]) SM.RULES.resolveTurn(recoverablePush, action);
+  eq(recoverablePush.won, true,
+    'WORLD 4  level_3 remains recoverable after the optional extra eastward crate push');
+
+  const forceUndo = SM.RULES.newState(levels[2]);
+  SM.RULES.resolveTurn(forceUndo, { type: 'move', dir: 'east' });
+  const beforeForce = canonicalSnapshot(forceUndo);
+  const beforeForceSignature = SM.RULES.snapshotSig(forceUndo);
+  SM.RULES.resolveTurn(forceUndo, { type: 'move', dir: 'east' });
+  SM.RULES.restore(forceUndo, beforeForce);
+  eq(canonicalSnapshot(forceUndo), beforeForce,
+    'WORLD 4  undo restores player, crate, and strokes after the forced crate chain');
+  eq(SM.RULES.snapshotSig(forceUndo), beforeForceSignature,
+    'WORLD 4  restored forced-movement state has its original solver signature');
+
+  const wallStop = SM.RULES.newState(levels[3]);
+  SM.RULES.resolveTurn(wallStop, { type: 'move', dir: 'east' });
+  eq(wallStop.player, { x: 3, y: 4 }, 'WORLD 4  wall channel stops the redirected ice route safely');
+  eq(SM.RULES.isSolid(wallStop, 3, 5), true,
+    'WORLD 4  the level-4 stopping wall remains solid rather than redirecting or crushing');
+
+  const compression = SM.RULES.newState(levels[4]);
+  SM.RULES.resolveTurn(compression, { type: 'move', dir: 'east' });
+  SM.RULES.resolveTurn(compression, { type: 'move', dir: 'east' });
+  eq([compression.crates[2][6] && compression.crates[2][6].id,
+    SM.RULES.isSolid(compression, 7, 2)], [71, true],
+  'WORLD 4  compression chamber safely parks the sliding block against its wall');
+
+  const alley = SM.RULES.newState(levels[5]);
+  const alleyTurn = SM.RULES.resolveTurn(alley, { type: 'move', dir: 'east' });
+  eq([alley.player, alleyTurn.steps.filter(step => step.type === 'move').length,
+    alley.strokes], [{ x: 15, y: 2 }, 15, 1],
+  'WORLD 4  full-width alley crosses one deterministic 16-column channel for one stroke');
+
+  const circuit = SM.RULES.newState(levels[6]);
+  const circuitFirst = SM.RULES.resolveTurn(circuit, { type: 'move', dir: 'east' });
+  const circuitPush = SM.RULES.resolveTurn(circuit, { type: 'move', dir: 'south' });
+  SM.RULES.resolveTurn(circuit, { type: 'move', dir: 'south' });
+  eq(circuitFirst.steps.some(step => step.type === 'force-loop'), true,
+    'WORLD 4  circuit-exit route has a finite four-way loop');
+  eq([circuit.player, circuit.crates[0][1] && circuit.crates[0][1].id],
+    [{ x: 1, y: 1 }, 71], 'WORLD 4  two deliberate pushes move the block out of the loop exit lane');
+  ok(circuitPush.steps.some(step => step.type === 'push'),
+    'WORLD 4  loop-exit staging is a normal, undoable crate push');
+
+  const mastery = SM.RULES.newState(levels[7]);
+  const networkTurn = SM.RULES.resolveTurn(mastery, { type: 'move', dir: 'east' });
+  eq([mastery.player, mastery.crates[4][5] && mastery.crates[4][5].id],
+    [{ x: 6, y: 4 }, 70], 'WORLD 4  mastery network stops immediately before its crate bumper');
+  ok(networkTurn.steps.filter(step => step.type === 'move').length >= 9,
+    'WORLD 4  mastery first input traverses the joined east/north/west vector network');
+}
+
+function checkVectorSolver() {
+  const R = SM.RULES;
+  const iceLevel = mkLevel([[1, 64, 5, 5, 0, 2]], null, 2);
+  const iceSearch = SM.LEVELS.solve(iceLevel, { maxStates: 1000, maxDepth: 10 });
+  eq([iceSearch.status, iceSearch.optimal], ['solvable', 2],
+    'VECTOR BFS  solver uses the real belt-to-ice resolver and proves the two-stroke optimum');
+  const replay = st(iceLevel);
+  for (const action of iceSearch.path || []) R.resolveTurn(replay, action);
+  eq([replay.won, replay.strokes], [true, 2],
+    'VECTOR BFS  replaying the solver path wins at the recorded forced-movement par');
+
+  const loopLevel = mkLevel([
+    [0, 0, 0, 0, 2],
+    [0, 67, 65, 0, 0],
+    [0, 64, 66, 0, 0],
+    [1, 0, 0, 0, 0]
+  ], null, 7);
+  const loopSearch = SM.LEVELS.solve(loopLevel, { maxStates: 1000, maxDepth: 20 });
+  eq([loopSearch.status, loopSearch.optimal], ['solvable', 7],
+    'VECTOR BFS  solver remains finite and finds the safe route around a conveyor loop');
+  ok(loopSearch.explored <= 1000,
+    'VECTOR BFS  loop fixture stays within the configured search budget');
+
+  const loopState = st(loopLevel);
+  loopState.player = { x: 0, y: 1 };
+  const loopTurn = R.resolveTurn(loopState, { type: 'move', dir: 'east' });
+  ok(loopTurn.steps.some(step => step.type === 'force-loop'),
+    'VECTOR BFS  bounded-loop fixture returns a deterministic loop event');
+  ok(loopTurn.steps.filter(step => step.type === 'move').length <=
+      loopState.width * loopState.height * 4 + 1,
+    'VECTOR BFS  loop fixture respects the board-derived forced-hop bound');
+}
+
 function checkLevels() {
   eq(SM.P_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  player palette remains the four existing colors');
   eq(SM.W_COLOURS, ['wht', 'red', 'gre', 'blu'], 'CHROMA  world palette remains the four existing colors');
@@ -1463,6 +1644,8 @@ checkCatchSolver();
 checkRules();
 const res = checkLevels();
 checkWorldOneContent();
+checkWorld4Content();
+checkVectorSolver();
 checkStore();
 try { checkRulesPurity(); }
 catch (e) { ok(false, 'A2  purity check ran', e.message); }

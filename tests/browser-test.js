@@ -123,6 +123,13 @@ function key(k) {
   ok(northRayCodex && /Static north ray/.test(northRayCodex.textContent) &&
       /crates shield it/.test(northRayCodex.textContent),
     'codex explains the static direction and crate-shield behavior for World 2 emitters');
+  const iceCodex = Array.from(codexRows).find(row => row.querySelector('.id').textContent === '5');
+  const beltCodex = Array.from(codexRows).find(row => row.querySelector('.id').textContent === '64');
+  ok(iceCodex && /Slides in the entering direction; belts set their own direction/.test(iceCodex.textContent),
+    'codex distinguishes direction-preserving ice from directional belts');
+  ok(iceCodex && beltCodex && iceCodex.querySelector('svg').innerHTML !== beltCodex.querySelector('svg').innerHTML,
+    'ice hatching and belt chevrons have visibly distinct glyphs');
+
 
   /* ---- play level 1 ---------------------------------------------------- */
   const g = () => SM.game;
@@ -498,6 +505,74 @@ function key(k) {
     'the target crate visibly shields its own cell from the ray');
   ok(!doc.querySelector('#player').classList.contains('caught'),
     'respawn clears the transient caught presentation');
+
+  const vectorPack = [
+    'name: "Vector Browser Test"',
+    'world_id: world-04-vector-test',
+    'num_level: 2',
+    'levels:',
+    '  level_1:',
+    '    name: "Belt into Ice"',
+    '    width: 6',
+    '    height: 1',
+    '    golf_score: 2',
+    '    grid:',
+    '      - [1, 64, 5, 5, 0, 2]',
+    '  level_2:',
+    '    name: "Pushed Ice Block"',
+    '    width: 7',
+    '    height: 3',
+    '    golf_score: 7',
+    '    grid:',
+    '      - [0, 0, 0, 0, 0, 0, 2]',
+    '      - [0, 0, 0, 0, 0, 0, 0]',
+    '      - [1, 0, 71, 5, 5, 0, 0]'
+  ].join('\n');
+  ok(SM.io.applyText(vectorPack), 'a World 4 belt-and-ice pack loads through the shared workflow');
+  await waitFor(() => g().levels.length === 2 && doc.querySelectorAll('#board .cell').length === 6);
+
+  g().load(0);
+  let playerForceResult = null;
+  const resolveVectorTurn = SM.RULES.resolveTurn;
+  SM.RULES.resolveTurn = function (state, action) {
+    playerForceResult = resolveVectorTurn(state, action);
+    return playerForceResult;
+  };
+  key('ArrowRight');
+  SM.RULES.resolveTurn = resolveVectorTurn;
+  await waitFor(() => !g().pending);
+  eq(g().state.player, { x: 4, y: 0 }, 'player belt and ice chain reaches its safe stopping cell');
+  eq(playerForceResult.steps.filter(step => step.type === 'move').length, 4,
+    'resolver returns each player belt-to-ice hop for playback');
+  eq(g().r.view.player, g().state.player,
+    'renderer mirror finishes the player chain at the resolver position');
+  eq(g().state.strokes, 1, 'player belt-to-ice animation costs one stroke');
+
+  g().load(1);
+  key('ArrowRight');
+  await waitFor(() => !g().pending);
+  let crateForceResult = null;
+  SM.RULES.resolveTurn = function (state, action) {
+    crateForceResult = resolveVectorTurn(state, action);
+    return crateForceResult;
+  };
+  key('ArrowRight');
+  SM.RULES.resolveTurn = resolveVectorTurn;
+  await waitFor(() => !g().pending);
+  eq(crateForceResult.steps.filter(step => step.type === 'push').map(step =>
+    [step.crate.x, step.to.x]), [[2, 3], [3, 4], [4, 5]],
+  'resolver returns the direct push and both forced crate-slide hops');
+  eq(g().state.player, { x: 2, y: 0 }, 'player follows the pushed crate into its former cell');
+  eq(g().state.crates[0][5].id, 71, 'rules state retains the crate at its final ice-slide cell');
+  eq(g().r.view.player, g().state.player,
+    'renderer mirror finishes the pushed player at the resolver position');
+  eq(g().r.view.crates[0][5].id, 71,
+    'renderer mirror replays every forced crate hop to the resolver position');
+  key('z');
+  eq([g().state.player.x, g().state.crates[0][2].id, g().state.strokes], [1, 71, 1],
+    'undo restores the pre-push player, crate, and stroke count after an ice chain');
+  eq(g().r.view.crates[0][2].id, 71,
+    'undo redraws the crate at its restored pre-force position');
 
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);

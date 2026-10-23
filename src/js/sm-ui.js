@@ -297,8 +297,9 @@
     this.dismissWin();
     this.clearWinPicture();
     this.overParSaid = false;
-    this.r.draw(this.state);
-    this.r.placePlayer(this.state, false);
+    this.r.view = this.snapshotView();
+    this.r.draw(this.r.view);
+    this.r.placePlayer(this.r.view, false);
     this.syncHud();
     this.syncCarriers();
     this.r.say(this.state.level.goalText || '');
@@ -551,7 +552,9 @@
       };
       var detail = def.family === 'hazard'
         ? '<small class="detail">Static ' + cardinalDirection(def.params.dir) + ' ray · crates shield it</small>'
-        : '';
+        : (def.name === 'ice'
+          ? '<small class="detail">Slides in the entering direction; belts set their own direction.</small>'
+          : '');
       html += '<div class="row' + (on ? '' : ' unseen') + '"' +
         (on ? '' : ' title="not yet seen in this level"') + '>' +
         wrapSvg(SM.glyph(def, ctx)) +
