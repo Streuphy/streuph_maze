@@ -328,7 +328,9 @@
     var self = this;
 
     document.addEventListener('keydown', function (e) {
-      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      var target = e.target;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) &&
+          !(target.tagName === 'INPUT' && target.type === 'file')) return;
       var dir = KEYMAP[e.key];
       if (dir) { e.preventDefault(); self.act({ type: 'move', dir: dir }); return; }
 
