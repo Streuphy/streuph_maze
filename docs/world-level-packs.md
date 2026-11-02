@@ -27,19 +27,29 @@ levels:
 
 `grid` rows are written **top-first**: the first row is the board's highest
 row, while game coordinate A1 is the bottom-left cell. Grids must be rectangular,
-match their declared `width` and `height`, and fit within 16 columns by 9 rows.
+match their declared `width` and `height`, and have 2–16 columns and 1–9 rows.
 Every cell is an integer ID for a registered, implemented tile. `golf_score` is
-the minimum number of player strokes; the validator uses the same resolver and
-solver as gameplay to check it.
+a declared minimum-stroke target, not proof by itself. Solver-enabled validation
+uses the same resolver/search as gameplay; schema-only loading does not certify
+PAR. The score becomes replay-proven only after a completed minimum proof and
+winning replay. Budget-limited `unknown` is not an impossibility result.
 
 ## V2 authoring contract
 
-V2 is the sole runtime interpretation, tracked in
-`openspec/changes/v2-global-pack-migration/`. There is no pack or level runtime
-selector. Unsupported selectors, floor-tier fields, and prototype prerequisite
-fields are rejected rather than silently choosing different behavior. The
-content/math migration covers all 61 levels; final verification/acceptance is
-tracked separately in the per-level ledger and asset checklist.
+V2 is the sole runtime interpretation, specified by the accepted
+[pack contract](../openspec/specs/world-level-packs/spec.md) and shared
+[event-resolution contract](../openspec/specs/event-resolution/spec.md).
+The existing migration deltas have been synchronized; the migration remains
+provenance. There is no pack or level runtime selector. Unsupported selectors,
+floor-tier fields and prototype prerequisite fields are rejected rather than
+choosing different behavior. The content/math migration covers all 61 levels;
+verification and release approval are tracked separately.
+
+YAML selects registered configuration, not executable mechanic behavior. Numeric
+IDs are stable authored identities; named strategies remain code-side. The engine
+and tileset meet through declared state/query/transition and committed-event
+contracts, not a world-specific loader or ID-dispatch rules in exported data.
+See the [abstract model](Product_Design_Document.md#2-state-and-tile-model).
 
 ```yaml
 name: "V2 Example"
@@ -134,9 +144,11 @@ registry/usage coverage, current guidance/dispatch, seven-pack inventory, fresh
 proof evidence, and all 61 design-review rows. Historical archives/design history
 and harness/dependency internals are preserved, not rewritten. Parser validation
 labels are not treated as alternate engines. During review, `--preaccept` reports
-obsolete accepted-spec guidance as an explicit deferred synchronization item;
-it never bypasses missing proofs or pending design reviews and cannot report
-`releaseReady` while synchronization is still deferred.
+any pending accepted-spec mappings as deferred; it never bypasses missing proofs,
+pending design reviews or other stale guidance. Strict mode requires all mappings
+to match. The [archived documentation review](../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
+records completed synchronization and an unrelated protected draft that still
+blocks the whole-tree audit. Neither audit mode is human release approval.
 
 The [verification record](level-design/v2-verification.md) separates actual Node/
 jsdom results from the native Chromium `file://` gate. Run the optional

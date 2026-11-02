@@ -4,6 +4,13 @@
 
 Defines a deterministic level-wide binary polarity switch that exchanges the passability of complementary red and blue barrier classes.
 
+## Interpretation
+
+Class openness is the requested binary state, not a second cell-level lock.
+Effective solidity also applies the common [occupied-surface closure contract](../event-resolution/spec.md):
+a crate can defer closure while a dot cannot. Such pending cells do not change
+which class the polarity requests open. The crystal remains ACTION-only.
+
 ## Requirements
 
 ### Requirement: Binary polarity controls complementary barriers
@@ -22,36 +29,38 @@ The system SHALL maintain one binary polarity per level, with exactly one of the
 - **THEN** ordinary walls and non-polarity gates retain their existing behavior
 
 ### Requirement: Closed polarity barriers block entry and crate pushes
-The system SHALL treat a closed polarity barrier as solid for both player entry and crate destinations, and an open barrier as traversable under the normal movement rules.
+Polarity barriers SHALL use their requested binary class state and the common V2 closure contract. Effectively closed barriers SHALL block dot/object destinations. A crate SHALL defer physical closure while occupying the cell; closure beneath the dot SHALL immediately fail the attempt. No ejection, crushing, or silent departure exception SHALL occur.
 
 #### Scenario: Player attempts to enter a closed barrier
-- **WHEN** the player moves into a barrier closed by the current polarity
-- **THEN** movement is blocked and no stroke is charged
+- **WHEN** a directional destination is effectively closed by polarity
+- **THEN** direct movement blocks without a stroke or propagation
 
 #### Scenario: Crate is pushed toward a closed barrier
-- **WHEN** a crate's destination is a barrier closed by the current polarity
-- **THEN** the push is blocked and neither player nor crate moves
+- **WHEN** a crate destination is an effectively closed polarity barrier
+- **THEN** the atomic push blocks without moving crate or dot
 
 #### Scenario: A polarity flip closes a barrier beneath a crate
-- **WHEN** a switch changes polarity while a crate occupies a barrier that becomes closed
-- **THEN** the crate remains in place, may be pushed off under normal rules, and cannot be pushed back into the barrier until it opens
+- **WHEN** a flip requests closure while a crate occupies that barrier
+- **THEN** the crate remains, pending-close is visible, and it can leave legally; effective closure follows its departure unless the request has reopened
 
 #### Scenario: A player is already on a barrier that becomes closed
-- **WHEN** a runtime or restored state has the player on a barrier cell that is solid under the current polarity
-- **THEN** the player is not ejected, may leave under normal movement rules, and cannot re-enter until the barrier opens
+- **WHEN** derived polarity makes a surface beneath the dot effectively closed
+- **THEN** terminal failure commits before a goal checkpoint or later queued effect, without ejection or allowed continued movement
 
-The current switch is a single-cell tile activated only by ACT while occupied, so the player-on-closing-barrier case is a defensive state invariant rather than a state reachable through the ordinary switch interaction. It is verified with a focused state fixture; no remote activation or layered-tile mechanic is implied.
+The crystal remains current-tile ACTION-only. Defensive state fixtures SHALL
+test occupied closing barriers even where current shipped layouts do not make
+that state reachable; no remote crystal activation is implied.
 
 ### Requirement: Polarity state is undoable and solver-visible
-The system SHALL include polarity in turn snapshots, restoration, state identity, and solvability search so that undo and computed par match interactive play.
+Polarity, requested/effective barrier state, pending closure, and terminal outcome SHALL agree across atomic effects, derived rebuilding, snapshots/restoration, and search. Successful nonterminal flips SHALL support undo; closure failure SHALL instead require restart and be a terminal non-winning solver successor.
 
 #### Scenario: Undo a polarity flip
-- **WHEN** the player undoes a switch activation
-- **THEN** the prior polarity, barrier passability, and stroke count are restored
+- **WHEN** a successful nonterminal flip is undone
+- **THEN** prior polarity, requested/effective barrier state, and counters are restored
 
 #### Scenario: Solver evaluates switch order
-- **WHEN** a level's solvability and par are computed
-- **THEN** the solver explores the same binary switch transitions and red/blue barrier rules as gameplay
+- **WHEN** search evaluates a crystal activation
+- **THEN** it uses the same queued flip and occupied-surface closure outcomes as play and never routes through a failed closure
 
 ### Requirement: Hyrule Flip-Flop has eight progressive levels
 The world pack SHALL contain eight named levels following the blueprint progression, with deterministic switch order puzzles and boards no larger than 16 columns by 9 rows.
@@ -67,3 +76,10 @@ The world pack SHALL contain eight named levels following the blueprint progress
 #### Scenario: Mastery coordinates many barriers
 - **WHEN** the player selects level 8
 - **THEN** one deterministic polarity state governs the full 16×9 barrier arrangement
+
+### Requirement: Every shipped polarity level is recertified under V2
+All eight Hyrule Flip-Flop levels SHALL preserve their world/key identity and progression while being re-proven under V2. Their boards, text, displayed barrier classes, and PARs SHALL match actual switch/closure behavior, including the complete mastery level rather than a sampled subset.
+
+#### Scenario: Mastery proof is budget-limited
+- **WHEN** the larger polarity puzzle returns `unknown`
+- **THEN** its declared score is not accepted as a proven V2 PAR and migration remains incomplete until proof or redesign

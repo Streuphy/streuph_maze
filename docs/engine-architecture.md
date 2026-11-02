@@ -1,10 +1,37 @@
 # Engine architecture
 
-The current implementation is migrating to the sole queued contract in
-`openspec/changes/v2-global-pack-migration/`. Engine tests and the shipped-pack
-certification ledger are separate gates; implementing the scheduler does not
-certify existing levels. Accepted specification synchronization remains a
-review/release step. This document describes ownership, not another ruleset.
+The implementation uses the sole queued V2 contract. Its existing ten deltas
+have been synchronized into [accepted specifications](../openspec/specs/).
+This guide maps the [abstract state/event model](Product_Design_Document.md#2-state-and-tile-model)
+to current code; it is not another ruleset or a proposed engine refactor.
+Proofs, browser evidence, documentation coherence and release approval remain
+separate. See the [archived review](../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
+for unresolved cross-change guidance.
+
+## Integration contract: states and events
+
+The engine owns *transaction integrity*; registered strategies own
+*mechanic-specific behavior*. Calls flow through declared query/behavior hooks
+and explicit context. Committed state and ordered events are the common contract
+for play, search, undo and rendering. It is not an event-only plug-in bus:
+handlers currently mutate supported state in atomic batches, and the core
+journals and validates them. Definitions remain immutable and YAML remains data.
+
+| Boundary | Existing implementation | Dependency rule |
+|---|---|---|
+| Definition → query/behavior | `tiles.js` registry, strategies and state descriptors; `SM.resolveTileHook` | Declare parameters, profiles, reads/writes/hooks/events; no mechanic dispatch by ID/name/family/world |
+| State → commit | `sm-rules.js` `atomicEffect`, common legality and validation | Commit whole actor/mutation batches or reject them; no half-push observation |
+| Commit → subsequent work | Captured transitions, `signalState`, typed queue, `queueForce` and occupant scans | Queue intent is revalidated; captured actor identity cannot retarget a later occupant |
+| State → view | `describeTile`, ordered `steps`, commit IDs and authoritative `state` frames | Consumers inspect/project committed truth; animation never schedules rules |
+| State → search/restore | `cloneState`, `snapshot`/`restore`, `snapshotSig`, shared resolver | Preserve transition-relevant state; internal restore is not permission for player undo after failure |
+
+Local policies answer such questions as "what direction does this source request?"
+or "is this source active?" Core policy decides atomicity, priority, legal
+capacity, terminal precedence, accounting and rollback. Core queries still have
+explicit supported actor layers, carriers and closing-surface semantics; the
+current implementation is not an arbitrary-entity extension API. Reducing coupling
+means preserving these contracts, not adding tile-specific branches to the core
+or moving rule decisions into rendering.
 
 ## Current runtime flow
 
@@ -54,6 +81,32 @@ Resolver events include `blocked`, `press`, `move`, `push`, `pull`,
 diagnostics. Atomic mutation events share a commit ID. The resolver owns their order and meaning;
 `sm-render.js` applies them to a display mirror. New/changed event forms must be
 reviewed against playback, undo, and solver behavior together.
+
+In the PDD vocabulary, normalized configuration is `D`, mutable canonical state
+is `S`, derived lock/activity queries are `R(D,S)`, and a command's queue/provenance
+is local context `C`. The ordered committed output is `E`; discovery is auxiliary
+observation `O`. None of these symbols introduces an additional stored root.
+
+### Work records versus output records
+
+- **Queued request:** pending intent with priority, operation, source, actor and
+  payload; a stale or blocked request may commit nothing.
+- **Captured entry/departure:** a past committed transition with stable actor
+  identity; its supported reaction survives later movement unless the transaction
+  terminates. It is not a current-occupancy assertion.
+- **Signal edge:** change in derived current activity; unchanged contacts do not
+  enqueue repeated activation. Contact count and boolean activity differ.
+- **Committed event/frame:** actual validated mutation with commit identity;
+  authoritative snapshots cover multi-field changes even without readable hints.
+- **Abort diagnostic:** the sole output retained after full-action rollback;
+  tentative movement events must not be played or persisted as real progress.
+
+`resolveTurn` rejects malformed API commands, blocks terminal gameplay input and
+defensively enforces closure on restored state before opening a transaction.
+`resolveAction` owns direct commit, queue drain and final exposure.
+`atomicEffect` validates mutations, rebuilds locks, enforces closure, derives
+events and captures downstream work. The controller publishes win progress only
+after the returned result, not during an intermediate commit.
 
 ## Tile-specific dispatch and current ownership
 
@@ -121,6 +174,22 @@ Snapshots contain the complete switch/feature inventory, profiles, latches,
 positions, object occupancy, carriers, terminal flags/reason, and counters.
 Restore reconstructs mutable rows and derived locks; immutable definitions can
 be shared safely. Player undo policy is separate from internal snapshot restore.
+
+### Identity and lifecycle review
+
+| Concern | Required identity / boundary |
+|---|---|
+| Settled solver transition | `snapshotSig` captures transition-relevant positions/profiles, carriers, polarity, latches and terminal outcome; observations and absolute counters are not route identity |
+| Transaction repetition | Gameplay plus semantically ordered pending work, signal state and transport provenance; normalized queue order, not ever-increasing enqueue serials |
+| Undo/internal restore | Complete reversible payload and counters; observation rollback handled explicitly; rebuild derived locks rather than copy an independent pending flag |
+| Restart | Reconstruct authored initial state, empty round context and playing outcome |
+| Renderer | Mirror complete state frames/commit IDs; no independent mutable gameplay truth |
+
+Changing a mechanic requires reviewing construction, clone, snapshot, restore,
+derivation, state identity, events and passive playback together. A source reaction
+must not require its consumer to know the emitter's tile ID. The existing focused
+tests enforce these boundaries; this documentation change does not generalize
+the supported engine or alter event formats.
 
 ## Current progress storage
 

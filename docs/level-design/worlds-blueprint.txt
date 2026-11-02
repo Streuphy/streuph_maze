@@ -3,9 +3,11 @@ Streuph's Maze — current world blueprint and future concepts
 
 Current scope: six implemented eight-level worlds (48 levels), plus the
 13-level Prologue = 61 shipped-source levels. Worlds 7 and 8 below are future
-concepts only, not supported packs/mechanics. No editor is shipped.
-The queued V2 contract and Tile Mechanics Reference control behavior; this is
-the authoring/progression index, not an alternate executable ruleset.
+concepts only, not supported packs/mechanics. Editor work is tracked separately;
+see docs/level-editor.md for its current authoring workflow.
+The accepted V2 specs in openspec/specs/ and Tile Mechanics Reference control
+behavior; this is the authoring/progression index, not an alternate ruleset.
+Existing V2 deltas are synchronized; evidence and release approval remain separate.
 
 Golden Rules
 ------------

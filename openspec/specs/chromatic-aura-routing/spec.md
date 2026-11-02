@@ -18,30 +18,34 @@ World 5 SHALL use only `wht`, `red`, `gre`, and `blu`; `wht` SHALL serve the the
 - **THEN** that concept is represented as sequential color routing or omitted, not as a mixed color state
 
 ### Requirement: Prisms set one player aura and matching gates test the correct carrier
-World 5 SHALL use prisms to set the player's current aura and SHALL allow player-color gates by `P` and world-color gates by `W`, using their configured color.
+Prisms SHALL queue the captured dot's configured color replacement for every supported committed entry, including intermediate transport cells, or occupied ACTION. Gates SHALL test their declared global `P` or `W` carrier and effective lock state when a destination is evaluated. Ordinary tint SHALL NOT create color mixing or object mobility.
 
 #### Scenario: Player passes a matching aura gate
-- **WHEN** the player attempts to enter an aura gate while `P` matches its required color
-- **THEN** the gate permits entry unless a separate linked lock is closed
+- **WHEN** a destination's action-time `P` equals its required aura color and its effective lock is open
+- **THEN** it permits the dot under ordinary occupancy rules
 
 #### Scenario: Wrong player aura is rejected
-- **WHEN** the player attempts to enter an aura gate while `P` does not match its required color
-- **THEN** entry is blocked without changing the player's aura or charging a stroke
+- **WHEN** the relevant `P` does not match at direct preflight or queued dequeue
+- **THEN** that move blocks without implicitly applying a pending lower-priority prism effect early
 
 #### Scenario: World gate checks world color
-- **WHEN** the player attempts to enter a world-color gate
-- **THEN** entry depends on `W`, not on `P`
+- **WHEN** a world-color gate is evaluated
+- **THEN** it tests current `W`, not `P` or the mover's own crate color
+
+#### Scenario: Dot leaves a prism before its effect executes
+- **WHEN** transport moves the dot away after a captured entry
+- **THEN** the queued prism effect still sets that dot's aura once and emits a color event
 
 ### Requirement: World 5 exits retain the existing matching-goal rule
-The player SHALL clear a chromatic level only while standing on its goal with player aura `P` equal to world color `W`.
+A chromatic level SHALL clear only at a legal dot-goal entry checkpoint with `P === W`, after that hop's signal/closure reactions. Victory SHALL then cancel remaining ordinary/transport work and final ray sampling. Matching colors reached while stationary on the goal SHALL NOT clear without re-entry.
 
 #### Scenario: Matching colors clear the goal
-- **WHEN** the player reaches the goal with `P === W`
-- **THEN** the level is cleared
+- **WHEN** a legal goal entry reaches its checkpoint with equal colors and no closure failure
+- **THEN** victory commits immediately before remaining work
 
 #### Scenario: Mismatched colors do not clear the goal
-- **WHEN** the player reaches the goal with `P !== W`
-- **THEN** the level remains uncleared until the required color state is reached
+- **WHEN** the dot enters the goal while mismatched
+- **THEN** it remains uncleared and must legally re-enter while matching even if a later stationary effect makes colors equal
 
 ### Requirement: Chromatic levels teach the mechanic without mixing or implicit aura reset
 The World 5 pack SHALL contain eight named levels following the blueprint progression, and SHALL NOT rely on color mixing or automatic aura loss while backtracking.
@@ -57,3 +61,14 @@ The World 5 pack SHALL contain eight named levels following the blueprint progre
 #### Scenario: Mastery uses all palette states
 - **WHEN** the player selects level 8
 - **THEN** the puzzle may use white, red, green, and blue as distinct existing states without adding a fifth state
+
+### Requirement: Every shipped chromatic route reflects queue timing
+All eight Chip's Chromatic levels SHALL be certified with the four-color palette, per-hop captured color effects, declared gate carriers, and entry-only goal victory. Route/name/goal text and PAR SHALL agree. Unsupported mixing, Black carrier state, or stationary-goal shortcuts SHALL NOT be used to preserve an incompatible route.
+
+#### Scenario: Previous route waits on the goal for a color change
+- **WHEN** a candidate route depends on stationary matching after mismatched entry
+- **THEN** the level/route is revised and re-proven under the entry checkpoint rather than adding a special goal exception
+
+#### Scenario: Transport crosses more than one prism
+- **WHEN** a route crosses several prisms before ordinary effects execute
+- **THEN** certification replays their captured effects in actual queue order and records the resulting carrier at each later gate/goal decision

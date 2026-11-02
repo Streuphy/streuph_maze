@@ -1,5 +1,10 @@
 # World 2: queued V2 shielding review
 
+> **2026-11-02 status follow-up:** Contract-sync statements below describe the
+> content-certification checkpoint. The ten V2 deltas are now synchronized;
+> current audit/approval dependencies are in the [verification follow-up](v2-verification.md#documentation-review-follow-up--2026-11-02).
+> Board/route evidence below is unchanged, not a new browser run.
+
 Source `data/worlds/world-02-lolos-castle.levels.yaml`, stable world identity
 `world-02-lolos-castle`, eight levels. No timer, sweeping beam, or continued
 play after exposure. All listed proofs use the real solver/resolver, not a

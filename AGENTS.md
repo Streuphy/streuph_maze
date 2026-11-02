@@ -21,12 +21,20 @@ references rather than duplicating their details here.
 - Solver success alone does not prove a level is well designed; an `unknown`
   solver result does not prove solvability.
 
-The selected `v2-global-pack-migration` implements the explicitly breaking sole
-queued contract, documented in its deltas and the maintained Tile Mechanics
-Reference. The runtime no longer selects an earlier interpretation. Its 61-row
-ledger and generated proofs record content/math evidence, not acceptance or
-final browser verification. Accepted-spec synchronization remains a separate
-approval/release dependency; do not infer it from checked implementation tasks.
+The sole queued V2 contract is implemented and its ten migration deltas were
+explicitly synchronized into `openspec/specs/` during `doc-review-v2-ruleset`.
+The migration is provenance, not a runtime selector. The shared contract is
+**canonical state and ordered committed events**: the engine owns transaction
+integrity, scheduling, validation, lifecycle and rollback; registered definitions
+own mechanic-specific queries/behavior. Do not introduce tile-ID/name/family or
+world dispatch to bridge those layers. Consult the PDD abstract model and engine
+architecture for the existing boundary, not an assumed arbitrary plug-in API.
+
+The 61-row ledger and generated proofs establish content/math evidence, not
+browser verification or release approval. The verification record distinguishes
+actual Node/jsdom/native checks and the current documentation review records
+unresolved cross-change guidance. Do not infer acceptance, release readiness or
+archival from implementation checkboxes or specification synchronization alone.
 
 ## Pre-implementation validation
 
@@ -71,6 +79,12 @@ local references as the contract. Keep changes minimal and scoped.
   Do not silently expand an unarchived proposal into unrelated work.
 
 ## Local design and authoring references
+
+- [Documentation guide](docs/README.md) separates player help, authoring,
+  normative contracts, implementation ownership, evidence and future/history.
+- [State/event model](docs/Product_Design_Document.md#2-state-and-tile-model)
+  defines configuration, canonical/derived state, round context and event output;
+  [Engine Architecture](docs/engine-architecture.md) maps those to existing code.
 
 - [Tile Mechanics Reference](docs/level-design/tile-mechanics.md) is the
   level-designer guide to registered tile IDs, standard resolver behavior,

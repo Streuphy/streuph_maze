@@ -1,5 +1,12 @@
 # Queued V2 verification record
 
+> **Status follow-up — 2026-11-02 documentation review:** The ten existing V2
+> deltas are now synchronized into accepted specifications. The implementation
+> checkpoint below is preserved as recorded; its no-sync/no-commit statements
+> describe that earlier checkpoint. See the current follow-up at the end and the
+> [review record](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md) for
+> unresolved whole-tree audit guidance. This is not release approval.
+
 Recorded on 2026-11-02 for the working implementation of
 `v2-global-pack-migration`. This is implementation/content evidence, not accepted-
 spec approval or a released version. No commit, staging, archive, or spec sync
@@ -91,3 +98,28 @@ just keyword scans. Strict release mode intentionally blocks on that dependency.
 Review/synchronize accepted specs before release or archival. Historical archives,
 design history, the pending separate World 6 archive relocation, dependencies,
 harness internals, and `docs/Nouveau document` were not discarded or rewritten.
+
+## Documentation review follow-up — 2026-11-02
+
+`doc-review-v2-ruleset` explicitly integrated the existing ten source deltas into
+accepted specs, including new event-resolution/conveyor-transport homes and
+stale hazard Purpose/recovery text. Strict validation passes for all ten accepted
+specs. Both pending-sync and deferred-spec audit lists are empty. That is a
+reviewed documentation baseline, not an archive or release declaration.
+
+Player instructions now have a concise commands/outcomes guide. The PDD and
+architecture separate configuration, canonical/derived state, round context,
+captured triggers, pending intent and committed events. Engine transaction
+integrity and registered mechanic policy meet through those explicit boundaries,
+not numeric-ID dispatch or rendering decisions. No new mechanics were specified.
+
+The protected exploratory editor draft independently fails the whole-tree asset
+audit; its format/bounds conflict is assigned to separate editor work. Source
+code and tests for that work also changed concurrently and are not part of this
+documentation review. They are preserved and not presented here as accepted.
+Current command results and remaining gates are recorded in the
+[review](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md).
+
+No new native Chromium run was performed for prose-only changes. The earlier
+fingerprint-bound mathematical/native-browser JSON remains unchanged; passing
+fresh jsdom checks cannot be substituted for a native-browser run.

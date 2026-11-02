@@ -1,11 +1,19 @@
 # Tile Mechanics Reference
 
 This is the maintained authoring index for the sole queued V2 runtime in
-`src/js/tiles.js`, `sm-rules.js`, and `levels.js`. The selected contract is
-`openspec/changes/v2-global-pack-migration/`; accepted-spec synchronization is
-still a separate review/release dependency. Historical design notes are not
-alternate playable policies. All 62 registered IDs and the separate dot are
+`src/js/tiles.js`, `sm-rules.js`, and `levels.js`. Normative contracts are the
+[accepted specifications](../../openspec/specs/), including shared
+[event resolution](../../openspec/specs/event-resolution/spec.md) and
+[conveyor transport](../../openspec/specs/conveyor-transport/spec.md).
+Their existing V2 deltas were explicitly synchronized in the documentation review;
+release approval is separate. Historical design notes are not alternate playable
+policies. All 62 registered IDs and the separate dot are
 defined below. Unknown, retired, reserved, and unimplemented IDs are rejected.
+
+The integration contract is states and events. Registered definitions supply
+mechanic queries and transitions; the core validates atomic batches, schedules
+work and returns complete committed events. See the [PDD vocabulary](../Product_Design_Document.md#2-state-and-tile-model)
+for canonical versus derived state and pending intent versus committed output.
 
 ## Universal definition template
 
@@ -448,8 +456,10 @@ same definitions; the renderer never chooses outcomes.
 
 Use `npm run test:unit:registry`, `test:unit:rules`, and `test:unit:levels` for
 focused work. `npm run levels:routes -- --early-review` covers all seven packs;
-`node scripts/audit-v2-assets.js --preaccept` checks usage/definitions/evidence
-and explicitly defers accepted-spec synchronization, not missing content.
+`node scripts/audit-v2-assets.js` checks usage/definitions/evidence and accepted
+spec synchronization. `--preaccept` reports pending mappings without bypassing
+other failures; it is not release approval. The [archived review](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
+records the completed mappings and the unrelated draft still blocking the audit.
 The 61-row ledger links complete route/lesson reviews, including optional elements
 and late wrong-push consequences. Unknown is not a minimum or impossibility
 proof. Final `npm test` and real Chromium `file://` checks remain distinct gates.

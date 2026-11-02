@@ -1,11 +1,12 @@
 # V2 shipped-pack certification ledger
 
-**Migration in progress.** Certified rows have content-design and replay-proof
-review, not final release/browser approval. Pending rows retain observed source
-scores, not proven queued-engine minima. `pending`, `unknown`, failed replay, or
-an omitted row blocks release. Passing repository and separate real Chromium
-gates are recorded in [v2-verification.md](v2-verification.md). Accepted-spec
-synchronization/approval is still pending; these rows do not assert release approval.
+**61/61 rows certified for content and minimum-route replay.** These rows are
+not release approval. A `pending`/`unknown` result, failed replay or omitted row
+would block certification; an authored score alone is not proof. Repository and
+separate real Chromium gates are recorded in [v2-verification.md](v2-verification.md).
+The ten existing V2 deltas were synchronized into accepted specs during the
+[documentation review](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md);
+its unrelated whole-tree audit blocker and release approval remain separate.
 
 Each certified row must link evidence containing dimensions, tile/profile set,
 lesson, solver budgets/status, minimum route/strokes, U/D/L/R counts, tied-route

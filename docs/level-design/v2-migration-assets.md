@@ -1,5 +1,9 @@
 # V2 maintained-asset checklist
 
+> **Migration checkpoint:** The checklist below preserves the implementation
+> review, when accepted-spec synchronization was still deferred. The subsequent
+> documentation review synchronized all ten deltas; see the follow-up at the end.
+
 Checkboxes record actual review/verification for the sole queued contract;
 accepted-spec synchronization/approval is a separate dependency, not assumed.
 The change's `asset-inventory.md` and `tile-catalogue.md` define dispositions.
@@ -69,3 +73,16 @@ superseded proposal records, `.git` history/tags, dependencies, and harness skil
 are not rewritten. Do not discard the user's World 6 archive move or unclassified
 `docs/Nouveau document`. A historical exemption never permits an obsolete live
 resolver path or misleading maintained guidance.
+
+## Documentation review follow-up — 2026-11-02
+
+- [x] All ten existing V2 deltas synchronized into accepted specs, including
+  Purpose corrections and the two missing accepted capability homes.
+- [x] Player/author/agent navigation and state/event ownership clarified without
+  changing mechanics, authored boards, progress records or generated evidence.
+- [ ] Whole-tree audit readiness: blocked by conflicting protected editor-draft
+  guidance owned by separate work; synchronization alone cannot clear that gate.
+
+See the [archived review](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
+for command outcomes, concurrent-work attribution and remaining dependencies.
+No release approval or archival is implied.

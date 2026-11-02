@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines crate-adjacency receivers as the central Goof-inspired puzzle mechanic, preserving color matching and orthogonal contact while adding a complete independent world pack.
+Defines matching-color cardinal crate-adjacency receivers, their derived contacts and signal edges, and Goof Proximity's eight-level progression. Linked consumers and actor lifecycle use the common V2 state/event and occupied-surface closure contracts.
 
 ## Requirements
 
@@ -22,15 +22,23 @@ The system SHALL activate a receiver when at least one crate of its configured c
 - **THEN** the receiver remains inactive
 
 ### Requirement: Receiver activity follows crate movement
-The system SHALL recalculate receiver activity from the current crate positions after each resolved action and deactivate a receiver when no matching crate remains adjacent.
+Receiver activity and all matching cardinal contacts SHALL derive from the current board after every atomic commit, including automatic hops. Inactive/active edges SHALL enqueue signal reactions; unchanged activity SHALL NOT repeatedly fire. Multiple matching contacts SHALL combine with OR rather than toggling the receiver per contact.
 
 #### Scenario: Crate is pushed next to a receiver
-- **WHEN** a push places a matching crate next to a receiver
-- **THEN** the receiver activates and its linked lock is reevaluated in the same resolved turn
+- **WHEN** an atomic push creates a matching cardinal contact
+- **THEN** derivation and resulting signal reactions precede remaining lower-priority work
 
 #### Scenario: Last matching crate moves away
-- **WHEN** the last matching adjacent crate is pushed away
-- **THEN** the receiver deactivates and its linked lock returns to its configured state
+- **WHEN** the final matching contact is lost
+- **THEN** release is derived immediately and the link's combined closure request is reevaluated
+
+#### Scenario: One of several matching contacts leaves
+- **WHEN** a receiver still has another matching adjacent crate
+- **THEN** it remains active and emits no release edge
+
+#### Scenario: Crate crosses adjacency during transport
+- **WHEN** two distinct committed hops first create and then remove contact
+- **THEN** each activity edge is captured once even though both occur in one initiating round
 
 ### Requirement: Receiver colors and links are independently authorable
 Each receiver instance used by a level SHALL have a determinable color and lock link, and a receiver SHALL affect only consumers assigned to its link.
@@ -44,15 +52,19 @@ Each receiver instance used by a level SHALL have a determinable color and lock 
 - **THEN** activity on one receiver's link does not change gates on another link
 
 ### Requirement: Receiver state is visible, undoable, and solver-visible
-The system SHALL expose active state and cardinal contact directions to the view and SHALL derive the same linked-gate result in play, undo restoration, and solvability/par search.
+Receiver contacts/activity, combined links, pending/effective closure, and terminal outcome SHALL agree in play, snapshots/restoration, inspection, and search. Successful nonterminal docking actions SHALL be undoable; failed closure attempts SHALL require restart. Same-link receiver/target/plate activity SHALL combine with OR before applying closure.
 
 #### Scenario: Undo crate docking
-- **WHEN** the player undoes a move that activated or deactivated a receiver
-- **THEN** crate positions, receiver activity, gate state, and stroke count return to their prior values
+- **WHEN** an allowed undo restores successful nonterminal docking
+- **THEN** all positions, contacts, activity, closure queries, and counters match the pre-action state
 
 #### Scenario: Solver evaluates docking route
-- **WHEN** a level is checked for solvability or minimum strokes
-- **THEN** the solver uses the same color, adjacency, link, and deactivation rules as gameplay
+- **WHEN** a receiver puzzle is searched and replayed
+- **THEN** it uses the same per-hop edges, color/link matching, and terminal-aware closure outcomes as gameplay
+
+#### Scenario: Another source keeps the link open
+- **WHEN** one receiver deactivates but another same-link receiver, target, or plate remains active
+- **THEN** that release does not close the shared route merely because its own source became inactive
 
 ### Requirement: Goof Proximity has eight progressive levels
 The world pack SHALL contain eight named levels matching the blueprint progression and board limits, with no level requiring crate-on-target occupancy as a substitute for adjacency.
@@ -64,3 +76,14 @@ The world pack SHALL contain eight named levels matching the blueprint progressi
 #### Scenario: Mastery coordinates dependent docks
 - **WHEN** the player selects level 8
 - **THEN** the level combines multiple color/link docks whose individual activity and route consequences remain inspectable
+
+### Requirement: Every shipped docking level is migrated and certified
+All eight Goof Proximity levels SHALL retain identity/progression and receive replay-proven V2 minima with matching teaching text. Belt-driven docking and re-docking SHALL follow the common conveyor contract, per-hop receiver edges, and common occupied-surface closure. Decorative receivers or route bypasses SHALL be disclosed or corrected.
+
+#### Scenario: Belt-driven docking changes the shortest route
+- **WHEN** universal queue-opening transport changes a dock's timing or essential use
+- **THEN** the board/lesson/PAR are revised together rather than retaining a passenger-kind exception
+
+#### Scenario: A receiver is claimed essential
+- **WHEN** certification states that a receiver/gate is necessary
+- **THEN** route review or a controlled disabled-mechanic probe supports that claim under V2

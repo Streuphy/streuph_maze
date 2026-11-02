@@ -1,5 +1,10 @@
 # World 4: queued V2 vector review
 
+> **2026-11-02 status follow-up:** Contract-sync statements below describe the
+> content-certification checkpoint. The ten V2 deltas are now synchronized;
+> current audit/approval dependencies are in the [verification follow-up](v2-verification.md#documentation-review-follow-up--2026-11-02).
+> Board/route evidence below is unchanged, not a new browser run.
+
 Source `data/worlds/world-04-pengo-vector.levels.yaml`, stable identity
 `world-04-pengo-vector`, eight levels. Full pack browser/release gates are
 separate from the content/math reviews below.

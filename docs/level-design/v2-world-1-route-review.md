@@ -1,5 +1,10 @@
 # World 1: queued V2 route review
 
+> **2026-11-02 status follow-up:** Contract-sync statements below describe the
+> content-certification checkpoint. The ten V2 deltas are now synchronized;
+> current audit/approval dependencies are in the [verification follow-up](v2-verification.md#documentation-review-follow-up--2026-11-02).
+> Board/route evidence below is unchanged, not a new browser run.
+
 Source: `data/worlds/world-01-sokoban.levels.yaml`, stable identity
 `world-01-sokoban`, eight levels. Content/math review is separate from the
 repository/Chromium results in `v2-verification.md` and pending accepted-spec approval.

@@ -1,98 +1,130 @@
-# Streuph's Maze — rules of the game
+# Streuph's Maze — game rules
 
-These are the player-facing rules of the sole queued V2 implementation. The
-[Tile Mechanics Reference](level-design/tile-mechanics.md) defines every tile
-and object; the [PDD](Product_Design_Document.md) explains transaction ownership.
-The selected `v2-global-pack-migration` tracks final verification and pending
-accepted-spec synchronization, not a second playable ruleset.
+Guide the dot to the exit with its aura matching the world color. Each command
+resolves completely before the next one; there are no timed moves or sweeping
+beams. Inspect tiles to see their current behavior and state.
 
-## Inspectable state
+## Commands and strokes
 
-The dot is the controllable object. Its position/aura, world color, crates,
-switches, signals, barriers, arrows, and ray cells determine the next outcome.
-Inspection exposes relevant state; no hidden previous input, timer, or animation
-phase can change gameplay. This means inspectable state, **not absence of state**.
+| Action | Control |
+|---|---|
+| Move one cardinal step, pushing one eligible object if legal | Arrows / WASD / HJKL |
+| Pull an eligible object immediately behind you while advancing | Shift + direction |
+| Action / Rest on the tile you occupy | Space / Enter |
+| Undo a nonterminal round | Z |
+| Restart the level | R |
+| Next level | N |
+| Inspect a tile | Click |
 
-World and dot colors are exactly White, Red, Green, and Blue. Black/mute are
-presentation colors only. Prisms replace the dot's aura P; dials change world W.
-Colors do not mix, decay, grant crate mobility, or create an inventory. The goal
-always displays W. Polarity red-open/blue-open is a separate binary state.
+A successful move, push, pull or Action/Rest costs **one stroke**. Automatic
+movement adds none. A blocked directional command counts as an attempt but costs
+no stroke and does not advance conveyors or hazards. A push or pull either moves
+both participants together or moves neither. There is no default chain push.
 
-## Commands and rounds
+Action affects only your **current tile**, never neighboring tiles. On plain
+floor it still acts as rest: eligible passengers already on conveyors can move.
+Movement bindings are source-configured; there is no in-game rebinding screen.
 
-- Arrows/WASD/HJKL move one cardinal step, or push one eligible object if the
-  complete push is legal. There is no default chain push.
-- Shift+direction explicitly pulls an eligible trailing object into the dot's
-  vacated cell while the dot advances. Capabilities, not floor color, permit it.
-- Space/Enter or Action/Rest invokes the **current tile only**. Missing hooks
-  are no-ops, but rest still opens an environmental propagation round. It does
-  not activate neighboring objects or tiles.
-- The initiating movement/push/pull and every accepted ACTION cost one stroke.
-  Automatic work costs none. A blocked direct command increments attempts but
-  costs no stroke and triggers no environmental work.
+## Colors and the exit
 
-One command resolves completely before another gameplay command. Push/pull
-actors commit together; no signal sees a half-move. Each committed hop derives
-current signals and captures supported entry/departure triggers by identity.
-Priority is signal reactions, then transport, then ordinary effects; source y/x
-and enqueue order break ties. Newly produced signals preempt remaining transport.
+There are four gameplay colors: **White, Red, Green and Blue**. The dot's aura
+is called **P**; the world color is **W**. Prisms replace P; dials change W.
+Colors do not mix, fade or give crates extra movement abilities. Black and muted
+tones are display colors, not additional gameplay states.
 
-## Movement and signals
+The exit displays W. You win on a **legal entry** when P and W match at that
+entry's checkpoint, after its signal reactions. Standing on the exit and changing
+colors to match is not enough: leave and enter again while matching. A winning
+entry ends the round before later automatic effects or ray exposure. Physical
+closure beneath the dot takes precedence and can fail the attempt first.
 
-Objects/features sit over independent terrain; moving them never drags the
-floor. Stationary targets are non-blocking. Default crates are pushable, not
-pullable, conveyor-enabled, portal-disabled, and ray-blocking. Explicit authored
-profiles can change supported capabilities. The dot has its own object definition,
-not the start marker's definition.
+## Objects and movement tiles
 
-Conveyor arrows name the adjacent **exit**, regardless of entry side. All belt
-IDs share one passenger policy, with White/inert tint. Post-direct scans include
-eligible stationary passengers, including during rest. Occupied exits block;
-belts never shove objects standing in front. Explicit ice carries the incoming
-direction only in that round. Portals respect eligible occupants and destination
-legality; arrival provenance prevents bouncing back automatically.
+- **Crates** sit over the floor: moving a crate does not move the terrain.
+  Defaults allow pushing and conveyor movement, but not pulling or portal travel;
+  authored capability profiles can explicitly enable supported interactions.
+  Crate color does not grant mobility.
+- **Targets** are non-blocking features. You can walk onto an ordinary stationary
+  target without moving or activating it. Moving a target requires an explicitly
+  enabled capability; its identity and link move with it.
+- **Conveyors** point to their adjacent **exit**, regardless of which side you
+  entered from. Their White default tint is mechanically inert. All conveyor
+  variants use the same eligibility rules; blocked exits never shove another crate.
+  Stationary eligible passengers are checked after a successful command or rest.
+- **Ice** continues eligible movement in the incoming direction during that round;
+  it does not remember a previous command's direction.
+- **Portals** transport eligible occupants to a legal linked partner. Arrival
+  does not automatically bounce you back. Blocked destinations do not destroy
+  or displace occupants.
 
-Player plates use dot occupancy; targets use same-cell crate occupancy;
-receivers use matching-color cardinal crate adjacency. They are not substitutes.
-All receiver contacts and same-link sources combine with OR. Only activity edges
-create reactions; unchanged occupancy does not repeatedly fire. Tagged toggle
-keys latch rather than being consumed. Master lock forces linked gates shut.
+Effects on intermediate entered cells still count, even when automatic movement
+then carries the dot away. Automatic movement and tile reactions are deterministic,
+not controlled by animation speed.
 
-Carrier gates test their declared P or W **at entry**. Link/default/toggle/source/
-master state separately requests physical closure. Gates, polarity barriers,
-and phase void use the same occupied closure policy: a crate holds closure
-visibly pending until departure; reopening cancels it. Effective closure beneath
-the dot fails immediately. Mere carrier mismatch is an entry filter, not closure.
+## Signals, gates and polarity
 
-## Win, fail, and recover
+These three sources have different activation conditions:
 
-After a legal dot **goal entry**, resolve its signal reactions and closure first.
-If P equals W and the dot still legally occupies that goal, victory commits
-immediately and cancels later effects/rays. A stationary color match or ACTION
-while already there does not manufacture another entry.
+| Source | Active when… |
+|---|---|
+| Player plate | The dot occupies it |
+| Crate target | A crate occupies the same cell |
+| Receiver | A matching-color crate is immediately north, south, east or west |
 
-Only a non-winning drained queue gets final ray exposure testing. Exposure fails
-the attempt, preserves the settled board and normal stroke, and blocks further
-gameplay/undo. Closure beneath the dot can fail earlier, before victory. Failed
-attempts award no completion/best score or victory image. **R restarts**; level
-navigation remains available. Z undoes successful non-failed rounds, not a failed
-attempt. There is no automatic hazard recovery teleport.
+A diagonal crate, or one on a receiver itself, does not activate that receiver.
+Several matching contacts keep it active; same-link sources combine so any active
+one can satisfy the link. Tagged keys toggle persistent latches rather than being
+consumed. The master lock overrides linked gates. Signals update at every
+committed step, including automatic movement.
 
-Cycles, invalid mutations, exceptions, or the 64-attempts-per-cell action budget
-are different: they roll back the **whole action**, charge no stroke/counter,
-retain no partial mutation/discovery, and report a diagnostic rather than a loss.
+Color gates check their declared P or W color **when you try to enter** as well
+as their effective lock state. A color mismatch blocks entry; it is not physical
+closure beneath an occupant. The polarity crystal is separate from colors: use
+Action while on it to exchange red-open and blue-open barrier classes.
 
-## Worlds and golf scores
+Linked gates, polarity barriers and master-controlled void share one closure
+policy. A crate holds requested closure **pending** until it leaves; reopening
+cancels the pending close. Effective closure beneath the dot immediately fails
+the attempt. The dot is not pushed out or allowed to continue from a closed cell.
 
-The Prologue has 13 levels; six implemented worlds have eight each: 61 total.
-Imported world levels remain directly selectable; no prototype prerequisite
-authoring field is supported. A score/PAR is an actual minimum only after the
-shared solver proves it and the route replays through the real resolver.
-Unknown is neither a minimum nor an impossibility proof. Directional balance
-chooses a representative among tied minima; ACT counts toward PAR but not
-U/D/L/R balance. Personal bests and partial world totals are separate records.
+## Rays, failure and recovery
 
-Current progress uses contract `v2-queued`, schema 1, in a fresh V2 namespace.
-Prior serialized scores are left unread and untouched, never imported as current
-completion. Export/import current progress JSON for backup; authored levels
-remain YAML. Storage can fall back to session memory under `file://`.
+Each emitter projects one fixed cardinal ray. Walls, effectively closed surfaces
+and ray-blocking crates shield cells beyond them; open gates and default targets
+do not. Rays and any enabled ray-object movement resolve as part of commands,
+not a timer. Exposure is checked on the settled board only if the round has not
+already won. Passing through a ray during automatic movement is not itself the
+final exposure test.
+
+Exposure or physical closure can **fail** the attempt. The settled board and
+normal initiating stroke remain; gameplay and player undo are blocked. Failure
+awards no completion, best score or victory picture. **Restart with R**, or use
+level navigation. There is no automatic return-to-start after exposure.
+
+Z restores a completed nonterminal round, including all its automatic effects.
+An engine diagnostic is different from failure: a cycle or invalid transaction
+rolls back the entire command without keeping partial changes or charging a
+stroke/attempt. See the [technical contract](../openspec/specs/event-resolution/spec.md)
+for scheduling, safety limits and state/event guarantees.
+
+## Packs, PAR and progress
+
+The Prologue has 13 levels; six additional worlds have eight each: **61 levels**.
+Under `file://`, load packs with the file picker, drag-and-drop or YAML paste.
+Imported levels are directly selectable; invalid packs leave the active game
+unchanged. See the [pack guide](world-level-packs.md).
+
+**PAR** is the minimum strokes only when the shared solver has proved it and
+replayed a winning route. A declared score or personal best is not that proof.
+`Unknown` means the search did not establish an answer, not that the level is
+solvable or impossible. Automatic motion is free, but Action/Rest counts toward PAR.
+Directional balance only chooses a representative among tied minimum routes;
+it does not change PAR.
+
+Progress is separate for each world. Earlier-rule scores are not imported into
+the current game, and their stored bytes are left untouched. Use current-progress
+**JSON export/import** for backup; authored packs are **YAML**. If browser storage
+is unavailable or full, progress lasts only for the current session.
+
+For exact definitions and defaults, use the [Tile Mechanics Reference](level-design/tile-mechanics.md).
+For contracts, architecture and evidence, start at the [documentation guide](README.md).

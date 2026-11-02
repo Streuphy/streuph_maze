@@ -1,5 +1,10 @@
 # World 5: Chip's Chromatic — route review
 
+> **2026-11-02 status follow-up:** Contract-sync statements below describe the
+> content-certification checkpoint. The ten V2 deltas are now synchronized;
+> current audit/approval dependencies are in the [verification follow-up](v2-verification.md#documentation-review-follow-up--2026-11-02).
+> Board/route evidence below is unchanged, not a new browser run.
+
 The pack uses only the existing `wht`, `red`, `gre`, and `blu` gameplay
 colors. “White fills the yellow-key role” is a theme analogy only: the player
 carrier, gate color, palette, and glyph remain white. There is no mixing or

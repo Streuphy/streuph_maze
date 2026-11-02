@@ -1,5 +1,10 @@
 # Prologue: queued V2 content review
 
+> **2026-11-02 status follow-up:** Contract-sync statements below describe the
+> content-certification checkpoint. The ten V2 deltas are now synchronized;
+> current audit/approval dependencies are in the [verification follow-up](v2-verification.md#documentation-review-follow-up--2026-11-02).
+> Board/route evidence below is unchanged, not a new browser run.
+
 Design/math review of the built-in source, `src/js/levels.default.js`. This is
 not the final jsdom/Chromium or accepted-spec gate. Generated all-pack evidence
 is published in `v2-pack-proofs.json`. Stable identity is

@@ -7,72 +7,72 @@ Defines the Sokoban occupancy-target mechanic used by World 1, where crates are 
 ## Requirements
 
 ### Requirement: Crate occupancy activates a target
-The system SHALL activate a target only while a crate occupies its cell; player occupancy and orthogonal crate adjacency SHALL NOT activate it.
+A target SHALL derive activity only from a same-cell crate after every complete atomic commit. Dot occupancy, adjacency, and stale captured entry events SHALL NOT activate it. Activity edges SHALL enqueue signal reactions; unchanged occupancy SHALL NOT retrigger activation.
 
 #### Scenario: Crate is pushed onto a target
-- **WHEN** a crate is pushed onto a target cell
-- **THEN** that target becomes active during the resolved turn
+- **WHEN** a push atomically places a crate on the target and the dot in its vacated cell
+- **THEN** post-commit derivation activates the target before lower-priority work sees the board
 
 #### Scenario: Crate is adjacent to a target
-- **WHEN** a crate is next to, but not on, a target
+- **WHEN** a crate is next to but not on a target
 - **THEN** that target remains inactive
 
 #### Scenario: Player stands on a target
-- **WHEN** the player stands on a target without a crate occupying it
-- **THEN** that target remains inactive
+- **WHEN** the dot occupies a target without a same-cell crate
+- **THEN** the feature is non-blocking and inactive
 
 ### Requirement: Target activity controls its linked gate
-The system SHALL use target activity to satisfy the matching lock link, keeping the linked gate passable while the target is occupied and restoring its locked state when occupancy ends.
+Target activity SHALL contribute a momentary signal to its matching link after each atomic commit, combining with other active sources by OR. Release SHALL update the closure request immediately; effective closure SHALL use the common crate-pending/dot-failure policy rather than waiting for the round to finish.
 
 #### Scenario: Occupied target opens linked gate
-- **WHEN** a crate occupies a target linked to a closed gate
-- **THEN** the linked gate becomes passable after the turn resolves
+- **WHEN** a commit places a crate on a target linked to a closed gate
+- **THEN** derivation/reactions open its requested route before later queued movement evaluates that gate
 
 #### Scenario: Crate leaves a momentary target
-- **WHEN** a crate is pushed off a target that controls a momentary link
-- **THEN** the target becomes inactive and its linked gate returns to its configured locked state
+- **WHEN** the last satisfying source on the link becomes inactive
+- **THEN** the gate's closure request returns to its combined configured state with pending or terminal consequences applied immediately
 
 #### Scenario: Unrelated link remains unchanged
-- **WHEN** a crate occupies a target on one link
-- **THEN** gates on other links do not change state because of that target
+- **WHEN** a target on one link changes
+- **THEN** that signal does not directly alter unrelated links
 
 #### Scenario: Multiple target and gate links coexist
-- **WHEN** a level contains target/gate pairs configured on different supported links
-- **THEN** each target changes only the gates assigned to its own link
+- **WHEN** multiple target/gate pairs and other signal sources coexist
+- **THEN** each link uses only its assigned sources and combines simultaneous satisfactions with OR
 
 ### Requirement: Sokoban crates can only be pushed
-World 1 SHALL use a push-only crate profile: the player can move a crate only by entering its cell while the next cell in that direction is in bounds, unoccupied by another crate, and not solid. World 1 crates SHALL NOT be pullable, and World 1 target markers SHALL remain stationary.
+World 1 SHALL retain push-only crates and stationary non-blocking target features. Each push SHALL preflight both actor destinations and commit dot/crate together before deriving targets. World 1 SHALL NOT gain automatic pulling, color/floor mobility tiers, or implicit chain pushing from the global migration.
 
 #### Scenario: Successful push
-- **WHEN** the player moves toward a crate with a valid destination cell beyond it
-- **THEN** the crate moves one cell forward and the player enters the crate's previous cell as one player action
+- **WHEN** the dot faces a crate whose destination and following dot cell are legal
+- **THEN** crate and dot move atomically as one stroke
 
 #### Scenario: Crate leaves its starting cell
-- **WHEN** a crate is pushed away from its initial grid cell
-- **THEN** the vacated cell exposes its underlying walkable floor or feature rather than remaining a solid crate tile
+- **WHEN** a crate is pushed away
+- **THEN** its source exposes unchanged supporting terrain/feature state
 
 #### Scenario: Blocked push
-- **WHEN** a crate's destination is outside the board, occupied by another crate, or solid
-- **THEN** neither crate nor player moves and the action costs no stroke
+- **WHEN** the crate destination is illegal or occupied incompatibly
+- **THEN** neither actor moves and no direct stroke is charged
 
 #### Scenario: Pull is not part of World 1 Sokoban
-- **WHEN** the player issues a pull with a World 1 crate immediately behind
-- **THEN** the action is blocked without moving either entity or charging a stroke
+- **WHEN** an explicit pull addresses a default World 1 crate
+- **THEN** the request blocks without relocation or a stroke
 
 #### Scenario: World 1 target remains a floor marker
-- **WHEN** the player attempts to push or pull a World 1 target marker
-- **THEN** the target remains in place and the action is blocked without a stroke
+- **WHEN** an unsupported target-relocation request is made
+- **THEN** the marker stays stationary; ordinary dot movement onto it remains legal and does not activate it
 
 ### Requirement: Sokoban state is undoable and solver-visible
-The system SHALL include crate positions and derived target/gate activity in turn resolution, state cloning, undo restoration, and solvability search so that displayed play, undo, and computed par agree.
+Crates, target positions/identity, signal activity, closure requests/effective state, and outcome SHALL agree in play, clone, snapshots/restoration, and search. Successful nonterminal actions SHALL be exactly undoable; terminal closure SHALL block undo. Minimum routes SHALL use the same V2 atomic effects and signal priority as play.
 
 #### Scenario: Undo a crate push onto a target
-- **WHEN** the player undoes a push that moved a crate onto or off a target
-- **THEN** the player, crate, target activity, gate state, and stroke count return to their exact pre-push values
+- **WHEN** an allowed undo restores a successful nonterminal target push
+- **THEN** dot, crate, target activity, closure, and counters match their pre-action values
 
 #### Scenario: Solver evaluates target route
-- **WHEN** a World 1 level is checked for solvability or minimum strokes
-- **THEN** the solver evaluates crate occupancy and linked-gate state using the same rules as interactive play
+- **WHEN** World 1 solvability and PAR are certified
+- **THEN** search and replay use the same immediate occupancy edges and terminal-aware closure behavior as interactive play
 
 ### Requirement: World 1 levels follow the Sokoban teaching progression
 The World 1 pack SHALL contain eight named levels matching the blueprint's tutorial-to-mastery roles, within the engine's 16-column by 9-row maximum; levels 1–3 SHALL avoid unintended irreversible softlocks.

@@ -2,51 +2,74 @@
 
 ## Purpose
 
-Defines the authoritative level-designer contract for tile identity, parameters, passability, state, and the standard deterministic turn rules. It distinguishes behavior present in the runtime from registered or in-flight mechanics whose behavior is introduced or completed by this change.
+Defines the sole queued V2 catalogue and authoring contract for existing tile/object identities, parameters, capabilities, state and triggers. Shared transaction, closure, outcome and event guarantees are owned by [event-resolution](../event-resolution/spec.md); exact defaults and usage are indexed in the [Tile Mechanics Reference](../../../docs/level-design/tile-mechanics.md).
+
+## Interpretation
+
+Definitions supply declared behavior; IDs and family names are data, not engine
+dispatch cases. "Locked" describes a requested lock. Destination solidity uses
+effective closure, including crate-held pending closure, under event-resolution.
+Carrier mismatch is a separate entry filter. Source activity is derived after
+each commit. This distinction applies to the preserved link/passability clauses
+below as well as the uniform catalogue.
 
 ## Requirements
 
 ### Requirement: The tile catalogue is documented by stable ID and behavior
-The system SHALL provide level designers an authoritative catalogue of each registered tile ID, its family, default parameters, interaction role, and whether its rules are implemented or newly specified.
+The system SHALL document every registered tile and the dot using a uniform V2 definition covering identity/layer, defaults, color meaning, triggers/queue, legality, commits/events, blocked/terminal behavior, presentation, and lifecycle. Usage SHALL distinguish shipped IDs from supported unused entries. Reserved/unsupported IDs SHALL NOT acquire guessed behavior.
 
 #### Scenario: Designer looks up an implemented tile
-- **WHEN** a designer looks up a registered implemented ID
-- **THEN** the reference identifies its name, family, defaults, passability, and gameplay effect
+- **WHEN** a designer looks up a supported ID
+- **THEN** the maintained reference supplies its complete definition, effective authoring parameters, and shipped pack usage
 
 #### Scenario: Designer encounters a reserved or unsupported ID
 - **WHEN** a grid uses an unknown, reserved, retired, or explicitly unimplemented ID
 - **THEN** the level is rejected with a diagnostic rather than assigning the ID guessed behavior
 
-**Catalogue reference (IDs not listed as available are gaps, not aliases):**
+**Complete supported-ID index (full definitions and usage are maintained in the tile reference):**
 
-| ID(s) | Tile(s) | Family | Standard behavior and authoring notes | Status |
-|---|---|---|---|---|
-| 0 | `floor` | terrain | Walkable, non-solid, no entry effect. | Runtime |
-| 1 | `start` | terrain | Walkable start marker; exactly one per level. | Runtime |
-| 2 | `goal` | terrain | Walkable; wins only when the player is on it and player color `P` equals world color `W`. | Runtime |
-| 3 | `wall` | terrain | Always solid; blocks player entry and object destinations. | Runtime |
-| 4 | `void` | terrain | Walkable by default; becomes solid while the global `master_void` latch is on. | Runtime |
-| 5 | `ice` | terrain | Walkable; carries the player and conveyor-compatible objects in their incoming direction. | Runtime |
-| 10, 26, 27 | `phase_wall`, `_link_2`, `_link_3` | barrier | Solid while locked, with defaults on links 1, 2, and 3 respectively; no color test. | Runtime |
-| 11–13 | `prism_red`, `_gre`, `_blu` | aura | Walkable; on final entry sets `P` to the named color. | Runtime |
-| 20 | `cycle_dial` | actuator | On entry or ACT, advances `W` through red → green → blue → red; white advances to red. | Runtime |
-| 21 | `cycle_reset` | actuator | On entry or ACT, sets `W` to white. | Runtime |
-| 22 | `set_dial` | actuator | On entry or ACT, sets `W` to its configured color only while any active switch/sensor/target shares its configured link; defaults to link 1 and red. | Runtime |
-| 23–25 | `target_link_1`–`_3` | target | Non-blocking floor features, stationary by default; momentary link signals active only while a crate shares their cell. Movement can be explicitly enabled per entity, in which case link and identity move with the target. | Runtime |
-| 30–33 | `aura_gate_wht/red/gre/blu` | gate | Requires `P` to match its color and its lock to be open. Unwired link 0 defaults open; assigning a link defaults it closed unless `defaultLocked` is explicit. | Runtime |
-| 34–36 | `world_gate_red/gre/blu` | gate | As above, but checks `W` instead of `P`; defaults to unwired link 0. | Runtime |
-| 40, 42 | `plate`, `link_plate` | switch | Walkable, tagged momentary link (default 1); active while the player stands on the cell. | Runtime |
-| 41 | `link_key` | switch | Walkable, tagged toggle link (default 1); each entry or ACT toggles its latch. | Runtime |
-| 44 | `master_lock` | switch | Walkable global toggle; when latched, forces every lock-controlled tile closed. | Runtime |
-| 45 | `master_void` | switch | Walkable global toggle; when latched, makes all ordinary void (ID 4) cells solid. | Runtime |
-| 50 | `receiver` | sensor | Walkable; active if at least one orthogonally adjacent crate matches its configured color (default red); defaults to link 1. A crate on the receiver is not adjacent. | Runtime |
-| 60–63 | `crate_east/west/north/south` | flow | Walkable crate-force belts. When the player's force chain traverses one, it shoves a compatible crate or object one cell in the belt direction; eligible objects can continue along their bounded force chain. | Runtime |
-| 64–67 | `player_east/west/north/south` | flow | Walkable player belt; carries the player in its direction during the same turn. Compatible objects can also receive flow movement. | Runtime |
-| 70–73 | `crate_wht/red/gre/blu` | crate | Movable solid objects over ordinary floor; pushable but not pullable by default, conveyor-compatible, ray-blocking, and not portal-compatible unless overridden. | Runtime |
-| 80 | `portal` | portal | Walkable; matching-link portals form a pair and transport the player; compatible objects can also use them. Link defaults to 0. | Runtime |
-| 81–84 | `ray_north/east/south/west` | hazard | Static cardinal emitters. Capability-compatible objects can be transported along the ray; exposed players are caught and respawned. | Runtime |
+| ID(s) | Definition | V2 attributes and behavior |
+|---|---|---|
+| 0 | Ordinary floor | Passable terrain; no intrinsic entry/ACTION effect. |
+| 1 | Start | Unique dot-origin floor marker; restart origin, not a recovery teleport. |
+| 2 | Goal | Unique passable marker; color follows `W`; matching entry checkpoint commits immediate victory. |
+| 3 | Wall | Solid; blocks movement and rays. |
+| 4 | Phase void | Normally passable; `master_void` requests solidity; common occupied-surface closure applies. |
+| 5 | Ice | Incoming-direction queued transport, per-hop effects, no next-round memory. |
+| 10,26,27 | Linked barriers | Links 1/2/3; requested closed by default; common pending/failure closure. |
+| 11,12,13 | Prisms | Default Red/Green/Blue; captured dot-entry or current ACTION sets `P`. |
+| 20 | Cycle dial | Sets `W` through White→Red→Green→Blue→Red on captured entry/current ACTION. |
+| 21 | Reset dial | Sets `W` to White on captured entry/current ACTION. |
+| 22 | Linked set dial | Default link 1/Red; sets `W` when the configured source link is active at execution. |
+| 23,24,25 | Target features | Links 1/2/3; crate occupancy only; stationary, non-blocking, ray-transparent defaults. |
+| 30,31,32,33 | Dot-carrier gates | Require `P` White/Red/Green/Blue; unwired link 0/open lock default. |
+| 34,35,36 | World-carrier gates | Require `W` Red/Green/Blue; unwired link 0/open lock default. |
+| 40,42 | Player plates | Dot occupancy; tagged momentary link 1 default. |
+| 41 | Tagged toggle | Link 1; each captured entry/current ACTION flips one latch. |
+| 44 | Master lock | Global latch forces physical closure requests for lock-controlled gates. |
+| 45 | Master void | Global latch requests solidity for phase void. |
+| 46,47 | Polarity barriers | Open in `red-open`/`blue-open`; common occupied-surface closure applies. |
+| 48 | Polarity crystal | Current-tile ACTION flips the independent binary polarity once. |
+| 50 | Receiver | Red/link 1; matching cardinal crate contacts with OR activity. |
+| 60,61,62,63 | Conveyors | East/West/North/South exits; White/inert tint; common eligible-passenger transport. |
+| 64,65,66,67 | Conveyors | East/West/North/South exits; same transport semantics as 60–63. |
+| 70,71,72,73 | Crate objects | White/Red/Green/Blue; pushable/not-pullable, conveyor-compatible, ray-blocking, portal-incompatible defaults. |
+| 80 | Portal floor | Link 0 default; paired legal transport; arrival provenance prevents automatic bounce-back. |
+| 81,82,83,84 | Emitters | North/East/South/West; queued object transport, final non-winning exposure causes failure. |
+| 90,91,92 | Receivers | Green/Blue/White, link 1. |
+| 93,94,95,96 | Receivers | Red/Green/Blue/White, link 2. |
+| 97,98,99,100 | Receivers | Red/Green/Blue/White, link 3. |
 
-IDs 6–7 are retired, and unlisted gaps are not usable tiles unless added to the registry with defined behavior. Gameplay colors are exactly `wht`, `red`, `gre`, and `blu`; `blk` and `mute` are presentation colors only.
+The dot is a separate movable object, not ID 1. Its cardinal movement, explicit
+eligible pull, ACTION, color, transport/hazard profile, terminal state, events,
+and lifecycle SHALL be documented like other objects. Crate/target markers
+normalize over independent terrain. Capability overrides remain explicit.
+
+IDs 6–7 are retired; gaps are not aliases. Gameplay colors are exactly `wht`,
+`red`, `gre`, and `blu`; `blk`/`mute` are presentation colors. Conveyor tint is
+White by default and mechanically inert. Supported per-ID parameters override
+defaults for their level; links assigned to unwired carrier gates default their
+lock closed unless explicitly configured otherwise.
 
 ### Requirement: Level grids and tile overrides have consistent coordinates
 The system SHALL interpret authored grids top row first, convert them once to a bottom-left-origin runtime board, and merge each used tile ID's override values over that tile's defaults.
@@ -123,47 +146,62 @@ The system SHALL calculate each switch or sensor from its declared activation mo
 - **THEN** the target activates its link; player occupancy, adjacency, or a crate on a different cell does not activate it
 
 ### Requirement: Tile effects occur at standard resolver boundaries
-The system SHALL resolve direct actions, forced movement, ray interactions, respawn, and goal checks in a deterministic order independent of rendering or wall-clock time.
+The system SHALL use the V2 event-resolution contract: commit direct actions atomically, capture every entered/departed cell, derive signals/closure after each effect, and process signal, transport, then ordinary work. Matching goal-entry checkpoints SHALL interrupt before later work; only a non-winning drained queue SHALL receive final ray exposure testing.
 
 #### Scenario: Movement enters an effect tile
-- **WHEN** a successful move and its forced movement chain finish
-- **THEN** the final resting tile's entry effect runs once; intermediate force-chain cells do not independently run player entry effects
+- **WHEN** a successful movement crosses intermediate forced-movement cells
+- **THEN** each supported entry effect is captured once and remains queued even if the actor moves again before execution
 
 #### Scenario: Player uses ACT
-- **WHEN** ACT is issued
-- **THEN** the effect on the player's current tile is invoked once, followed by link/ray resolution and goal evaluation
+- **WHEN** ACTION is issued
+- **THEN** the current tile's action hook is invoked through the queue and initial conveyor occupants receive transport work; no entry record is fabricated by stationary ACTION
 
 #### Scenario: Ray transport and catch order
-- **WHEN** a successful move/pull or ACT reaches ray resolution
-- **THEN** derive locks, transport ray-compatible objects in stable emitter scan order, derive locks again, evaluate player exposure on the post-transport board, respawn and re-derive locks if caught, then test the final goal state
+- **WHEN** a committed action has not already won or failed and the queue finishes its transport and other work
+- **THEN** final rays are traced and exposure causes terminal failure without recovery teleport
 
 #### Scenario: Ray transport precedes player exposure
-- **WHEN** a resolved action transports one or more ray-compatible objects and leaves the player on an exposed ray cell
-- **THEN** the player is caught and respawned before the final goal test, with no extra stroke for transport or respawn
+- **WHEN** queued ray transport has completed in a non-winning action whose queue drains
+- **THEN** exposure uses that settled board and commits failure without an extra stroke
+
+#### Scenario: Winning entry precedes ray exposure
+- **WHEN** a matching goal entry passes its signal/closure checkpoint
+- **THEN** victory cancels remaining work and no later ray sample can replace it
 
 #### Scenario: Goal is reached with unequal colors
-- **WHEN** the player rests on the goal with `P` different from `W`
-- **THEN** the level remains uncleared; it clears once both colors match while the player is on the goal
+- **WHEN** the dot enters a goal with `P` different from `W` at its checkpoint
+- **THEN** it does not clear, and a later stationary color match still requires legal matching re-entry
 
 ### Requirement: Turns, strokes, and view playback share one deterministic result
-The system SHALL make the synchronous rule result authoritative and return ordered state-change events for display, undo, and solver use.
+The synchronous V2 result SHALL own gameplay outcomes and ordered committed events for display, undo, and solver use. A normal accepted action SHALL have one initiating stroke at most. Invariant/cycle/budget aborts SHALL restore all pre-action gameplay and counters; terminal failures SHALL retain the normal initiating stroke and SHALL NOT permit undo.
 
 #### Scenario: Successful movement has forced hops
-- **WHEN** one movement action causes one or more automatic hops or interactions
-- **THEN** all effects resolve as one turn and cost at most the single initiating movement stroke
+- **WHEN** one movement action causes automatic hops or interactions
+- **THEN** all substeps belong to one turn and cost only its initiating movement stroke
 
 #### Scenario: Blocked move
-- **WHEN** movement cannot commit any change because of a blocker
-- **THEN** it costs no stroke and leaves the board unchanged
+- **WHEN** direct movement cannot commit because of a blocker
+- **THEN** it costs no stroke and leaves the board unchanged with no environmental propagation
 
 #### Scenario: Blocked action advances the turn counter
-- **WHEN** a well-formed directional move is blocked
+- **WHEN** a well-formed directional command is blocked before any direct commit
 - **THEN** the attempt increments the turn counter but not the stroke counter
 
 #### Scenario: ACT is used
-- **WHEN** ACT is issued, including when the current tile has no effect
-- **THEN** it consumes one stroke and one turn
+- **WHEN** ACTION is accepted, including on a tile with no action hook
+- **THEN** it costs one stroke and one turn unless the whole transaction aborts diagnostically
 
 #### Scenario: Playback timing changes
 - **WHEN** identical states receive identical actions with different display timing
-- **THEN** the final rules state, turn events, and solver result are identical
+- **THEN** final state, committed events, solver result, and diagnostic/terminal outcome are identical
+
+### Requirement: Maintained gameplay assets describe only the sole V2 contract
+Maintained runtime, packs, tests, help, registry/gallery, and documentation SHALL contain no alternate playable ruleset, obsolete-only compatibility code, or authoritative obsolete-rule instructions. Historical archives and explicitly superseded design records SHALL remain preserved and clearly non-authoritative; Git history and dependency/harness internals SHALL NOT be rewritten.
+
+#### Scenario: Obsolete code has a still-useful generic helper
+- **WHEN** cleanup reviews shared parsing, geometry, rendering, or proof helpers
+- **THEN** useful V2 behavior is retained without retaining an alternate resolver or deleting code solely because of its age
+
+#### Scenario: Maintained asset audit finds a conflicting recovery tutorial
+- **WHEN** active help, a level goal, an accepted specification, or the gallery still teaches recoverable exposure
+- **THEN** migration cannot be declared complete until that maintained asset describes the terminal V2 outcome

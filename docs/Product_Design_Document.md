@@ -1,12 +1,12 @@
 # Product Design Document (PDD) — Tile Mechanics Architecture
 
-**Status:** Adopted queued V2 design; implementation/content review tracked in `openspec/changes/v2-global-pack-migration/`. Final verification and accepted-spec synchronization remain explicit release gates.
+**Status:** Implemented queued V2 design. Its ten existing capability deltas are now synchronized into accepted specifications by `doc-review-v2-ruleset`. Whole-tree audit readiness and release approval remain separate; see the [archived review](../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md).
 
-**Target:** Resolver ownership, atomic tile-effect scheduling, and global pack migration.
+**Target:** State/event contracts, resolver ownership and registered mechanic behavior.
 
 **Scope:** One queued interpretation of all existing mechanics. Consumable inventory keys and crumbling paths are explicitly out of scope.
 
-> **Authority note:** This adopted design and the selected change's deltas define the scoped implementation target. The live runtime now uses the sole queued engine. All 61 shipped-source levels have separately recorded design reviews and minimum/replay evidence; that is not final browser/release approval. Accepted specs are not silently synchronized by this document or task completion. See the certification ledger and verification record for current evidence, and the maintained Tile Mechanics Reference for all 62 IDs plus the dot.
+> **Authority:** [Accepted specifications](../openspec/specs/) define the normative V2 baseline, especially [event-resolution](../openspec/specs/event-resolution/spec.md). This PDD explains its abstract model; [Engine Architecture](engine-architecture.md) maps it to current code. The migration deltas are provenance, not an alternate engine. The maintained [tile reference](level-design/tile-mechanics.md) indexes all 62 IDs plus the dot. Proof, browser evidence, contract synchronization and release approval are distinct facts; consult the [verification record](level-design/v2-verification.md).
 
 ---
 
@@ -14,7 +14,7 @@
 
 V2 is global, with no selectable compatibility implementation. All packs use the same declarative loader/validator/resolver; unsupported selectors/fields are rejected atomically. Changes to solutions/PARs require full re-proof, replay, and lesson review before release.
 
-Current behavior is fully defined by this contract and the maintained uniform tile/object reference; no unspecified fallback interpretation survives.
+Current behavior is defined by the accepted state/event contracts and indexed by the maintained uniform tile/object reference; no unspecified fallback interpretation survives.
 
 The current progress store uses fresh key `streuphs-maze/progress/v2`, contract `v2-queued`, schema 1. It neither reads nor imports earlier completion/best scores and does not delete their serialized bytes. Current records remain world-qualified; rejected imports preserve current data. Denied/full storage falls back to session memory; progress JSON export/import supplies durable user-controlled backup.
 
@@ -40,6 +40,77 @@ Avoid one universal `state` enum. Each mechanic declares its configuration, muta
 | Glyphs, animation, inspection prose | Presentation only |
 
 Gameplay colors remain exactly `wht`, `red`, `gre`, and `blu`. `blk`/`mute` are presentation colors. Binary polarity is a separate level-wide state, `red-open` or `blue-open`; it is not a color, carrier, or inventory token.
+
+### 2.1 Abstract state vocabulary
+
+The notation below describes existing behavior, not new data fields or a public
+API. There is no universal tile `on/off` enum: each definition declares its own
+configuration, state dependencies and supported transitions.
+
+| Symbol | Meaning | Lifetime / authority |
+|---|---|---|
+| `D` | Normalized terrain, immutable definitions, authored parameters, actor identities, initial conditions and initial profiles | Fixed level configuration; moving an actor never moves its supporting terrain |
+| `S` | Canonical positions, P/W, polarity, latches, mutable feature profiles, counters, terminal outcome/reason | Authoritative gameplay state, cloned and restored coherently |
+| `R(D,S)` | Current activity/contacts, requested locks, effective solidity and pending closure | Derived queries/cache rebuilt from canonical inputs; no independent pending-lock truth |
+| `C` | Pending typed effects, trigger payloads, source/actor identity, transport provenance, signal-edge state, attempt count | Transaction-local scheduling context; discarded at settlement, victory, failure or rollback |
+| `E` | Ordered committed movement/color/signal/outcome records and authoritative state frames | Output journal for passive consumers; never an input from animation |
+| `O` | Discovery/seen observations | Auxiliary observation state; restored on diagnostic abort, not a cause of movement |
+
+A settled command is described by `T(D,S,a) → (S',E,result)`, using `C` only
+during evaluation. A derived cache is not an extra mutable source of truth.
+Counters and observations participate in restoration even when excluded from
+the solver's transition-equivalence key.
+
+| Result | Canonical state and events | Accounting / subsequent play |
+|---|---|---|
+| Blocked direct command | No relocation or environment work; blocked feedback | Attempts +1, strokes +0; still playing |
+| Completed nonterminal command | Complete action and propagation journal | Attempts +1, strokes +1; whole-round undo available |
+| Won | Legal matching entry checkpoint after signal/closure consequences; cancel later work | Normal initiating accounting, completion may be published |
+| Failed | Effective closure beneath dot or final non-winning exposure; freeze the settled board | Normal initiating accounting; no gameplay/undo or completion, restart/navigation available |
+| Diagnostic abort | Restore the pre-action canonical/observation snapshot; discard tentative journal, return diagnostic only | No counters/progress committed; not a persistent fourth gameplay outcome |
+
+The three persistent outcomes are `playing`, `won` and `failed`. Malformed
+commands are API validation errors, not player actions; a terminal input is
+blocked. A defensive restored state already closed beneath the dot is validated
+before beginning another transaction; it cannot gain a free escape or invent an
+initiating movement stroke. Ordinary reachable failure retains its initiating
+stroke. These are state validation boundaries, not extra game rules.
+
+### 2.2 Low-coupling behavior boundary
+
+**The shared contract is states and events.** The core is responsible for *when
+and whether a mutation can commit*, not for selecting mechanic behavior by tile
+ID, name, family, tint or world. A registered definition supplies the local
+query/transition policy through named strategies and explicit context. Empty
+hooks are neutral, not an invitation for the engine to infer an effect.
+
+| Producer / owner | Supplies | Must not assume |
+|---|---|---|
+| Definition/strategy | Supported defaults and profiles, local passability/activation/transport/ray queries, declared entry/ACTION/exit/edge behavior and state/event metadata | A particular renderer, animation completion, world-specific loader or executable YAML |
+| Transaction engine | Current-state legality, atomic batches, scheduling/checkpoints, invariants, derivation boundaries, counters, terminal enforcement and rollback | Meaning inferred from an ID range, visual family or ordinary tint |
+| Journal / snapshot layer | Complete validated state changes, stable actor/commit identity and ordered output | A readable animation hint is the full authoritative mutation |
+| View/controller | Inputs, passive playback/inspection and user lifecycle operations | Permission to schedule rule work or choose win/failure |
+
+A queued request is **intent**, not proof a transition happened. Dequeue
+revalidates current source identity, destination and capability. A captured
+entry/departure is evidence of a past committed transition: its declared reaction
+addresses that actor, not whoever later occupies the source. An occupancy signal
+instead queries the current board. A committed output event describes an actual
+validated mutation. These three record types must not be conflated.
+
+Handlers may mutate declared mutable gameplay fields in a synchronous batch;
+the engine validates and journals the whole batch rather than trusting optional
+animation hints. This is not a sandbox or an event-sourcing-only implementation:
+manifests document reads/writes/events, invariants enforce global boundaries, and
+mechanic tests establish local semantic correctness. Counters, observation,
+immutable definitions and checkpoint-only victory retain core-owned constraints.
+The supported actor layers/actions and shared terminal policy remain explicit
+engine concepts; this document does not claim arbitrary plug-ins are supported.
+
+Golden Rules constrain the same boundary: inspectable state and minimal visuals,
+synchronous deterministic outcomes, safe focused early lessons, and route/lesson
+agreement. Reducing coupling means using these declared state/query/event
+interfaces, not deleting the common legality or safety guarantees.
 
 ## 3. Action transaction and propagation
 
@@ -69,9 +140,16 @@ An entry/departure trigger is an immutable event record captured when the transi
 
 The “signals → transport → ordinary effects” ordering is a priority, not a promise to run each category only once. A transport hop can produce a new signal edge; that signal reaction runs before remaining transport or ordinary effects.
 
+The dot-entry **goal checkpoint** is an interrupt between signal and transport
+priority, not an ordinary goal-tile rest effect. Signal reactions can create
+further signal work, which also precedes it. Effective closure is enforced after
+each atomic batch, before a later checkpoint or queued effect. Terminal outcome
+cancels pending reactions; captured triggers are not obligations beyond that
+transaction's termination.
+
 ### 3.3 Handler commits and invariants
 
-Tile handlers may directly mutate any gameplay state. One handler invocation is atomic: its complete mutation batch becomes visible together, then the core validates global invariants and recomputes derived signals/locks. A failed invariant rolls back the entire initiating action and emits a deterministic diagnostic; partial handler state is never retained.
+Tile handlers may directly mutate declared mutable gameplay fields subject to core-owned constraints (§2.2). One handler invocation is atomic: its complete mutation batch becomes visible together, then the core validates global invariants and recomputes derived signals/locks. A failed invariant rolls back the entire initiating action and emits a deterministic diagnostic; partial handler state is never retained.
 
 Core validation SHALL cover at least board bounds, valid entity positions and occupancy, supported color/polarity values, valid gate/source references, coherent terminal/counter state, and well-formed queued effects. Handlers and their tests remain responsible for mechanic-specific legality and intended behavior; core validation is not proof that an arbitrary mutation is semantically correct.
 
@@ -190,8 +268,8 @@ The exhaustive state contract in the selected implementation SHALL be tested acr
 
 The sole queued implementation is not release-ready merely because packs parse. Before release:
 
-1. Complete/review the selected scoped change and separately synchronize accepted specs, including stale Purpose text. Do not archive unfinished work or infer acceptance from task checkboxes.
+1. Keep implementation and accepted specs coherent, including Purpose and unchanged surrounding prose. The existing ten V2 deltas were explicitly synchronized during the documentation review; do not infer release approval from that or archive unfinished work.
 2. Cover all seven shipped packs: Prologue 13 plus six eight-level worlds, 61 levels. Recompute every PAR, replay each minimum, record budgets/counts/tie comparison and fresh fingerprints; missing/unknown/unsolvable rows block completion.
 3. Manually review changed routes, especially World 1 occupancy targets, World 2 rays, World 3 polarity, World 5 color gates, World 6 receivers, and all gate-closure cases.
 4. Use current-only progress without importing incompatible scores; preserve prior bytes and historical archives unchanged, not another executable rules implementation.
-5. Run existing focused suites, full `npm test`, route/asset audits, and separate real Chromium `file://` checks for each pack and gallery. The jsdom suite is not Chromium. Report accepted-spec synchronization as a remaining approval/release dependency until performed.
+5. Run existing focused suites, full `npm test`, route/asset audits, and separate real Chromium `file://` checks for relevant runtime/presentation/pack changes. The jsdom suite is not Chromium. Prose-only review preserves existing fingerprint-bound evidence rather than claiming a fresh native run; record unresolved audit and approval dependencies explicitly.

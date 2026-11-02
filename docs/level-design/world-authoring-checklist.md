@@ -4,11 +4,21 @@ Use this checklist whenever creating or revising a level or world pack. The
 repository-root `AGENTS.md` makes the final `npm test` requirement apply to all
 OpenCode work in this project.
 
-The active `v2-global-pack-migration` applies the sole queued four-color contract
-to all shipped content. Its reviewed deltas control changed goal/closure/hazard
-boundaries until accepted-spec synchronization; do not reintroduce recoverable
-exposure to satisfy historical route notes. Track all 61 rows in
-`v2-pack-certification.md` and preserve historical archives unchanged.
+The level editor (`editor.html`, documented in [level-editor.md](../level-editor.md)) is
+the recommended authoring surface for the workflows below: it loads, edits, validates,
+quick-tests, and exports world-pack YAML through the shared `SM.LEVELS.load` path, and
+runs the standalone A→B solver between two authored snapshot arrangements. It is a
+consumer of the shared validator and real resolver — never a second source of executable
+rules. Hand-authoring YAML remains supported, but the editor's live validation, area
+fill, and quick-test features remove the most common authoring errors.
+
+The sole queued four-color V2 contract applies to all shipped content. Its
+existing migration deltas are synchronized into [accepted specs](../../openspec/specs/);
+the [event-resolution contract](../../openspec/specs/event-resolution/spec.md)
+owns shared goal/closure/hazard ordering. Do not reintroduce recoverable exposure
+to satisfy historical route notes. Track all 61 rows in `v2-pack-certification.md`
+and preserve historical archives unchanged. The [documentation guide](../README.md)
+separates normative contracts, authoring reference and verification evidence.
 
 ## Design review
 
@@ -16,10 +26,11 @@ exposure to satisfy historical route notes. Track all 61 rows in
   minimal visual language, deterministic and inspectable state, a safe and
   focused tutorial, and the eight-level progression from tutorial through
   mastery.
-- Use the world-specific design/specification as the authority for implemented
-  mechanics. If a legacy blueprint description conflicts with an accepted design
-  or current runtime behavior, call out the conflict and follow the accepted
-  design; do not silently introduce unsupported behavior. World 2 hazards, for
+- Use accepted capability specifications and the maintained tile reference as
+  the contract for implemented mechanics; world designs describe teaching intent.
+  If a legacy blueprint, proposed design or runtime behavior conflicts with that
+  contract, record and resolve the conflict before authoring rather than silently
+  introducing unsupported behavior. World 2 hazards, for
   example, are fixed turn-based rays, not timers or sweeping beams.
 - Keep levels 1–3 free of unintended irreversible softlocks. Include a manual
   wrong-push/dead-end review; solver-proven solvability only proves that at
