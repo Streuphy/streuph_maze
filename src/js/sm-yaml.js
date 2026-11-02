@@ -143,6 +143,7 @@
   /* ---------------------------------------------------------------------- */
 
   function splitFlow(body, ln, col) {
+    if (body.trim() === '') return [];
     var parts = [];
     var cur = '';
     var depth = 0;
@@ -410,12 +411,12 @@
     '  * So the cell at grid row 0, column 0 is A<height> (top-left corner).',
     '    A cell commented "C3" is at grid row (height-3), column 2.',
     '  * Every cell is an integer tile id. See src/js/tiles.js for what each id means.',
-    '  * Level keys MUST be level_1, level_2, ... contiguous and in file order',
-    '    (the gating order).',
+    '  * Level keys MUST be contiguous level_1, level_2, ...; numeric order',
+    '    defines stable display/progress identity.',
     '  * num_level MUST equal the number of level_ keys. The loader enforces it.',
-    '  * golf_score is PAR: the minimum number of entries to finish.',
-    '  * overrides supplies per-instance tile parameters, keyed by the integer',
-    '    tile id used in this level\'s grid.'
+    '  * golf_score is PAR: minimum strokes (move/pull or ACTION; automatic hops free).',
+    '  * overrides is keyed by tile ID and affects every occurrence in the level.',
+    '    object_overrides uses coordinates for supported per-entity capabilities.'
   ].join('\n');
 
 })(typeof window !== 'undefined' ? window : globalThis);

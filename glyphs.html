@@ -1,241 +1,119 @@
-<!DOCTYPE html>
-<html lang="fr">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streuph Maze - Galerie des Glyphs (ID 1-256)</title>
-    <link rel="stylesheet" href="src/css/sm.css">
-    <style>
-        :root {
-            --bg-color: #0b0f19;
-            --card-bg: #131b2e;
-            --border-color: #1e293b;
-            --accent-color: #6366f1;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            padding: 20px;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px dashed var(--border-color);
-            padding-bottom: 15px;
-        }
-
-        .gallery-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 15px;
-        }
-
-        .glyph-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            gap: 12px;
-            align-items: flex-start;
-        }
-
-        /* Conteneur 1x1 Field aligné sur le moteur */
-        .field-1x1 {
-            width: 48px;
-            height: 48px;
-            background: #000;
-            border: 2px solid #334155;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
-            position: relative;
-        }
-
-        .glyph-info {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            font-size: 0.8rem;
-            overflow: hidden;
-        }
-
-        .glyph-header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 4px;
-        }
-
-        .glyph-name { font-weight: bold; color: #fff; font-size: 0.9rem; }
-        .glyph-badge { background: #1e293b; color: #38bdf8; padding: 1px 5px; border-radius: 3px; font-size: 0.7rem; }
-        .glyph-category { color: #a78bfa; font-size: 0.7rem; text-transform: uppercase; }
-
-        .attributes-box {
-            background: #0f172a;
-            border: 1px solid #1e293b;
-            border-radius: 4px;
-            padding: 5px;
-            max-height: 80px;
-            overflow-y: auto;
-            font-size: 0.68rem;
-            color: var(--text-muted);
-        }
-
-        .attr-row { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.05); padding: 1px 0; }
-        .attr-k { color: #94a3b8; }
-        .attr-v { color: #f1f5f9; font-weight: bold; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Streuph's Maze — V2 definition gallery</title>
+  <link rel="stylesheet" href="src/css/sm.css">
+  <style>
+    body { height: auto; overflow: auto; padding: 1rem; }
+    .gallery-header { display: block; padding: 1rem; margin-bottom: 1rem; }
+    .gallery-controls { display: flex; flex-wrap: wrap; gap: 1rem; }
+    .gallery-controls label { display: flex; gap: .5rem; align-items: center; }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 1rem; padding: 0; align-items: stretch; }
+    .glyph-card { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: .75rem; border: 1px solid var(--line); padding: .75rem; background: var(--panel); }
+    .preview { width: 64px; height: 64px; background: var(--panel-2); border: 1px solid var(--mute); }
+    .preview svg { width: 100%; height: 100%; display: block; }
+    .preview[data-outcome="failed"] { outline: 2px solid var(--red); }
+    .glyph-card h2 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+    .glyph-card p { font-size: .8rem; margin: .4rem 0; }
+    .glyph-card pre { max-height: 18rem; overflow: auto; white-space: pre-wrap; font-size: .72rem; }
+    .glyph-card select { width: 100%; }
+    a { color: var(--wht); }
+  </style>
 </head>
 <body>
-    <div id="app">
-        <header>
-            <h2>🧭 STREUPH MAZE — GALERIE DES GLYPHS (ID 1 - 256)</h2>
-            <p style="color: var(--text-muted); font-size: 0.8rem;">Affichage séquentiel par ID croissant avec gestion des exceptions (ES Modules)</p>
-        </header>
-
-        <div id="status" style="text-align: center; color: var(--text-muted); margin-bottom: 20px;">Chargement des modules ES...</div>
-        <main id="gallery-viewport" class="gallery-grid"></main>
+  <header class="gallery-header">
+    <h1>V2 tile and object gallery</h1>
+    <p>Actual registered definitions, including tile 0 and the separate dot object.
+      Samples below are presentation data, not a second gameplay simulator.</p>
+    <p><a href="index.html">Play</a> · <a href="docs/level-design/tile-mechanics.md">Full definitions and pack usage</a></p>
+    <div class="gallery-controls">
+      <label>Dot color <select id="sample-P"></select></label>
+      <label>World / goal color <select id="sample-W"></select></label>
+      <label>Conveyor tint (reserved) <select id="sample-tint"></select></label>
     </div>
-
-    <script type="module">
-        import * as TilesMod from './src/js/tiles.js';
-        import * as GlyphsMod from './src/js/sm-glyphs.js';
-        import * as RenderMod from './src/js/sm-render.js';
-
-        const viewport = document.getElementById('gallery-viewport');
-        const statusEl = document.getElementById('status');
-
-        async function initGallery() {
-            viewport.innerHTML = '';
-            let registry = new Map();
-
-            // Moissonneur universel pour extraire les entités des modules ES
-            function harvest(mod) {
-                if (!mod) return;
-                const targets = [mod.Tiles, mod.Glyphs, mod.tiles, mod.glyphs, mod.default, mod];
-                targets.forEach(t => {
-                    if (!t) return;
-                    if (Array.isArray(t)) {
-                        t.forEach((item, idx) => {
-                            if (item && typeof item === 'object') {
-                                const id = item.id !== undefined ? item.id : idx;
-                                registry.set(Number(id), item);
-                            }
-                        });
-                    } else if (typeof t === 'object') {
-                        Object.entries(t).forEach(([k, val], idx) => {
-                            if (val && typeof val === 'object' && !Array.isArray(val)) {
-                                const id = val.id !== undefined ? val.id : idx;
-                                registry.set(Number(id), val);
-                                registry.set(k, val);
-                            }
-                        });
-                    }
-                });
-            }
-
-            harvest(TilesMod);
-            harvest(GlyphsMod);
-            harvest(RenderMod);
-
-            let displayedCount = 0;
-
-            // Boucle séquentielle stricte de 1 à 256 par ordre croissant
-            for (let id = 1; id <= 256; id++) {
-                try {
-                    let tile = registry.get(id);
-                    if (!tile) {
-                        for (const v of registry.values()) {
-                            if (v && (v.id === id || v.index === id)) {
-                                tile = v;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!tile) continue; // Skip silencieux des IDs non implémentés
-
-                    displayedCount++;
-                    const card = document.createElement('div');
-                    card.className = 'glyph-card';
-
-                    const fieldBox = document.createElement('div');
-                    fieldBox.className = 'field-1x1';
-
-                    let rendered = false;
-                    if (RenderMod && typeof RenderMod.renderTile === 'function') {
-                        try {
-                            const res = RenderMod.renderTile(id, tile);
-                            if (res instanceof Element) {
-                                fieldBox.appendChild(res);
-                                rendered = true;
-                            }
-                        } catch (e) {}
-                    }
-
-                    if (!rendered) {
-                        if (tile.svg && typeof tile.svg === 'string') {
-                            fieldBox.innerHTML = tile.svg;
-                        } else if (tile.char || tile.symbol) {
-                            fieldBox.innerHTML = `<span style="font-size:1.6rem; color:#fff;">${tile.char || tile.symbol}</span>`;
-                        } else {
-                            fieldBox.innerHTML = `<span style="font-size:0.75rem; color:#38bdf8;">#${id}</span>`;
-                        }
-                    }
-
-                    const name = tile.name || tile.label || `Glyph_${id}`;
-                    const category = tile.category || tile.type || 'Standard';
-
-                    const skipKeys = ['svg', 'render', 'draw', 'callback', 'handler'];
-                    const attrHtml = Object.entries(tile)
-                        .filter(([k, v]) => !skipKeys.includes(k) && v !== null && typeof v !== 'function')
-                        .map(([k, v] ) => `
-                            <div class="attr-row">
-                                <span class="attr-k">${k}:</span>
-                                <span class="attr-v">${typeof v === 'object' ? JSON.stringify(v) : v}</span>
-                            </div>
-                        `).join('');
-
-                    card.innerHTML = `
-                        <div class="field-slot"></div>
-                        <div class="glyph-info">
-                            <div class="glyph-header-row">
-                                <span class="glyph-name">${name}</span>
-                                <span class="glyph-badge">ID: ${id}</span>
-                            </div>
-                            <div class="glyph-category">Catégorie : ${category}</div>
-                            <div class="attributes-box">
-                                ${attrHtml || '<div style="color:var(--text-muted); font-style:italic;">Aucun attribut additionnel</div>'}
-                            </div>
-                        </div>
-                    `;
-                    card.querySelector('.field-slot').replaceWith(fieldBox);
-                    viewport.appendChild(card);
-
-                } catch (err) {
-                    continue; // Skip par exception
-                }
-            }
-
-            statusEl.textContent = `Galerie générée : ${displayedCount} glyphe(s) affiché(s) par ordre d'ID croissant (1-256)[span_1](start_span)[span_1](end_span).`;
-            if (displayedCount === 0) {
-                statusEl.textContent = "Aucun glyphe résolu. Vérifiez les structures exportées dans les modules source[span_2](start_span)[span_2](end_span).";
-            }
+    <p id="status" role="status">Loading local registry…</p>
+  </header>
+  <main id="gallery" role="list" aria-label="Registered tile and object definitions"></main>
+  <script src="src/js/tiles.js"></script>
+  <script src="src/js/sm-glyphs.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var status = document.getElementById('status');
+    try {
+      var SM = window.SM;
+      var registry = SM.getActiveRegistry();
+      var tiles = Object.keys(registry).map(Number).sort(function (a, b) { return a - b; })
+        .map(function (id) { return registry[id]; }).filter(function (tile) { return tile.implemented !== false; });
+      var definitions = [SM.DOT_DEFINITION].concat(tiles);
+      var controls = ['sample-P', 'sample-W', 'sample-tint'].map(function (id) {
+        var select = document.getElementById(id);
+        SM.GAME_COLOURS.forEach(function (color) {
+          var option = document.createElement('option'); option.value = color; option.textContent = SM.COLOUR_NAMES[color]; select.appendChild(option);
+        });
+        return select;
+      });
+      function direction(params) {
+        if (!params.dir) return 'not directional';
+        return params.dir.x > 0 ? 'east' : params.dir.x < 0 ? 'west' : params.dir.y > 0 ? 'north' : 'south';
+      }
+      function viewFor(mode) {
+        return { P: controls[0].value, W: controls[1].value, polarity: 'red-open',
+          solid: mode === 'closed', locked: mode === 'closed' || mode === 'pending',
+          requestedSolid: mode === 'closed' || mode === 'pending', pendingClose: mode === 'pending',
+          active: mode === 'active', latched: mode === 'active', failed: mode === 'failed',
+          lit: mode === 'active' ? { n: true, e: true, s: true, w: true } : {} };
+      }
+      var redraws = [];
+      definitions.forEach(function (definition) {
+        var card = document.createElement('article'); card.className = 'glyph-card'; card.setAttribute('role', 'listitem');
+        if (definition.id === undefined) card.dataset.objectId = 'dot'; else card.dataset.tileId = definition.id;
+        var preview = document.createElement('div'); preview.className = 'preview'; preview.setAttribute('role', 'img');
+        var content = document.createElement('div'), title = document.createElement('h2');
+        title.textContent = definition.name + (definition.id === undefined ? ' — object, no tile ID' : ' — ID ' + definition.id);
+        var classification = document.createElement('p'); classification.textContent = definition.category + ' / ' + definition.family + ' · ' + definition.layer;
+        var select = document.createElement('select'); select.setAttribute('aria-label', 'Display sample for ' + definition.name + ' ' + (definition.id === undefined ? 'object' : definition.id));
+        var modes = definition.closingSurface ? ['open', 'closed', 'pending'] : definition.entityRole === 'dot' ? ['playing', 'failed'] :
+          definition.strategies && definition.strategies.activation ? ['inactive', 'active'] : ['default'];
+        modes.forEach(function (mode) { var option = document.createElement('option'); option.value = mode; option.textContent = 'Display: ' + mode; select.appendChild(option); });
+        var description = document.createElement('p'), details = document.createElement('details'), summary = document.createElement('summary');
+        summary.textContent = 'Definition defaults, hooks, and state metadata';
+        var attributes = document.createElement('pre');
+        attributes.textContent = JSON.stringify({ category: definition.category, layer: definition.layer,
+          defaults: definition.id === undefined ? { colour: definition.defaultColour } : definition.params, capabilities: definition.capabilities || {},
+          selfMovable: definition.selfMovable, vulnerableToRays: definition.vulnerableToRays,
+          colourRole: definition.colourRole, closingSurface: definition.closingSurface || false,
+          strategies: definition.strategies || {}, state: definition.state || {} }, null, 2);
+        details.appendChild(summary); details.appendChild(attributes);
+        content.appendChild(title); content.appendChild(classification); content.appendChild(select); content.appendChild(description); content.appendChild(details);
+        card.appendChild(preview); card.appendChild(content); document.getElementById('gallery').appendChild(card);
+        function redraw() {
+          var sample = definition.colourRole === 'reserved-tint' ? Object.assign({}, definition,
+            { params: Object.assign({}, definition.params, { colour: controls[2].value }) }) : definition;
+          var view = viewFor(select.value), params = sample.params || {}, caps = sample.capabilities || {};
+          preview.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + SM.glyph(sample, view) + '</svg>';
+          preview.dataset.outcome = view.failed ? 'failed' : 'playing';
+          preview.setAttribute('aria-label', title.textContent + '; ' + select.value + '; ' + direction(params));
+          var values = { direction: direction(params), colour: SM.COLOUR_NAMES[params.colour || 'wht'],
+            link: params.link === undefined ? 0 : params.link, mode: params.mode || 'none', scope: params.scope || 'none',
+            carrierLabel: params.carrier === 'W' ? 'world' : 'dot', activeLabel: view.active ? 'active' : 'inactive',
+            lockLabel: view.pendingClose ? 'pending close' : view.solid ? 'closed' : 'open',
+            solidLabel: view.solid ? 'closed' : 'open', polarityLabel: view.polarity,
+            mobilityLabel: (caps.pushable ? 'pushable' : 'fixed') + (caps.pullable ? ', pullable' : ''),
+            rayCount: 'presentation sample', playerColour: SM.COLOUR_NAMES[view.P], worldColour: SM.COLOUR_NAMES[view.W] };
+          description.textContent = ((sample.presentation && sample.presentation.codex) || 'No intrinsic effect.').replace(/\{([A-Za-z0-9_]+)\}/g,
+            function (token, key) { return values[key] === undefined ? token : values[key]; });
+          if (sample.colourRole === 'reserved-tint') description.textContent += ' Display tint: ' + SM.COLOUR_NAMES[controls[2].value] + ' (inert).';
         }
-
-        initGallery();
-    </script>
+        select.addEventListener('change', redraw); redraws.push(redraw); redraw();
+      });
+      controls.forEach(function (select) { select.addEventListener('change', function () { redraws.forEach(function (redraw) { redraw(); }); }); });
+      status.textContent = definitions.length + ' definitions — ' + tiles.length + ' registered tiles + dot. No numeric-gap placeholders.';
+      document.documentElement.dataset.galleryReady = 'true';
+    } catch (error) { status.textContent = 'Gallery error: ' + error.message; console.error(error); }
+  })();
+  </script>
 </body>
 </html>

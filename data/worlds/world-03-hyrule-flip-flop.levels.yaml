@@ -96,7 +96,7 @@ levels:
 
   level_7:
     name: "Barrier Blocker"
-    goal: "Push the crate onto red, take the upper switch, then flip again for the red exit gate."
+    goal: "Park the crate on the red barrier: it holds closure pending while you use the upper crystal. Flip again for the red exit; do not push past the parking cell."
     initial_polarity: red-open
     width: 16
     height: 9

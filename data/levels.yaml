@@ -7,12 +7,12 @@
 #   * So the cell at grid row 0, column 0 is A<height> (top-left corner).
 #     A cell commented "C3" is at grid row (height-3), column 2.
 #   * Every cell is an integer tile id. See src/js/tiles.js for what each id means.
-#   * Level keys MUST be level_1, level_2, ... contiguous and in file order
-#     (the gating order).
+#   * Level keys MUST be contiguous level_1, level_2, ...; numeric order
+#     defines stable display/progress identity.
 #   * num_level MUST equal the number of level_ keys. The loader enforces it.
-#   * golf_score is PAR: the minimum number of entries to finish.
-#   * overrides supplies per-instance tile parameters, keyed by the integer
-#     tile id used in this level's grid.
+#   * golf_score is PAR: minimum strokes (move/pull or ACTION; automatic hops free).
+#   * overrides is keyed by tile ID and affects every occurrence in the level.
+#     object_overrides uses coordinates for supported per-entity capabilities.
 
 name: "Streuph's Maze"
 num_level: 13
@@ -31,7 +31,7 @@ levels:
       - [1, 0, 0, 0, 0]
   level_2:
     name: "Two colours"
-    goal: "A prism sets YOUR colour. A dial sets the WORLD colour. The goal only opens when the two match."
+    goal: "A prism sets YOUR colour. A dial sets the WORLD colour. Enter the goal while the two match."
     width: 5
     height: 5
     golf_score: 8
@@ -44,7 +44,7 @@ levels:
       - [1, 0, 0, 0, 3]
   level_3:
     name: "Conveyor"
-    goal: "Belts carry you one tile per stroke, for free. Chains of belts are free travel."
+    goal: "Enter an arrow floor: its arrow names the exit, and the belt chain carries you without extra strokes."
     width: 5
     height: 5
     golf_score: 6
@@ -60,6 +60,11 @@ levels:
     width: 6
     height: 4
     golf_score: 8
+    grid:
+      - [3, 3, 3, 3, 3, 2]
+      - [3, 3, 3, 3, 3, 0]
+      - [3, 3, 3, 0, 50, 30]
+      - [1, 71, 0, 0, 0, 3]
     overrides:
       "30":
         link: 1
@@ -67,43 +72,38 @@ levels:
       "50":
         link: 1
         colour: "red"
-    grid:
-      - [3, 3, 3, 3, 3, 2]
-      - [3, 0, 0, 3, 3, 0]
-      - [3, 0, 0, 0, 50, 30]
-      - [1, 71, 0, 0, 0, 3]
   level_5:
     name: "Keys and masters"
-    goal: "A key latches the link it names. A master lock overrides every link at once — and it latches too."
+    goal: "Use the key to latch the exit link. The optional master switch forces every linked gate shut; ACTION on it toggles it back."
     width: 8
     height: 5
     golf_score: 9
-    overrides:
-      "30":
-        link: 1
     grid:
       - [0, 0, 0, 0, 0, 0, 0, 0]
       - [0, 0, 0, 0, 0, 0, 0, 0]
       - [0, 44, 0, 0, 0, 0, 0, 0]
       - [0, 0, 41, 0, 0, 0, 0, 30]
       - [1, 0, 0, 0, 0, 0, 3, 2]
+    overrides:
+      "30":
+        link: 1
   level_6:
     name: "Hold and release"
-    goal: "A plate is live only while you stand on it. A key stays live. Walk back through a plate gate and watch it seal."
+    goal: "The optional plate opens its gate only while occupied; the gate closes before you can reach it. Use the latched key for the exit route."
     width: 8
     height: 5
     golf_score: 11
+    grid:
+      - [3, 0, 0, 0, 0, 0, 3, 2]
+      - [3, 0, 0, 0, 0, 0, 10, 0]
+      - [3, 0, 0, 0, 0, 42, 0, 30]
+      - [0, 0, 41, 0, 0, 0, 0, 3]
+      - [1, 0, 0, 0, 0, 0, 3, 0]
     overrides:
       "30":
         link: 2
       "42":
         link: 2
-    grid:
-      - [3, 0, 0, 0, 0, 0, 3, 2]
-      - [3, 0, 0, 0, 0, 0, 10, 0]
-      - [3, 0, 0, 0, 0, 0, 42, 30]
-      - [0, 0, 41, 0, 0, 0, 0, 3]
-      - [1, 0, 0, 0, 0, 0, 3, 0]
   level_7:
     name: "Hinges"
     goal: "A phase wall is solid only while its link is unsatisfied. Same lock law, no colour test."
@@ -122,43 +122,40 @@ levels:
     width: 8
     height: 6
     golf_score: 12
-    overrides:
-      "80":
-        link: 1
     grid:
       - [3, 3, 3, 3, 3, 3, 3, 2]
       - [3, 3, 3, 3, 3, 3, 3, 34]
       - [3, 3, 0, 0, 0, 0, 0, 0]
       - [3, 80, 20, 11, 0, 0, 0, 0]
-      - [0, 0, 3, 3, 3, 3, 3, 0]
+      - [3, 3, 3, 3, 3, 3, 3, 3]
       - [1, 0, 0, 80, 0, 0, 0, 0]
+    overrides:
+      "80":
+        link: 1
   level_9:
-    name: "Push chain"
-    goal: "A crate belt shoves whatever sits in front of it, one tile, for free — then carries you along."
+    name: "Cargo current"
+    goal: "Push the red crate onto the arrow floor. The belt carries its own passenger beside the receiver; take the upper detour to the gate."
     width: 8
     height: 5
-    golf_score: 11
+    golf_score: 13
+    grid:
+      - [0, 0, 0, 0, 0, 0, 3, 2]
+      - [0, 0, 0, 3, 0, 0, 0, 30]
+      - [0, 0, 71, 60, 0, 50, 3, 3]
+      - [0, 0, 0, 0, 0, 3, 0, 3]
+      - [1, 0, 0, 0, 0, 0, 0, 0]
     overrides:
       "30":
         link: 1
       "50":
         link: 1
         colour: "red"
-    grid:
-      - [0, 0, 0, 0, 0, 0, 3, 2]
-      - [0, 0, 0, 0, 0, 0, 0, 30]
-      - [0, 0, 71, 60, 0, 50, 3, 3]
-      - [0, 0, 0, 0, 0, 0, 0, 3]
-      - [1, 0, 0, 0, 0, 0, 0, 0]
   level_10:
     name: "The long way round"
     goal: "Walls never move. Crates do — push one down a corridor to open a route, or walk around it."
     width: 16
     height: 9
     golf_score: 27
-    overrides:
-      "71":
-        colour: "wht"
     grid:
       - [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
       - [3, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
@@ -169,23 +166,26 @@ levels:
       - [3, 3, 3, 0, 71, 0, 3, 0, 0, 0, 3, 3, 3, 3, 0, 3]
       - [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
       - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]
+    overrides:
+      "71":
+        colour: "wht"
   level_11:
     name: "Corridor"
-    goal: "Two rows, sixteen columns, one obstruction. The long way round is sometimes the only way."
+    goal: "Navigate the two-row corridor around the wall. The key and its upper gate are optional; the lower lane also reaches the exit."
     width: 16
     height: 2
     golf_score: 16
+    grid:
+      - [0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 30, 0, 0, 2]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 0, 0, 0]
     overrides:
       "30":
         link: 1
       "41":
         link: 1
-    grid:
-      - [0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 30, 0, 0, 2]
-      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 41, 0, 0, 0]
   level_12:
     name: "Colophon"
-    goal: "Everything at once: a set dial instead of a cycling one, two links, and a master lock that can undo your work."
+    goal: "Combine the latched link, red prism, and set dial. The optional master switch forces linked gates shut; the spare crate is not needed."
     width: 16
     height: 9
     golf_score: 27

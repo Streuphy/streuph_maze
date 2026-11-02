@@ -42,25 +42,11 @@
   }
 
   function beltGlyph(dir) {
-    // Three chevrons along the axis. Hardcoded cardinal paths stay inspectable.
-    if (dir.x > 0) {
-      return '<path d="M6 7 L11 12 L6 17" stroke-width="2" fill="none"/>' +
-             '<path d="M11 7 L16 12 L11 17" stroke-width="2" fill="none"/>' +
-             '<path d="M16 7 L21 12 L16 17" stroke-width="2" fill="none"/>';
-    }
-    if (dir.x < 0) {
-      return '<path d="M18 7 L13 12 L18 17" stroke-width="2" fill="none"/>' +
-             '<path d="M13 7 L8  12 L13 17" stroke-width="2" fill="none"/>' +
-             '<path d="M8  7 L3  12 L8  17" stroke-width="2" fill="none"/>';
-    }
-    if (dir.y > 0) {
-      return '<path d="M7 18 L12 13 L17 18" stroke-width="2" fill="none"/>' +
-             '<path d="M7 13 L12 8  L17 13" stroke-width="2" fill="none"/>' +
-             '<path d="M7 8  L12 3  L17 8"  stroke-width="2" fill="none"/>';
-    }
-    return '<path d="M7 6  L12 11 L17 6"  stroke-width="2" fill="none"/>' +
-           '<path d="M7 11 L12 16 L17 11" stroke-width="2" fill="none"/>' +
-           '<path d="M7 16 L12 21 L17 16" stroke-width="2" fill="none"/>';
+    var direction = dir.x > 0 ? 'east' : dir.x < 0 ? 'west' : dir.y > 0 ? 'north' : 'south';
+    var rotation = { east: 0, west: 180, north: -90, south: 90 }[direction];
+    return '<g class="conveyor-arrow" data-exit="' + direction + '" transform="rotate(' + rotation + ' 12 12)" ' +
+      'stroke="' + SM.PALETTE.wht + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
+      '<path d="M4 12 H20 M15 7 L20 12 L15 17"/></g>';
   }
 
   function squareBacking(col, locked) {
@@ -75,7 +61,8 @@
   SM.glyph = function (inst, state) {
     var family = inst.family;
     var params = inst.params || {};
-    var colour = params.colour || (state && state.W) || 'wht';
+    var colour = inst.levelRole === 'goal' && state
+      ? state.W : params.colour || (state && state.W) || 'wht';
     var colHex = SM.PALETTE[colour] || SM.PALETTE.wht;
     var s = state || {};
 
@@ -95,6 +82,8 @@
             return '<path d="M4 18 L18 4 M8 21 L21 8 M3 12 L12 3" fill="none" ' +
                    'stroke="' + SM.PALETTE.blu + '" stroke-width="1.5" stroke-opacity="0.75"/>';
           case 'void':
+            return '<rect x="3" y="3" width="18" height="18" fill="' + (s.solid ? SM.PALETTE.blk : 'none') +
+              '" stroke="' + SM.PALETTE.mute + '" stroke-width="1" stroke-dasharray="2 2"/>';
           case 'floor':
           default:
             return '';
@@ -109,7 +98,7 @@
                  polarityColour + '" stroke-width="2" stroke-linecap="round" stroke-opacity="' +
                  (s.solid ? 0.9 : 0.45) + '"/>';
         }
-        return squareBacking(SM.PALETTE.wht, !!s.locked);
+        return squareBacking(SM.PALETTE.wht, s.solid === undefined ? !!s.locked : !!s.solid);
 
       case 'aura':
         return '<circle cx="12" cy="12" r="8" fill="' + colHex + '"/>';
@@ -118,7 +107,7 @@
         var innerMark = /^aura_/.test(inst.name)
           ? '<circle cx="12" cy="12" r="5" fill="' + colHex + '"/>'
           : '<circle cx="12" cy="12" r="5" fill="none" stroke="' + colHex + '" stroke-width="2"/>';
-        return squareBacking(colHex, !!s.locked) + innerMark;
+        return squareBacking(colHex, s.solid === undefined ? !!s.locked : !!s.solid) + innerMark;
       }
 
       case 'switch': {
@@ -185,6 +174,10 @@
       case 'flow':
         return beltGlyph(params.dir || { x: 1, y: 0 });
 
+      case 'dot':
+        return '<circle cx="12" cy="12" r="7" fill="' + (SM.PALETTE[s.P] || SM.PALETTE.wht) +
+          '" stroke="' + (SM.PALETTE[s.W] || SM.PALETTE.wht) + '" stroke-width="3"/>';
+
       case 'crate':
         return '<rect x="2" y="2" width="20" height="20" fill="' + colHex +
                '" fill-opacity="0.18" stroke="' + colHex + '" stroke-width="2"/>' +
@@ -218,5 +211,13 @@
         return '<rect x="1" y="1" width="22" height="22" fill="none" stroke="' +
                SM.PALETTE.mute + '" stroke-width="1" stroke-dasharray="2 2"/>';
     }
+  };
+  var baseGlyph = SM.glyph;
+  SM.glyph = function (inst, state) {
+    var markup = baseGlyph(inst, state);
+    if (state && state.pendingClose && inst.closingSurface) markup +=
+      '<rect class="pending-indicator" x="1" y="1" width="22" height="22" fill="none" stroke="' +
+      SM.PALETTE.wht + '" stroke-width="1.5" stroke-dasharray="3 2"/>';
+    return markup;
   };
 })(typeof window !== 'undefined' ? window : globalThis);

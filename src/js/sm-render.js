@@ -48,7 +48,7 @@
     var level = state.level;
     this.state = state;
     this.view = mirror(state);
-    this.playerEl.classList.remove('caught');
+    this.playerEl.classList.remove('failed');
 
     var b = this.board;
     b.style.setProperty('--cols', level.width);
@@ -162,7 +162,7 @@
         var cell = this.cellAt(x, y);
         var ctx = SM.RULES.describeTile(view, x, y);
         var directions = rayAt[x + ',' + y] || [];
-        var html = '';
+        var html = ctx.target ? SM.glyph(ctx.terrain, ctx) : '';
         for (var di = 0; di < directions.length; di++) html += rayGlyph(directions[di]);
         html += SM.glyph(ctx.inst, ctx);
         if (ctx.crate) html += SM.glyph(ctx.crate, ctx);
@@ -170,16 +170,33 @@
           cell.innerHTML = html ? wrapSvg(html) : '';
           cell.dataset.mark = html;
         }
-        var cls = 'cell' + (ctx.solid ? ' wall' : '');
+        var cls = 'cell' + (ctx.solid ? ' wall' : '') + (ctx.pendingClose ? ' pending-close' : '');
         if (cell.className !== cls) cell.className = cls;
         if (directions.length) cell.dataset.ray = directions.map(directionName).join(' ');
         else delete cell.dataset.ray;
+        {
+          var label = SM.RULES.cellLabel(x, y) + ': ' + ctx.inst.name;
+          if (ctx.target || ctx.crate) label += '; supporting terrain ' + ctx.terrain.name;
+          if (ctx.crate) label += '; ' + SM.COLOUR_NAMES[ctx.crate.params.colour || 'wht'] + ' crate; ' +
+            (ctx.crateCapabilities.pullable ? 'pullable' : ctx.crateCapabilities.pushable ? 'pushable' : 'fixed');
+          if (ctx.dotHere) label += '; ' + SM.COLOUR_NAMES[view.P] + ' dot';
+          if (ctx.target) label += '; target link ' + ctx.inst.params.link;
+          if (ctx.inst.levelRole === 'goal') label += '; ' + SM.COLOUR_NAMES[view.W] + ' goal';
+          label += '; requested ' + (ctx.requestedSolid ? 'closed' : 'open') + '; effective ' + (ctx.solid ? 'closed' : 'open') +
+            (ctx.pendingClose ? '; pending close until crate leaves' : '') + '; latch ' + (ctx.latched ? 'on' : 'off');
+          cell.setAttribute('aria-label', label);
+          cell.title = label;
+          cell.dataset.pendingClose = String(ctx.pendingClose);
+        }
       }
     }
     var aura = this.playerEl.querySelector('.aura');
     aura.style.background = SM.PALETTE[view.P] || SM.PALETTE.wht;
     aura.style.borderColor = SM.PALETTE[view.W] || SM.PALETTE.wht;
     aura.classList.toggle('matched', view.P === view.W);
+    this.playerEl.classList.toggle('failed', view.failed);
+    this.board.dataset.outcome = SM.RULES.outcome(view);
+    this.board.setAttribute('aria-label', 'maze board — ' + SM.RULES.outcome(view));
   };
 
   function directionName(dir) {
@@ -247,7 +264,6 @@
       if (finished) return;
       finished = true;
       if (self.timer) { clearTimeout(self.timer); self.timer = null; }
-      self.playerEl.classList.remove('caught');
       self.queue = null;
       done();
     }
@@ -260,13 +276,10 @@
         return;
       }
       var step = steps[i++];
-      applyStep(view, step);
-      if (step.type === 'caught') {
-        self.playerEl.classList.add('caught');
-        self.say('Caught by a ray — returning to start.', 'warn');
-      } else if (step.type === 'respawn') {
-        self.playerEl.classList.remove('caught');
-      }
+      var frame = [step];
+      if (step.commit !== undefined) while (i < steps.length && steps[i].commit === step.commit) frame.push(steps[i++]);
+      applyFrame(view, frame);
+      if (frame.some(function (event) { return event.type === 'failed'; })) self.say('Attempt failed. Restart or choose another level.', 'warn');
       self.draw(view);
       self.placePlayer(view, true);
       self.timer = setTimeout(tick, STEP_MS);
@@ -311,11 +324,16 @@
           view.crates[step.from.y][step.from.x] = null;
         }
         break;
-      case 'caught':
+      case 'state':
+        SM.RULES.restore(view, step.snapshot);
+        if (step.seen) view.seen = Object.assign({}, step.seen);
+        break;
+      case 'failed':
+        view.failed = true; view.won = false; view.failureReason = step.reason;
         view.player.x = step.at.x; view.player.y = step.at.y;
         break;
-      case 'respawn':
-        view.player.x = step.to.x; view.player.y = step.to.y;
+      case 'goal':
+        view.won = true;
         break;
       case 'colour':
         if (step.which === 'P') view.P = step.to; else view.W = step.to;
@@ -335,6 +353,9 @@
         break;
     }
   }
+
+  function applyFrame(view, frame) { frame.forEach(function (step) { applyStep(view, step); }); }
+  Renderer.applyFrame = applyFrame;
 
   function moveTargetInView(view, step) {
     for (var i = 0; i < view.switches.length; i++) {

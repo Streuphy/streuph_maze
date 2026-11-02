@@ -1,10 +1,10 @@
 # Engine architecture
 
-This note records the Alpha 0 architecture review and intended ownership
-boundaries. It is a migration map, not a second rules specification: current
-gameplay contracts remain in the accepted `tile-mechanics`, `movable-objects`,
-`line-of-sight-hazards`, and `world-level-packs` specifications and the
-[Tile Mechanics Reference](level-design/tile-mechanics.md).
+The current implementation is migrating to the sole queued contract in
+`openspec/changes/v2-global-pack-migration/`. Engine tests and the shipped-pack
+certification ledger are separate gates; implementing the scheduler does not
+certify existing levels. Accepted specification synchronization remains a
+review/release step. This document describes ownership, not another ruleset.
 
 ## Current runtime flow
 
@@ -35,41 +35,107 @@ gameplay contracts remain in the accepted `tile-mechanics`, `movable-objects`,
 | `level`, `key`, `width`, `height` | Immutable level identity and dimensions. |
 | `grid`, `portals`, `start`, `goal` | Immutable normalized terrain/index data and authored locations. |
 | `crates` | Mutable movable-entity occupancy; crate instances refer to immutable definitions. |
-| `switches` | Mutable switch latches and movable target positions; definitions/capabilities are shared metadata. |
-| `locked` | Derived passability state rebuilt from tile defaults, active signals, latches, and master lock. |
+| `switches` | Mutable latches, target positions/profiles, stable identities; immutable tile definitions are shared, mutable profiles are copied. |
+| `locked` | Derived requested linked locks; `closureAt` separately derives effective/pending solidity from requests and crate occupancy. |
 | `player` | Mutable player position. |
 | `P`, `W` | Mutable player and world color carriers. |
+| `polarity` | Mutable red-open/blue-open binary state, independent of P/W. |
 | `strokes`, `turns`, `won` | Mutable action accounting and completion state. |
+| `failed`, `failureReason` | Mutable terminal-failure state; cannot coexist with `won`. |
 | `seen` | Mutable per-level codex/progress observation. |
 
 Any added gameplay field must be considered in state construction, clone,
 snapshot, restore, derived-state rebuilding, solver identity, and renderer
 mirroring. A field that is presentation-only must not enter resolver outcomes.
 
-Resolver events currently include `blocked`, `press`, `move`, `push`, `pull`,
-`target-move`, `teleport`, `object-teleport`, `colour`, `switch`, `ray`,
-`caught`, `respawn`, `goal`, and bounded-chain diagnostics (`force-loop`,
-`belt-cap`, `object-force-cap`). The resolver owns their order and meaning;
+Resolver events include `blocked`, `press`, `move`, `push`, `pull`,
+`target-move`, `teleport`, `object-teleport`, `colour`, `switch`, `polarity`, `signal-edge`,
+`ray`, `failed`, `goal`, authoritative `state` snapshots, and `effect-abort`
+diagnostics. Atomic mutation events share a commit ID. The resolver owns their order and meaning;
 `sm-render.js` applies them to a display mirror. New/changed event forms must be
 reviewed against playback, undo, and solver behavior together.
 
-## Tile-specific dispatch and intended ownership
+## Tile-specific dispatch and current ownership
 
-| Concern | Current coupling found | Intended owner after migration |
-|---|---|---|
-| Tile IDs, names, defaults, parameter defaults, capabilities | Catalogue in `tiles.js`; loader and rules read the fields. | `tiles.js` definitions and schemas; stable IDs remain authored data. |
-| Entry/ACT effects (goal, color setters, world dials, latch toggles, teleport) | `tiles.js` behavior-name switch delegates back into a rules-created engine object. | Named synchronous behavior strategies in the tile registry, invoked at explicit resolver phases through a constrained context. |
-| Start/goal discovery, crate/target layers, switch registration, portal index | `buildLevel` branches on `name` and `family` in `sm-rules.js`. | Generic level normalization plus declarative tile roles/registration metadata; no tile ID/name case logic. |
-| Solidity/passability, gates, void, signal activity, lock precedence | `isSolid`, `canEnter`, `switchActive`, `masterVoidActive`, `rebuildLocks`, and repeated gate checks branch on family, mode, scope, or special keys. | Shared bounds/occupancy/legality and resolver phases in the engine; tile strategies/metadata supply solidity, activation, and carrier requirements. |
-| Crate/target movement and object capabilities | Movement helpers use entity identity and target-specific branches; capabilities are partly declarative. | Generic entity movement and capability helpers; registered entity roles/profiles define supported operations. |
-| Belts, ice, portals, rays | Force chains inspect `flow`, `portal`, `ice`, `hazard`, and `gate`; rays use hazard family and object profiles. | Explicit force/ray hooks plus generic bounded traversal, collision, deterministic order, and catch/respawn phases. |
-| Glyphs, codex, inspection/tutorial text | Glyph generation was co-located with `tiles.js`; `sm-ui.js` branched on families/names for prose; `sm-render.js` plays step events. | `tiles.js` owns readable display descriptors; `sm-glyphs.js` renders glyphs; UI formats descriptors and uses read-only engine queries. |
-| YAML/world data | `levels.js` validates shared YAML; validation has family checks for actuator/object/portal roles. | `levels.js` remains the single YAML authority and reads declarative registry schemas, never executable tile behavior. |
+| Concern | Owner / boundary |
+|---|---|
+| IDs, names, parameter defaults/schema, capabilities, hook/state/display metadata | `tiles.js`; numeric IDs remain authored identities, never executable rule cases. |
+| Entry/ACTION/exit/edge behavior | Registered synchronous named strategies through explicit resolver phases/context. Unconfigured hooks are neutral. |
+| Start/goal roles, object/feature normalization, switch/portal registration | `buildLevel` reads declarative roles/strategies and constructs immutable configuration, with independent movable layers. |
+| Bounds, occupancy, carrier preflight, atomic commits, closure, invariants | Core transaction helpers; tile passability/activation/ray hooks supply mechanic queries. Requested locks and occupancy-aware closure have separate ownership. |
+| Crate/feature movement | Stable actor identity and declared capabilities, common destinations, atomic push/pull and queued transport; no tint-selected mobility. |
+| Conveyors, ice, portals, rays | Typed queue records, one-hop revalidation, source ordering/provenance, per-hop signals, bounded repetition/budget, terminal precedence. No old independent force-chain resolver. |
+| Presentation | Registry descriptors, display-only `sm-glyphs.js`, UI formatting, passive commit-frame playback. The dot has the same explicit model without a tile ID. |
+| YAML/world data | One `levels.js` parser/validator/activation path; metadata/schema validation never runs authored callbacks. |
 
 Descriptive `family` metadata may remain useful to authors and presentation
 code. It must not be the gameplay dispatch mechanism. The engine still owns
 domain-general state invariants, action semantics, collision, boundedness,
 stroke accounting, deterministic turn ordering, and event emission.
+
+## V2 round policy
+
+There is one interpretation and no runtime selector. Four moves, explicit
+capability-enabled pulls, and current-tile ACTION share the same transaction.
+Initial colors and authored geometry/profiles form fixed level identity.
+Supporting terrain/definitions are immutable, and state roots are sealed;
+handlers may mutate declared gameplay state, not add untracked root fields.
+
+Direct push/pull destinations preflight completely and both actors commit
+together. Each committed hop captures entry/departure records by identity,
+derives current occupancy signals and physical closure, then queues work.
+Priority is signal reactions, transport, ordinary effects; ties use runtime
+y/x then enqueue order. A goal-entry checkpoint follows signal work but
+precedes transport. Missing hooks are neutral, not executable YAML.
+
+Registered synchronous handler batches may change several gameplay fields.
+The core validates the whole batch and journals every committed mutation,
+including changes made without an explicit event helper. Complete state patches
+and commit IDs accompany readable movement/color/switch events for passive
+playback. Queue source/actor references and transport policy are revalidated.
+Deferred entry effects do not retarget later occupants. Occupancy signals query
+current state and emit edges only when activity changes.
+
+Conveyor checks seed all eligible post-direct passengers, including stationary
+objects on ACTION. Every transport hop is atomic; no belt shoves a front crate.
+Ice carries an incoming direction only within the round. Portal provenance
+prevents arrival bounce-back. Pending physical closure is derived from requests
+and occupancy, uniformly for linked barriers, polarity barriers, and phase void.
+
+Queue repetition identity includes mutable gameplay state, semantically ordered
+pending records, signal state, and transport provenance. Absolute ever-increasing
+enqueue serials are excluded. Every attempted effect, including blocked/stale
+ones, consumes the `64 × width × height` budget. Cycles, exceptions, invalid
+mutations/references, or exhausted budget restore the full pre-action snapshot
+and return only an abort diagnostic: no counters, discovery, or progress commit.
+
+Successful movement costs one stroke even if it returns to its origin. ACTION
+costs one even as a no-op. Blocked direct commands cost zero and increment only
+attempts. Physical closure beneath the dot fails immediately; a legal matching
+goal entry wins after signals and cancels later work. Only a non-winning drained
+queue receives final ray exposure testing, which can commit failed state.
+Failures retain the settled board and initiating stroke; restart/navigation are
+the recovery operations. There is no rule work left pending between rounds.
+
+Snapshots contain the complete switch/feature inventory, profiles, latches,
+positions, object occupancy, carriers, terminal flags/reason, and counters.
+Restore reconstructs mutable rows and derived locks; immutable definitions can
+be shared safely. Player undo policy is separate from internal snapshot restore.
+
+## Current progress storage
+
+Persistence uses the fresh `streuphs-maze/progress/v2` key and requires JSON
+`contract: "v2-queued"`, `schema: 1`. Records use `world-id::level_n`, with
+independent best/clear/discovery and per-world last selection. No alternate
+contract is read or imported; prior stored bytes remain inert and untouched.
+Rejected imports are atomic. Reset removes only the current namespace.
+
+The rules core performs no external progress writes. Local storage is optional
+under `file://`; denied access or quota failure falls back to current-session
+memory. Current progress JSON export/import is the durable user-controlled
+backup. Authored level packs still use YAML, not the progress JSON schema.
+Declared PAR, replay-proven minimum, personal best, and partial world totals
+remain distinct and cannot borrow records from another contract.
 
 ## Existing verification coverage
 
@@ -80,9 +146,9 @@ stroke accounting, deterministic turn ordering, and event emission.
   `checkObjectOverrides`.
 - General movement, colors, gates, portals, switches, sensors, and counters:
   `checkRules`, `checkDirectObjectMovement`, `checkObjectForceChains`.
-- Ray queries, transport, catches, respawn, undo, and solver behavior:
-  `checkRayQueries`, `checkRayTransportTransitions`, `checkCatchTransitions`,
-  `checkCatchSolver`.
+- Ray queries, transport, terminal failure, snapshot restoration, and solver behavior:
+  `checkRayQueries`, `checkRayTransportTransitions`, `checkFailureTransitions`,
+  `checkFailureSolver`.
 - World-specific solver/content assertions: `checkWorldOneContent`,
   `checkWorld2Content`, `checkWorld4Content`, `checkVectorSolver`, and
   `checkParRouteSelection`.
@@ -95,12 +161,15 @@ browser-layer regression suite, not a fast module-level unit test and not a
 substitute for the separate real-Chromium `file://` check when rendering or
 local-file loading changes.
 
-The future fast unit suites should reuse and isolate appropriate assertions
-from this inventory. Full pack solving, broad integration/replay assertions,
-and DOM interaction remain in final validation so targeted suites stay small
-and do not silently weaken the comprehensive gate.
+Existing focused suites are `test:unit:registry`, `test:unit:rules`,
+`test:unit:levels`, and `test:unit:helpers`. The levels module also runs
+`tests/unit/pack-migration.js`: all 61 real-resolver proofs/replays and scoped
+necessity/recovery regressions. `scripts/report-par-routes.js` publishes complete
+mathematical evidence separately from the manual design ledger. None of these
+replace final `npm test` or real Chromium. Unknown and incomplete balance
+comparison are reported distinctly, never promoted into a minimum proof.
 
-## Alpha 0 test timing snapshot
+## Historical Alpha 0 test timing snapshot — not V2 verification
 
 Local Linux/Node 26.12 measurement at final validation; informational only, not
 a CI threshold:

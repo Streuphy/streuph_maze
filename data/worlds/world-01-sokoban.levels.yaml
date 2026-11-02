@@ -71,7 +71,7 @@ levels:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
   level_6:
     name: "Long Alley Remix"
-    goal: "Push onto the plate, then walk the long one-way corridor; crates can only be pushed, never pulled."
+    goal: "Push onto the target, then walk the long upper corridor; these crates can be pushed but not pulled."
     width: 14
     height: 6
     golf_score: 17

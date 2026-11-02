@@ -18,23 +18,23 @@ levels:
 
   level_2:
     name: "Double Circuit"
-    goal: "Each loop returns to a belt tile; leave it with a deliberate manual step."
+    goal: "Each open circuit stops at a wall. Use the lower connector, then ride the second eastbound exit."
     width: 7
     height: 5
-    golf_score: 8
+    golf_score: 5
     grid:
       - [3, 3, 3, 3, 3, 3, 3]
       - [3, 67, 65, 3, 67, 65, 3]
-      - [1, 64, 66, 3, 64, 66, 2]
+      - [1, 64, 64, 3, 64, 64, 2]
       - [3, 0, 0, 0, 0, 0, 3]
       - [3, 3, 3, 3, 3, 3, 3]
 
   level_3:
     name: "Ice Launch"
-    goal: "Push the block across ice onto its crate belt; follow the cleared lane to the upper exit."
+    goal: "Push the block across ice onto the arrow floor. Follow until the occupied exit stops you; the belt does not shove the block ahead."
     width: 9
     height: 6
-    golf_score: 7
+    golf_score: 8
     grid:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 0, 0, 0, 0, 0, 2, 3]
@@ -91,7 +91,7 @@ levels:
 
   level_7:
     name: "Circuit Exit"
-    goal: "Ride the four-way loop back to its junction, push the block out of the only exit lane, then cross the long corridor."
+    goal: "Ride into the plain-floor junction. Its open circuit stops there; two deliberate south pushes park the block before the long exit lane."
     width: 16
     height: 9
     golf_score: 17
@@ -100,15 +100,15 @@ levels:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 67, 65, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [1, 64, 66, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 67, 65, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [3, 0, 66, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 71, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
       - [3, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
 
   level_8:
     name: "Absolute Momentum"
-    goal: "Traverse the east–north–west vector network, stop safely before the crate, and finish along the upper 16-cell route."
+    goal: "Traverse the east–north–west network and stop against the crate bumper. Leave it in place and take the northbound step into the upper exit channel."
     width: 16
     height: 9
     golf_score: 4
@@ -116,7 +116,7 @@ levels:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
-      - [3, 3, 3, 0, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 5, 0]
+      - [3, 3, 3, 0, 64, 3, 64, 64, 64, 64, 64, 64, 64, 64, 5, 0]
       - [3, 3, 0, 0, 0, 70, 65, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3]

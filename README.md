@@ -35,6 +35,35 @@ world packs are in [`data/worlds/`](data/worlds/).
 
 ## Development
 
+### V2 migration and controls
+
+The sole queued V2 engine and all shipped content have been migrated in the
+working implementation; final verification/acceptance remains tracked separately.
+See the [61-level certification ledger](docs/level-design/v2-pack-certification.md)
+and [asset checklist](docs/level-design/v2-migration-assets.md). All 61 minimum
+routes now prove/replay, with a theoretical aggregate of 869 strokes. Content/math
+reviews are not a claim that final jsdom, Chromium, or accepted-spec gates passed.
+The [verification record](docs/level-design/v2-verification.md) reports the actual
+passing repository and separate real-Chromium checks. Accepted-spec synchronization
+remains an approval/release dependency, not a compatibility mode.
+
+- Arrows/WASD/HJKL move; Shift+direction explicitly pulls an eligible trailing
+  object. Object profiles, not crate/floor colors, grant that ability.
+- Space/Enter or Action/Rest invokes the current tile and opens the same queued
+  environment round. Belts indicate their exit direction and can carry stationary
+  eligible passengers on rest. No timer controls gameplay.
+- Z undoes a successful nonterminal round. Exposure or physical closure can
+  fail an attempt: its board freezes and undo/gameplay are blocked. R restarts;
+  navigation remains available. A rollback diagnostic is different: no stroke
+  or action mutation is committed.
+- A legal matching-color **goal entry** wins. A stationary color match alone
+  does not. The four carrier colors are White, Red, Green, and Blue.
+- Labels distinguish replay-proven PAR, unverified authored scores, personal
+  bests, and partial world totals. Current progress has a fresh namespace;
+  use progress JSON export/import for backup if browser storage is unavailable.
+
+### Verification
+
 Node.js and npm are only needed to run the test suite; they are not required to
 play the game. Install the development dependencies and run the full checks
 with:
@@ -46,6 +75,11 @@ npm test
 
 See [Engine Architecture](docs/engine-architecture.md) for an overview of the
 codebase.
+
+Open [`glyphs.html`](glyphs.html) directly for the definition gallery. It uses
+the same local classic-script registry and SVG renderer, includes all registered
+IDs (including 0) plus the dot, and offers explicit display samples for active,
+pending-close, and failed states. Samples do not run a second game engine.
 
 ## License
 

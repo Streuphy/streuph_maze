@@ -11,8 +11,8 @@ levels:
     grid:
       - [3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3]
-      - [0, 71, 0, 50, 3]
+      - [3, 3, 0, 50, 3]
+      - [0, 0, 71, 3, 3]
       - [1, 0, 0, 10, 2]
   level_2:
     name: "Two Colors, Two Links"
@@ -28,32 +28,32 @@ levels:
       - [3, 3, 3, 3, 3, 3, 3]
   level_3:
     name: "Around the Corner"
-    goal: "Lift the crate, walk around its corner, then dock it beside the red receiver."
+    goal: "Push north, walk around the corner, then push east into the guarded dock beside the red receiver."
     width: 9
     height: 6
     golf_score: 12
     grid:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 0, 0, 0, 50, 0, 3, 3, 3]
-      - [3, 0, 71, 0, 0, 0, 3, 3, 3]
+      - [3, 3, 3, 50, 3, 3, 3, 3, 3]
+      - [3, 0, 0, 0, 3, 3, 3, 3, 3]
+      - [3, 0, 71, 3, 3, 3, 3, 3, 3]
       - [3, 3, 1, 0, 0, 0, 10, 0, 2]
   level_4:
     name: "Belt and Barrier"
-    goal: "The matching dock opens the phase wall; the floor belt carries you forward."
+    goal: "Push red onto the arrow floor to dock it beside the receiver. Leave it parked, take the upper detour, and cross the opened phase wall."
     width: 10
     height: 8
-    golf_score: 8
+    golf_score: 13
     grid:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 50, 71, 3, 3, 3, 3, 3, 3, 3]
-      - [1, 64, 0, 0, 0, 10, 0, 0, 0, 2]
+      - [3, 0, 0, 0, 0, 3, 3, 3, 3, 3]
+      - [3, 0, 3, 3, 0, 3, 3, 3, 3, 3]
+      - [1, 71, 64, 0, 50, 10, 0, 0, 0, 2]
   level_5:
     name: "Castle Basement Rooms"
     goal: "Cross the red and green dock rooms in order; neither receiver is an occupancy plate."
@@ -71,7 +71,7 @@ levels:
       - [1, 0, 0, 10, 0, 0, 0, 26, 0, 0, 0, 2]
   level_6:
     name: "Railway Dock"
-    goal: "Push the red crate to the end of the 16-column track, then take the lower route."
+    goal: "Push red along the upper track until it docks beside the receiver, then return by the lower exit lane."
     width: 16
     height: 6
     golf_score: 19
@@ -100,7 +100,7 @@ levels:
       - [1, 0, 10, 0, 0, 26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
   level_8:
     name: "Grand Dockworks"
-    goal: "Cross link 1, re-dock red on link 2, then use the blue dock to open link 3."
+    goal: "Cross link 1, re-dock red on link 2, then cross link 3 while the parked blue crate keeps its receiver active."
     width: 16
     height: 9
     golf_score: 21

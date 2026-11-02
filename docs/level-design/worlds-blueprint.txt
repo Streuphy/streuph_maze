@@ -1,97 +1,139 @@
-Brief recap of previous context: Established the V4 architecture of Streuph's Maze supporting dynamic rectangular grids up to 16x9, chromatic player auras, conveyor belts, and crate-proximity sensors, mapped against classic 8/16-bit Japanese puzzle game paradigms.
-📐 🗺️ Streuph's Maze: Master Level Design Specification & 8-World Blueprint
-This document outlines the Golden Rules of Level Design and the complete structural blueprint for all 8 canonical puzzle worlds (64 levels total). Each world strictly follows the 8-level progression curve mandated by design constraints, operating within a maximum grid boundary of 16x9 (coordinates A1 to P9).
-🏛️ Part I: The Golden Rules of Level Design (Design Spec Document)
-Design Specification: Streuph's Maze Level Architecture v4.2
-Author: System Architect & Lead Level Designer
-Target Engine: Streuph's Maze JS Engine (Chromium / Web)
-Grid Constraints: Min 2x2, Max 16x9 (A1 to P9 Cartesian origin bottom-left)
-1. The Core Philosophy (Bauhaus & Zen)
-	•	Visual Minimalism: Levels must use abstract geometric shapes (squares, circles, vector arrows) where form directly communicates function. Unnecessary clutter is strictly forbidden.
-	•	Zero Dead-Ends on Tutorial Levels: Levels 1 to 3 must never feature irreversible softlocks (deadlocks) unless explicitly designed as a mechanics puzzle where resetting is educational.
-	•	Deterministic Clarity: Every puzzle state (gates, switches, auras, conveyors) must be visually inspectable at a glance via CSS pulse cycles or border glows.
-2. The Golden Progression Curve (Levels 1 to 8)
-Every world across all 8 canonical themes must strictly adhere to this progression pipeline:
-	•	Level 1 (Tutorial): Single screen, ultra-simple (often 5x5 or small 8x4), isolates one specific mechanic in absolute safety.
-	•	Level 2 - 3 (Beginner Variants): Introduces minor twists, alternative uses, or spatial scaling of the mechanic.
-	•	Level 4 (Combinatory Complexity): Combines the mechanic with foundational elements (walls, basic pushes, or empty space) requiring a 3-to-4 step sequence.
-	•	Level 5 (Classic Homage / Intermediate): Mimics a legendary layout or difficulty spike from the source retro game, requiring strategic route planning.
-	•	Level 6 (The Odd / Remix Level): A structural subversion or asymmetrical layout (e.g., long corridors, split paths, or inverted gravity/conveyors) testing lateral thinking.
-	•	Level 7 (Hard Multi-Step): Advanced puzzles requiring precise spatial sequencing, multi-turn crate positioning, or exact aura/switch timing.
-	•	Level 8 (Mastery Pinnacle): The ultimate expression of the world's mechanic, combining all prior variants into a tight, highly restrictive 16x9 layout demanding flawless execution.
-🕹️ Part II: The 8 Canonical Worlds & Level Blueprints
-📦 World 1: Sokoban (The Warehouse & Deadlock Paradigm)
-	•	Source Inspiration: Sokoban (Thinking Rabbit, 1982)
-	•	Core Mechanic: Pushing uncolored crates into target floor receptors without getting trapped in wall corners.
-Level	Type	Grid Size	Description & Mechanics
-1	Tutorial	5x5	Push a single crate straight into a target plate.
-2	Beginner	6x6	Two crates, single corridor pivot.
-3	Beginner	8x6	Introduction of corner deadlocks (avoiding wall traps).
-4	Combinatory	10x6	Combining a wall maze with two movable crates and a detour.
-5	Intermediate	12x8	Homage: Classic Sokoban Level 3 layout adapted to 12x8.
-6	Odd / Remix	14x6	Long horizontal conveyor alley forcing backward crate pulls/pushes.
-7	Hard	16x9	Tight 4-crate sorting puzzle requiring cyclical shuffling.
-8	Master	16x9	Full maze density: multi-branching corridors with zero margin for error.
-👁️ World 2: Lolo's Castle (The Line-of-Sight & Raycast Paradigm)
-	•	Source Inspiration: Adventures of Lolo (HAL Laboratory, 1989)
-	•	Core Mechanic: Shielding the player from static Medusa raycast hazards using movable blocks.
-Level	Type	Grid Size	Description & Mechanics
-1	Tutorial	5x5	Push one block to block a single static raycast line.
-2	Beginner	7x5	Two raycast turrets crossing paths; timed movement.
-3	Beginner	9x6	Intersecting raycasts requiring diagonal block positioning.
-4	Combinatory	10x8	Combining block pushing with opening a timed exit gate.
-5	Intermediate	12x8	Homage: The classic 4-Medusa courtyard puzzle from Lolo World 1.
-6	Odd / Remix	14x6	Narrow 2x16 corridor swept by moving raycast barriers.
-7	Hard	16x9	Multi-chamber facility requiring block recycling across ray paths.
-8	Master	16x9	The Labyrinth Fortress: 16x9 maze with 6 active turrets and 3 movable shields.
-⚡ World 3: Hyrule Flip-Flop (The Global Binary State Paradigm)
-	•	Source Inspiration: The Legend of Zelda: A Link to the Past (Nintendo, 1991)
-	•	Core Mechanic: Striking global state switches that invert Red/Blue barrier walls across the entire map.
-Level	Type	Grid Size	Description & Mechanics
-1	Tutorial	5x5	Hit a single crystal switch to drop Blue gates and raise Red gates.
-2	Beginner	6x6	Alternating switches forming a zig-zag corridor.
-3	Beginner	8x8	Dual-switch routing: order of activation matters.
-4	Combinatory	10x8	Combining flip-flop gates with immovable walls and a switch loop.
-5	Intermediate	12x8	Homage: Palace of Darkness switch puzzle rooms.
-6	Odd / Remix	16x4	The 2x16 corridor flip-flop sprint (state changes every 2 steps).
-7	Hard	16x9	Multi-layered maze where switches are hidden behind breakable blockers.
-8	Master	16x9	The Grand Inversion: Synchronized state-flipping across 144 cells.
-🧊 World 4: Pengo Vector (The Inertial Conveyor Paradigm)
-	•	Source Inspiration: Pengo (Sega, 1982) & Kickle Cubicle (Irem, 1989)
-	•	Core Mechanic: Navigating vector force floor tiles (conveyors) and sliding blocks across momentum channels.
-Level	Type	Grid Size	Description & Mechanics
-1	Tutorial	5x5	Step onto an East-bound conveyor belt and slide to safety.
-2	Beginner	7x5	Interlocking N/S/E/W conveyor loops.
-3	Beginner	9x6	Pushing a sliding ice block onto a conveyor to bridge a gap.
-4	Combinatory	10x8	Conveyor loops combined with directional wall redirectors.
-5	Intermediate	12x8	Homage: Pengo ice-wall crushing chamber.
-6	Odd / Remix	16x6	The Pinball Alley: High-speed momentum bouncing across 16 columns.
-7	Hard	16x9	Complex momentum network requiring precise block placement to break loops.
-8	Master	16x9	Absolute Momentum: Full 16x9 kinetic matrix with zero safe footing.
-🎨 World 5: Chip's Chromatic (The Aura & Gate Filter Paradigm)
-	•	Source Inspiration: Chip's Challenge (Epyx, 1989)
-	•	Core Mechanic: Absorbing color auras from prisms (Red, Blue, Green, Yellow) to pass through matching chromatic gates.
-Level	Type	Grid Size	Description & Mechanics
-1	Tutorial	5x5	Step on Red prism \rightarrow pass Red gate \rightarrow exit.
-2	Beginner	7x5	Dual prisms (Red/Blue) with sequential gate filtering.
-3	Beginner	9x6	Color mixing corridors where backtracking resets aura state.
-4	Combinatory	10x8	Prisms guarded by movable blocks and locked pathways.
-5	Intermediate	12x8	Homage: Chip's Challenge "Three-Way Color Lock" level.
-6	Odd / Remix	16x4	The 2x16 Chromatic Corridor (strict linear color absorption chain).
-7	Hard	16x9	Multi-branching color maze requiring temporary aura shedding.
-8	Master	16x9	The Spectrum Nexus: 16x9 grid featuring all 4 chromatic filters and switches.
-🧲 World 6: Goof Proximity (The Crate Sensor Dock Paradigm)
-	•	Source Inspiration: Goof Troop (Capcom, 1993)
-	•	Core Mechanic: Activating floor sensors exclusively via adjacent North/South/East/West contact with colored crates.
-Level	Type	Grid Size	Description & Mechanics
-1	Tutorial	5x5	Push a crate adjacent to a sensor plate to open a door.
-2	Beginner	7x5	Two colored crates matching two specific color-coded sensors.
-3	Beginner	9x6	Maneuvering a crate around a tight corner to maintain proximity.
-4	Combinatory	10x8	Proximity sensors linked to global phase gates and conveyors.
-5	Intermediate	12x8	Homage: Goof Troop Castle Basement puzzle rooms.
-6	Odd / Remix	16x6	The Railway Dock: Sliding crates along a 16-wide track to activate remote doors.
-7	Hard	16x9	Multi-sensor grid requiring constant re-docking of colored blocks.
-8	Master	16x9	The Grand Mechanism: 16x9 automated factory floor with interdependent crate docks.
+Streuph's Maze — current world blueprint and future concepts
+==========================================================
+
+Current scope: six implemented eight-level worlds (48 levels), plus the
+13-level Prologue = 61 shipped-source levels. Worlds 7 and 8 below are future
+concepts only, not supported packs/mechanics. No editor is shipped.
+The queued V2 contract and Tile Mechanics Reference control behavior; this is
+the authoring/progression index, not an alternate executable ruleset.
+
+Golden Rules
+------------
+• Visual minimalism: inspectable geometric forms, clear cardinal exit arrows,
+  current carrier/lock/contact state, no unnecessary visual language.
+• Early safety: levels 1–3 must have no unintended irreversible playing-state
+  softlocks. Visible terminal ray mistakes are a separate restart lesson; no
+  intended winning route continues after failure. Record any deliberate reset
+  exception rather than assuming solver success proves safety.
+• Determinism: synchronous atomic commits, signal → transport → ordinary work,
+  entry-only victory, common crate-pending/dot-failed closure. Animation never
+  changes gameplay. White/Red/Green/Blue only; no implicit mobility from tint.
+• Bounds: 2–16 columns, 1–9 rows; top-first YAML, bottom-left A1. Large stable
+  envelopes may include wall padding; do not claim padding creates difficulty.
+• Canonical progression: tutorial; two beginner variants; familiar-mechanic
+  combination; intermediate homage; sparse/asymmetric remix; hard sequence;
+  mastery. Prologue is a separate 13-lesson introduction, not an eight-level world.
+• Every PAR must be minimum-proved and replayed through the real resolver.
+  Record wrong pushes, optional/scenery elements, source/gate necessity,
+  comparison completeness, and deliberate deviations from historical concepts.
+
+Current evidence: v2-pack-certification.md, v2-pack-proofs.json, and each linked
+route review. All 61 source minima currently prove/replay; final repository,
+Chromium, reference audits, and accepted-spec approval are separate gates.
+
+Prologue — 13 lessons, minimum total 160
+--------------------------------------
+First steps 8; Two colours 8; Conveyor 6; Loader 8; Keys and masters 9;
+Hold and release 11; Hinges 11; Short cuts 12; Cargo current 13;
+The long way round 27; Corridor 16; Colophon 27; Void and passage 4.
+See v2-prologue-route-review.md for exact boards/routes, guarded tutorial pushes,
+safe plate release, required portal, cargo-belt benefit, and optional experiments.
+
+World 1: Sokoban — warehouse targets, total 114
+--------------------------------------------
+Source: world-01-sokoban.levels.yaml; review: v2-world-1-route-review.md.
+Level  Role          Board  PAR  Actual lesson
+1      Tutorial      5×5     8   First Push: one guarded target push, upper detour.
+2      Beginner      6×6     8   Corridor Pivot: second blocker parks safely.
+3      Beginner      8×6     9   Corner Check: read sealed corners, not hidden resets.
+4      Combination  10×6    13   Two-Chamber Detour: two required target links.
+5      Intermediate 12×8    15   Warehouse No. 3: warehouse homage, not exact reproduction.
+6      Remix        14×6    17   Long Alley Remix: remote target, two-way distance detour.
+7      Hard         16×9    21   Four-Crate Shuffle: three targets plus parked blocker.
+8      Mastery      16×9    23   Master Warehouse: three links and final switchback.
+Crates in this pack are pushable, not pullable. No conveyor pull, crushing, or
+breakable walls. Late wrong pushes may need ordinary undo; early boards are guarded.
+
+World 2: Lolo's Castle — fixed rays and shields, total 148
+-------------------------------------------------------
+Source: world-02-lolos-castle.levels.yaml; review: v2-world-2-route-review.md.
+1      Tutorial      5×5     7   First Medusa: shield a fixed West ray before crossing.
+2      Beginner      7×5     7   Crossfire: one shield at two cardinal ray lines.
+3      Beginner      9×6    11   Crossing Lines: wider guarded intersection approach.
+4      Combination  10×8    20   The Unhurried Exit: separate ray shield and target crate.
+5      Intermediate 12×8    15   Four Medusas: two crossing rays; two occluded scenery sources.
+6      Remix        14×6    18   Still Corridor: fixed beam, lower return aisle.
+7      Hard         16×9    31   Twin Chambers: North then South shield targets/gates.
+8      Mastery      16×9    39   Labyrinth Fortress: North/South/North, three required beams.
+No timers, sweeping rays, diagonal pushes, or strategic recovery teleport.
+Exposure fails and freezes the attempt. Goals beyond the crossing prevent
+immediate-entry bypasses. Mastery retains six source glyphs but only three beams
+intersect the playable chambers; the other three are explicitly occluded scenery.
+
+World 3: Hyrule Flip-Flop — binary polarity, total 176
+---------------------------------------------------
+Source: world-03-hyrule-flip-flop.levels.yaml; review: v2-world-3-route-review.md.
+1      Tutorial      5×5     5   Red First, Blue Next: explicit occupied crystal ACTION.
+2      Beginner      6×6     8   Two-Switch Zigzag: Blue then Red around a bend.
+3      Beginner      8×8     8   Ordered Twin Chambers: ordered barrier-class exchange.
+4      Combination  10×8    12   Switch Loop: wall routing, not an automatic queue cycle.
+5      Intermediate 12×8    15   Palace of Darkness: two-room exchange homage.
+6      Remix        16×2    20   Sixteen-Column Exchange: five crystals, no timer.
+7      Hard         16×9    11   Barrier Blocker: park crate on Red; pending closure.
+8      Mastery      16×9    97   Grand Inversion: forced five-lane 83 moves + 14 ACTIONs.
+Polarity is not a carrier color. No breakable blocker or synchronized autonomous
+wall behavior. The long forced mastery route is proved, not inferred from its size.
+
+World 4: Pengo Vector — arrows, ice, stops, total 58
+-------------------------------------------------
+Source: world-04-pengo-vector.levels.yaml; review: v2-world-4-route-review.md.
+1      Tutorial      5×5     2   First Current: East arrow chain, ordinary floor stop.
+2      Beginner      7×5     5   Double Circuit: two finite wall-stopped runs and connector.
+3      Beginner      9×6     8   Ice Launch: cargo/dot use same belts; occupied exit blocks.
+4      Combination  10×8     7   Wall Channel: North redirection, ice detour, real wall stop.
+5      Intermediate 12×8    13   Compression Chamber: visible cargo slide; nothing crushed.
+6      Remix        16×6     2   Long Alley: full-width transport plus explicit ice continuation.
+7      Hard         16×9    17   Circuit Exit: plain-floor junction and two South parking pushes.
+8      Mastery      16×9     4   Absolute Momentum: essential crate bumper, protected upper channel.
+No front shove or arbitrary loop endpoint. Complete queue cycles roll back the
+whole action. Compression demonstrates cargo distance, not a claimed PAR saving.
+The final bumper is necessary; removing it is unsolvable after the F6 bypass guard.
+
+World 5: Chip's Chromatic — persistent P/W routing, total 104
+----------------------------------------------------------
+Source: world-05-chips-chromatic.levels.yaml; review: world-5-chromatic-route-review.md.
+1      Tutorial      5×5     8   The White Mark: Red P/W; White is an analogy, not Yellow.
+2      Beginner      7×5    10   Two Prisms: Red then Blue replacement, persistent return aura.
+3      Beginner      9×6     9   The Other Carrier: Blue W-gate while P is Red.
+4      Combination  10×8     7   Guarded Spectrum: key powers linked Green set dial.
+5      Intermediate 12×8    13   Three-Way Filter: three current-aura filters.
+6      Remix        16×2    15   Chromatic Corridor: alternating W/P tests.
+7      Hard         16×9    27   Commit to Green: reversible Red spur, required Green/Blue route.
+8      Mastery      16×9    15   Spectrum Nexus: actual White + RGB, both carriers.
+No mixing, aura loss/reset on backtracking, consumable keys, or fifth color.
+Every goal requires legal matching entry, not stationary equality.
+
+World 6: Goof Proximity — crate receiver contacts, total 109
+---------------------------------------------------------
+Source: world-06-goof-proximity.levels.yaml; review: v2-world-6-route-review.md.
+1      Tutorial      5×5     6   First Dock: guarded North push beside receiver.
+2      Beginner      7×5     6   Two Colors, Two Links: inspect two necessary pre-parked sources.
+3      Beginner      9×6    12   Around the Corner: guarded North/East pushes and real corner walk.
+4      Combination  10×8    13   Belt and Barrier: automatic cargo docking and upper detour.
+5      Intermediate 12×8    11   Castle Basement Rooms: remote pre-parked Red/Green sources.
+6      Remix        16×6    19   Railway Dock: manual upper-track pushes, lower return lane.
+7      Hard         16×9    21   Re-dock the Red Crate: switch link 1 → 2 after crossing.
+8      Mastery      16×9    21   Grand Dockworks: same re-dock plus necessary pre-parked Blue source.
+Only matching cardinal crate contacts count; same-cell/diagonal/dot occupancy
+does not. Sources/contact sides combine with OR. No new target or factory timer
+is inferred. Early overshoot traps are repaired; late overshoots are documented.
+
+Future concepts — UNIMPLEMENTED, not authoring contracts
+------------------------------------------------------
+The original World 7/8 concepts below remain design ideas only. They do not
+allocate registered IDs, authorize an editor, or add inventory/crumble/timers to
+the current engine. Any implementation needs a separately approved scoped change.
+
 🐍 World 7: Catrap Collapse (The Hamiltonian Trail Paradigm)
 	•	Source Inspiration: Catrap / Pitman (Asmik, 1990)
 	•	Core Mechanic: Traversing paths where exited floor tiles crumble into voids, demanding a complete Hamiltonian traversal.
@@ -116,5 +158,3 @@ Level	Type	Grid Size	Description & Mechanics
 6	Odd / Remix	16x6	The Metronome Corridor: 16-wide rhythmic pulse gauntlet.
 7	Hard	16x9	Multi-phase timing puzzle requiring exact turn counting.
 8	Master	16x9	The Oracle's Sanctum: The ultimate synthesis of timing, color auras, and global flip-flops.
-❓ Specific Follow-Up Question
-Would you like to generate the YAML data structure for World 1 (Sokoban) Levels 1 through 4 next to test directly inside the Streuph's Maze engine?

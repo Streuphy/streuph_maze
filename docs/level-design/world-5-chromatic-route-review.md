@@ -4,13 +4,15 @@ The pack uses only the existing `wht`, `red`, `gre`, and `blu` gameplay
 colors. “White fills the yellow-key role” is a theme analogy only: the player
 carrier, gate color, palette, and glyph remain white. There is no mixing or
 automatic aura loss. A prism replaces `P`; the player keeps that aura while
-walking away. World dials affect `W`, and every exit requires `P === W`.
+walking away. World dials affect `W`; winning requires a legal **goal entry**
+with `P === W`, after that hop's signals. Stationary equality is not a win.
 
 ## Solver routes and manual review
 
-`npm run levels:routes` loaded the pack through the production resolver, replayed
-each selected minimum route to victory, and completed its comparison across all
-minimum routes. PAR counts each explicit move or pull once; ACT counts toward
+The queued V2 review independently loaded this complete pack through the common
+loader, re-proved all eight minima and replayed each through the real resolver
+to immediate victory. Every tied-route comparison completed. PAR counts each
+explicit move or pull once; ACT counts toward
 PAR but not the U/D/L/R balance. The route strings below are the selected
 representative routes, not additional authored instructions.
 
@@ -43,3 +45,81 @@ levels likewise avoid introducing unrelated crate behavior.
   aura reset or an irreversible softlock.
 - The level-8 mastery route uses the white aura gate plus the three RGB states
   and both gate carriers, without adding a fifth color or color-mixing rule.
+
+## Queued V2 certification evidence
+
+No board, dimension, goal, override, or PAR required migration edits. Stable
+identity is `world-05-chips-chromatic`; all eight authored keys remain. Budgets
+were 250,000 states, depth 200, 250,000 route labels. The table above supplies
+the exact routes/counts/final carriers. All routes finish at their recorded
+strokes without failed/aborted transitions; no stationary goal equality or
+future queued prism is used to enter a gate early.
+
+| Review | Registered IDs | Proof states / labels | Complete recovery states |
+|---|---|---|---|
+| C01 | 0,1,2,3,11,20,31 | 21 / 21 | 33 |
+| C02 | 0,1,2,3,11,13,20,31,33 | 19 / 19 | 21 |
+| C03 | 0,1,2,3,11,13,20,36 | 19 / 19 | 26 |
+| C04 | 0,1,2,3,10,12,22,32,41 | 13 / 13 | 26 |
+| C05 | 0,1,2,3,11,12,13,20,31,32,33 | 28 / 28 | 29 |
+| C06 | 0,1,2,3,11,12,13,20,31,32,33,34,35,36 | 46 / 46 | 48 |
+| C07 | 0,1,2,3,11,12,13,20,31,32,33 | 57 / 59 | 105 |
+| C08 | 0,1,2,3,11,12,13,20,30,31,32,33,34,35,36 | 42 / 42 | 44 |
+
+Recovery enumeration used a 20,000-state budget and completed for **all eight**
+boards: zero unwinnable playing states, terminal failures, or diagnostic aborts.
+Every start is ordinary safe terrain. There are no crates/movable features,
+emitters, conveyors, ice, portal, or object overrides; the only moving entity
+is the default dot. No blocked carrier entry is physical closure beneath it.
+The linked phase wall in level 4 uses the common closure query, not an exception.
+
+### C01–C03 — introduction, replacement, and distinct carriers
+
+Level 1 isolates red P/W while keeping actual White as the theme analogy. Its
+red prism and world dial are individually essential. Wrong dial cycles can be
+repaired; the side branch returns safely before the gate. Level 2 requires
+both prisms and the dial; blue persists during the dial backtrack, with exactly
+two occupied ACTs after dial entry. Level 3's world gate admits **red P / blue W**
+before the blue prism supplies goal equality. Its initial red prism is a
+deliberate carrier-contrast demonstration, not an essential extra lock; removing
+the blue prism or world dial makes the board unsolvable. This distinction is
+recorded rather than falsely asserting every displayed prism adds difficulty.
+
+### C04–C06 — link execution and interleaved carrier tests
+
+Level 4's key, green prism, and green set-dial are separately essential. The
+set-dial checks the link **when executed**; an occupied ACTION with its source
+unlatched leaves W White. The normal route has already latched the key before
+reaching it, passes the phase wall, then sets P/W Green before the aura gate.
+No "key inventory" or delayed permission survives incorrectly in snapshots.
+
+Level 5 requires each RGB replacement and the final dial. Gates filter current
+P in sequence; the two ACTs bring W to Blue before goal entry, not while waiting
+on the goal. Level 6's three ordinary dial entries advance W Red/Green/Blue
+between actual world gates; interleaved prisms set P for actual aura gates.
+Removing any necessary prism or dial makes these boards unsolvable. No mixed,
+Yellow, Black, or automatic reset color is introduced.
+
+### C07–C08 — reversible branch and four-color capstone
+
+Level 7's red spur is explicitly **optional/reversible**, not a required filter
+on PAR. Wrong-spur replay returns through its red gate to the fork, then the
+green prism replaces P and permits the intended upper route. Green/blue prisms
+and the final dial are individually essential. There is no temporary aura
+shedding mechanic or irreversible failed turn hidden in this branch.
+
+Level 8 crosses White's aura filter while P is still White, then the RGB prisms,
+all three matching aura filters, and all three world filters. Each entry tests
+the registered P or W at action time; no premature deferred effect is applied.
+Necessary RGB prisms/dials cannot be removed; wrong-filter perturbations in the
+content suite prevent unsupported equal-PAR bypass claims. Final Blue equality
+is tested on entering P1, not by waiting there.
+
+## Completion boundary
+
+The world minimum is **104 strokes**. These updated notes and ledger rows are
+content/math certification under the sole queued four-color contract, not a
+claim that full repository/jsdom tests, real Chromium,
+or accepted-spec synchronization have completed. Focused pack regressions cover
+all eight proofs, current-carrier entry timing, source necessity, recovery,
+linked-dial execution, and the deliberately reversible red spur.

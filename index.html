@@ -17,8 +17,8 @@
       <span class="chip"><span class="swatch" id="swatch-W"></span>world</span>
     </div>
     <div id="hud">
-      <span class="stat"><b id="v-strokes">0</b><span>entries</span></span>
-      <span class="stat"><b id="v-par">0</b><span>par</span></span>
+      <span class="stat"><b id="v-strokes">0</b><span>strokes</span></span>
+      <span class="stat"><b id="v-par">0</b><span id="v-par-kind">par</span></span>
       <span class="stat"><b id="v-best">—</b><span>best</span></span>
       <span class="stat"><b id="v-turns">0</b><span>attempts</span></span>
     </div>
@@ -41,10 +41,11 @@
         <button class="btn" data-act="west" aria-label="west">◀</button>
         <button class="btn" data-act="act" aria-label="press">●</button>
         <button class="btn" data-act="east" aria-label="east">▶</button>
+        <span></span><button class="btn" data-act="south" aria-label="south">▼</button><span></span>
       </div>
 
       <div class="row-btns">
-        <button class="btn" id="btn-act" type="button">Press (ACT)</button>
+        <button class="btn" id="btn-act" type="button">Action / Rest</button>
         <button class="btn" id="btn-undo" type="button">Undo</button>
         <button class="btn" id="btn-reset" type="button">Restart</button>
         <button class="btn" id="btn-next" type="button">Next level</button>
@@ -72,6 +73,7 @@
       <h2>Levels</h2>
       <div class="body">
         <p id="world-name" class="world-name"></p>
+        <p id="world-score" class="world-score" aria-live="polite"></p>
         <ul id="levels"></ul>
       </div>
     </section>
@@ -140,7 +142,7 @@
 </div>
 
 <!-- Classic scripts, in dependency order. No modules, no fetch: both are
-     blocked under file://. PRODUCT-DESIGN.md §12.1. -->
+     blocked under file://. See docs/engine-architecture.md. -->
 <script src="src/js/sm-yaml.js"></script>
 <script src="src/js/tiles.js"></script>
 <script src="src/js/sm-glyphs.js"></script>

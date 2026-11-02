@@ -1,75 +1,72 @@
 #!/usr/bin/env node
-/* =========================================================================
- * scripts/emit-levels-yaml.js
- *
- * Writes data/levels.yaml from the built-in levels, using the
- * SAME emitter the in-game "Save levels.yaml" button uses. That keeps the
- * shipped file and the runtime file byte-identical in shape, and proves the
- * YAML writer round-trips (§11, N6).
- *
- *   node scripts/emit-levels-yaml.js
- *   node scripts/emit-levels-yaml.js --pars   (rewrite golf_score from the solver)
- * ========================================================================= */
 'use strict';
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { isDeepStrictEqual } = require('node:util');
 const ROOT = path.resolve(__dirname, '..');
-for (const f of ['src/js/sm-yaml.js', 'src/js/tiles.js', 'src/js/levels.default.js', 'src/js/levels.js', 'src/js/sm-rules.js']) {
-  vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f });
-}
-const SM = globalThis.SM;
+const RUNTIME_FILES = [
+  'sm-yaml', 'tiles', 'sm-glyphs', 'sm-board', 'sm-entities',
+  'levels.default', 'levels', 'sm-rules'
+];
 
-const res = SM.LEVELS.boot({ solve: true });
-if (res.problems.length) {
-  console.error('Refusing to emit: the built-in levels do not validate.');
-  res.problems.forEach(p => console.error('  ' + p.level + ': ' + p.message));
-  process.exit(1);
-}
-
-const doc = {};
-for (const k of Object.keys(SM.DEFAULT_LEVELS)) {
-  if (k !== 'levels') { doc[k] = SM.DEFAULT_LEVELS[k]; continue; }
-  doc.levels = {};
-  for (const lk of Object.keys(SM.DEFAULT_LEVELS.levels)) {
-    const src = SM.DEFAULT_LEVELS.levels[lk];
-    const out = {};
-    // Key order is the schema's, not the object's: name, goal, size, par,
-    // win picture, overrides, grid. emitYAML preserves insertion order (N6).
-    if (src.name !== undefined) out.name = src.name;
-    if (src.goal !== undefined) out.goal = src.goal;
-    if (src.width !== undefined) out.width = src.width;
-    if (src.height !== undefined) out.height = src.height;
-    let par = src.golf_score;
-    if (process.argv.includes('--pars')) {
-      const lv = res.levels.find(l => l.key === lk);
-      if (lv && lv.solve && lv.solve.optimal !== null) par = lv.solve.optimal;
-    }
-    if (par !== undefined) out.golf_score = par;
-    if (src.win_picture !== undefined) out.win_picture = src.win_picture;
-    if (src.overrides && Object.keys(src.overrides).length) out.overrides = src.overrides;
-    if (src.grid) out.grid = src.grid;
-    doc.levels[lk] = out;
+function loadRuntime(root = ROOT) {
+  for (const name of RUNTIME_FILES) {
+    const file = path.join(root, 'src/js', name + '.js');
+    vm.runInThisContext(fs.readFileSync(file, 'utf8'), { filename: file });
   }
+  return globalThis.SM;
 }
 
-const out = SM.emitYAML(doc, SM.YAML_HEADER);
-fs.writeFileSync(path.join(ROOT, 'data', 'levels.yaml'), out, 'utf8');
-
-// Prove it round-trips before declaring victory.
-const back = SM.LEVELS.load(out, { solve: true });
-if (back.problems.length) {
-  console.error('Emitted YAML does not round-trip:');
-  back.problems.forEach(p => console.error('  ' + p.level + ': ' + p.message));
-  process.exit(1);
+// Pure generation: validation, proof, and replay finish before any file write.
+function generate(SM, source = SM.DEFAULT_LEVELS, options = {}) {
+  const result = SM.LEVELS.validate(source, { solve: true });
+  if (!result.ok) throw new Error(result.problems.map(problem => problem.message).join('\n'));
+  const document = JSON.parse(JSON.stringify(source));
+  for (const level of result.levels) {
+    const proof = level.solve;
+    if (!proof || proof.status !== 'solvable' || proof.verified !== true || proof.optimal === null) {
+      throw new Error(level.key + ': no replay-proven minimum (' + (proof ? proof.status : 'not run') + ')');
+    }
+    const replay = SM.RULES.newState(level);
+    for (const action of proof.path) SM.RULES.resolveTurn(replay, action);
+    if (!replay.won || replay.failed || replay.strokes !== proof.optimal) throw new Error(level.key + ': minimum route failed replay');
+    if (document.levels[level.key].golf_score !== proof.optimal) {
+      throw new Error(level.key + ': reviewed source golf_score must equal proven minimum ' + proof.optimal + ' before generation');
+    }
+    if (options.pars) document.levels[level.key].golf_score = proof.optimal;
+  }
+  const text = SM.emitYAML(document, SM.YAML_HEADER);
+  const parsed = SM.parseYAML(text);
+  if (!isDeepStrictEqual(parsed, document)) throw new Error('emitted authoring lost or changed fields');
+  const back = SM.LEVELS.validate(parsed, { solve: false });
+  if (!back.ok) throw new Error('emitted YAML fails the shared validator');
+  return { text, document, levels: result.levels };
 }
 
-const warnings = res.diagnostics.filter(d => /V10|§13/.test(d.message));
-console.log('wrote data/levels.yaml — ' + back.levels.length + ' levels, round-trips cleanly.');
-if (warnings.length) {
-  console.log('warnings from the built-in set:');
-  warnings.forEach(w => console.log('  ' + w.level + '  ' + w.message));
-} else {
-  console.log('no V10/§13 warnings.');
+function main() {
+  const flags = process.argv.slice(2);
+  if (flags.some(flag => !['--check', '--pars'].includes(flag))) throw new Error('usage: levels:emit [--check] [--pars]');
+  const generated = generate(loadRuntime(), undefined, { pars: flags.includes('--pars') });
+  const destination = path.join(ROOT, 'data/levels.yaml');
+  if (flags.includes('--check')) {
+    const existing = globalThis.SM.parseYAML(fs.readFileSync(destination, 'utf8'));
+    if (!isDeepStrictEqual(existing, generated.document)) throw new Error('Prologue JS/YAML authoring is not semantically equivalent');
+    console.log('Prologue check passed: ' + generated.levels.length + ' replay-proven levels; no files written.');
+    return;
+  }
+  const temporary = destination + '.' + process.pid + '.tmp';
+  let created = false;
+  try {
+    fs.writeFileSync(temporary, generated.text, { encoding: 'utf8', flag: 'wx' }); created = true;
+    fs.renameSync(temporary, destination); created = false;
+  } finally {
+    if (created) fs.unlinkSync(temporary); // Only a temporary file created by this invocation.
+  }
+  console.log('Wrote data/levels.yaml: ' + generated.levels.length + ' reviewed, replay-proven levels.');
+}
+
+module.exports = { loadRuntime, generate, RUNTIME_FILES };
+if (require.main === module) {
+  try { main(); } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

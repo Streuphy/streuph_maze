@@ -37,16 +37,17 @@
    *   part of solver identity.
    */
   RULES.STATE_CONTRACT = Object.freeze({
+    // Authored configuration under `level` and terrain under `grid` are fixed.
     fixed: Object.freeze(['level', 'key', 'width', 'height', 'grid', 'portals', 'start', 'goal']),
-    mutable: Object.freeze(['crates', 'switches', 'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won']),
+    mutable: Object.freeze(['crates', 'switches', 'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won', 'failed', 'failureReason']),
     derived: Object.freeze(['locked']),
     persistent: Object.freeze(['seen']),
     undo: Object.freeze([
-      'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won',
-      'switches[].latched', 'switches[target].position', 'crates[][]'
+      'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won', 'failed', 'failureReason',
+      'switches[]:identity+position+latch+capabilities', 'crates[][]'
     ]),
     solverIdentity: Object.freeze([
-      'player', 'P', 'W', 'polarity', 'switches[].latched', 'targets[].position',
+      'player', 'P', 'W', 'polarity', 'won', 'failed', 'failureReason', 'switches[].latched', 'targets[].position',
       'crates[][]:id+colour+capabilities'
     ])
   });
@@ -62,8 +63,56 @@
   var ACTION_KEYS = ['north', 'east', 'south', 'west'];
   RULES.ACTION_KEYS = ACTION_KEYS;
 
-  var FORCE_CHAIN_STATES_PER_CELL = 4;
-  var TELEPORT_HOP_CAP = 1;  // §5.2 step 7.4: a teleport ends the move
+  var EFFECT_PRIORITIES = Object.freeze({ signal: 0, checkpoint: 0.5, transport: 1, ordinary: 2 });
+  RULES.createQueue = function (width, height) {
+    var pending = [], sequence = 0;
+    var operations = { signal: ['onActivate', 'onRelease'], checkpoint: ['goal'],
+      transport: ['flow', 'ice', 'portal', 'ray'], ordinary: ['onEnter', 'onExit', 'onAct'] };
+    function dataOnly(value) {
+      if (value === null || value === undefined || typeof value === 'string' || typeof value === 'boolean') return;
+      if (typeof value === 'number' && isFinite(value)) return;
+      if (typeof value !== 'object' || (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+        throw new Error('non-declarative effect payload');
+      }
+      Object.keys(value).forEach(function (key) { dataOnly(value[key]); });
+    }
+    function ordered() {
+      pending.sort(function (a, b) {
+        return EFFECT_PRIORITIES[a.kind] - EFFECT_PRIORITIES[b.kind] || a.y - b.y || a.x - b.x || a.sequence - b.sequence;
+      });
+    }
+    function semantic(record) {
+      return [record.kind, record.op, record.x, record.y, record.actorId,
+        record.inst && [record.inst.id, record.inst.params, record.inst.strategies], record.payload || null];
+    }
+    var queue = {
+      add: function (record) {
+        if (!record || !Object.prototype.hasOwnProperty.call(EFFECT_PRIORITIES, record.kind) ||
+            !Number.isInteger(record.x) || !Number.isInteger(record.y) ||
+            record.x < 0 || record.y < 0 || record.x >= width || record.y >= height ||
+            typeof record.op !== 'string' || operations[record.kind].indexOf(record.op) < 0 ||
+            (record.kind !== 'signal' && typeof record.actorId !== 'string') ||
+            Object.keys(record).some(function (key) { return ['kind', 'op', 'x', 'y', 'actorId', 'inst', 'payload'].indexOf(key) < 0; })) {
+          throw new Error('malformed queued effect');
+        }
+        dataOnly(record.payload);
+        var encoded = JSON.stringify(semantic(record), function (key, value) {
+          if (typeof value === 'function' || typeof value === 'symbol' ||
+              (typeof value === 'number' && !isFinite(value))) throw new Error('non-declarative effect payload');
+          return value;
+        });
+        if (record.kind === 'transport' && pending.some(function (other) { return other.transportKey === encoded; })) return false;
+        var capturedPayload = record.payload === undefined ? undefined : JSON.parse(JSON.stringify(record.payload));
+        pending.push(immutableConfiguration(Object.assign({}, record, { payload: capturedPayload, sequence: sequence++,
+          transportKey: record.kind === 'transport' ? encoded : null })));
+        return true;
+      },
+      shift: function () { ordered(); return pending.shift() || null; },
+      signature: function () { ordered(); return JSON.stringify(pending.map(semantic)); }
+    };
+    Object.defineProperty(queue, 'length', { get: function () { return pending.length; } });
+    return Object.freeze(queue);
+  };
 
   /* ---------------------------------------------------------------------- */
   /* Level construction                                                     */
@@ -86,13 +135,29 @@
     return out;
   }
 
+  function immutableConfiguration(value) {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+    var copy = Array.isArray(value) ? [] : {};
+    Object.keys(value).forEach(function (key) { copy[key] = immutableConfiguration(value[key]); });
+    return Object.freeze(copy);
+  }
+
+  function protectFixed(state) {
+    RULES.STATE_CONTRACT.fixed.forEach(function (key) {
+      Object.defineProperty(state, key, { enumerable: true, configurable: false, writable: false,
+        value: key === 'level' ? state[key] : immutableConfiguration(state[key]) });
+    });
+    return Object.seal(state);
+  }
+
   /**
    * Build a normalised, immutable level object from a raw level record.
-   * levels.js has already validated the raw record (V1-V12); this function
+   * levels.js has already validated the raw record against the shared schema; this function
    * only translates. Throws LevelError on anything it still cannot honour.
    */
   RULES.buildLevel = function (raw, key) {
-    var w = raw.width, h = raw.height;
+    var w = raw.width === undefined ? raw.grid[0].length : raw.width;
+    var h = raw.height === undefined ? raw.grid.length : raw.height;
     var tiles = [], runtimeTiles = [], crates = [], locked = [], switches = [];
     var portals = {};
     var start = null, goal = null;
@@ -129,6 +194,9 @@
           entityId: def.entityRole ? def.entityRole + '@' + objectLabel : null,
           solid: def.solid,
           walkable: def.walkable,
+          closingSurface: def.closingSurface,
+          category: def.category,
+          layer: def.layer,
           pushable: !!def.pushable,
           capabilities: mergeParams(def.capabilities, objectOv),
           strategies: mergeParams(def.strategies, null),
@@ -146,6 +214,8 @@
             ov.defaultLocked === undefined) {
           inst.params.defaultLocked = true;
         }
+        inst = immutableConfiguration(inst);
+        authoredInst = inst;
         if (inst.entityRole === 'crate') {
           // Crate IDs in authored grids are entity markers, not terrain. Keep
           // the crate instance in its movable layer and expose ordinary floor
@@ -182,6 +252,7 @@
         }
         // Preserve the catalogue-backed authored view for level inspection;
         // the mutable runtime grid exposes floor beneath both entity types.
+        inst = immutableConfiguration(inst);
         tiles[ry][rx] = authoredInst.entityRole === 'target' ? authoredInst : inst;
         runtimeTiles[ry][rx] = inst;
 
@@ -206,8 +277,13 @@
       throw LevelError(key, 'the start tile and the goal tile are the same cell');
     }
 
-    return {
+    var level = {
       key: key,
+      rulesIdentity: JSON.stringify([key, raw.grid,
+        raw.overrides, raw.object_overrides, raw.initial_polarity,
+        raw.initial_player_colour, raw.initial_world_colour]),
+      initialPlayerColour: raw.initial_player_colour || 'wht',
+      initialWorldColour: raw.initial_world_colour || 'wht',
       name: raw.name || key,
       goalText: raw.goal || '',
       initialPolarity: raw.initial_polarity || 'red-open',
@@ -224,6 +300,11 @@
       goal: goal,
       raw: raw
     };
+    Object.keys(level).forEach(function (field) {
+      Object.defineProperty(level, field, { enumerable: true, configurable: false, writable: false,
+        value: immutableConfiguration(level[field]) });
+    });
+    return level;
   };
 
   var colName = SM.BOARD.colName;
@@ -255,14 +336,17 @@
       player: { x: level.start.x, y: level.start.y },
       start: { x: level.start.x, y: level.start.y },
       goal:  { x: level.goal.x,  y: level.goal.y  },
-      P: 'wht',
-      W: 'wht',
+      P: level.initialPlayerColour || 'wht',
+      W: level.initialWorldColour || 'wht',
       strokes: 0,
       turns: 0,
       won: false,
+      failed: false,
+      failureReason: null,
       polarity: level.initialPolarity || 'red-open',
       seen: {}
     };
+    protectFixed(s);
     rebuildLocks(s);
     var initialTarget = targetAt(s, s.player.x, s.player.y);
     s.seen[(initialTarget ? initialTarget.inst : s.grid[s.player.y][s.player.x]).id] = true;
@@ -278,7 +362,7 @@
     // A solver branch needs an independent copy of every mutable gameplay
     // value. Fixed definition data may be shared; derived locks are copied
     // here for speed but are rebuilt after restore and remain non-authoritative.
-    return {
+    return protectFixed({
       level: s.level,
       key: s.key,
       width: s.width,
@@ -286,10 +370,7 @@
       grid: s.grid,
       crates: deepCopyGrid(s.crates),
       locked: deepCopyGrid(s.locked),
-      switches: s.switches.map(function (sw) {
-        return { entityId: sw.entityId, x: sw.x, y: sw.y, inst: sw.inst,
-          latched: sw.latched, capabilities: mergeParams(sw.capabilities, null) };
-      }),
+      switches: copySwitches(s.switches),
       portals: s.portals,
       player: { x: s.player.x, y: s.player.y },
       start: { x: s.start.x, y: s.start.y },
@@ -297,8 +378,9 @@
       P: s.P, W: s.W,
       polarity: s.polarity,
       strokes: s.strokes, turns: s.turns, won: s.won,
+      failed: s.failed, failureReason: s.failureReason,
       seen: Object.assign({}, s.seen)
-    };
+    });
   };
 
   RULES.snapshot = function (s) {
@@ -309,9 +391,8 @@
       player: { x: s.player.x, y: s.player.y },
       P: s.P, W: s.W, polarity: s.polarity,
       strokes: s.strokes, turns: s.turns, won: s.won,
-      latched: s.switches.map(function (sw) { return sw.latched; }),
-      targets: s.switches.filter(isTargetEntity)
-        .map(function (sw) { return { entityId: sw.entityId, x: sw.x, y: sw.y }; }),
+      failed: s.failed, failureReason: s.failureReason,
+      switches: copySwitches(s.switches),
       crates: s.crates.map(function (row) {
         // Crate instances are immutable level data; retaining their reference
         // preserves ID and parameter overrides without putting terrain back.
@@ -324,29 +405,30 @@
     // Keep this list aligned with STATE_CONTRACT.mutable. Entity identity and
     // capability profiles remain attached to immutable instances; positions,
     // colors, counters, latches, and crate occupancy are restored explicitly.
-    s.player.x = snap.player.x; s.player.y = snap.player.y;
+    s.player = { x: snap.player.x, y: snap.player.y };
     s.P = snap.P; s.W = snap.W; s.polarity = snap.polarity || 'red-open';
     s.strokes = snap.strokes; s.turns = snap.turns; s.won = snap.won;
-    for (var i = 0; i < s.switches.length; i++) s.switches[i].latched = snap.latched[i];
-    if (snap.targets) {
-      for (var ti = 0; ti < snap.targets.length; ti++) {
-        var target = snap.targets[ti];
-        for (var si = 0; si < s.switches.length; si++) {
-          if (isTargetEntity(s.switches[si]) &&
-              s.switches[si].entityId === target.entityId) {
-            s.switches[si].x = target.x; s.switches[si].y = target.y;
-            break;
-          }
-        }
-      }
-    }
+    s.failed = snap.failed; s.failureReason = snap.failureReason;
+    s.switches = copySwitches(snap.switches);
+    s.crates = deepCopyGrid(snap.crates);
+    s.locked = newGrid(s.width, s.height, false);
     for (var y = 0; y < s.height; y++) {
       for (var x = 0; x < s.width; x++) {
         s.crates[y][x] = snap.crates[y][x] || null;
       }
     }
     rebuildLocks(s);
+    enforceDotClosure(s);
   };
+
+  function copySwitches(switches) {
+    return switches.map(function (sw) {
+      return { entityId: sw.entityId, x: sw.x, y: sw.y, inst: sw.inst,
+        latched: sw.latched, capabilities: mergeParams(sw.capabilities, null) };
+    });
+  }
+
+  RULES.outcome = function (s) { return s.failed ? 'failed' : s.won ? 'won' : 'playing'; };
 
   /* ---------------------------------------------------------------------- */
   /* Geometry helpers                                                       */
@@ -367,7 +449,7 @@
   var isLocked = SM.BOARD.isLocked;
   RULES.isLocked = isLocked;
 
-  function isSolid(s, x, y) {
+  function requestedSolidAt(s, x, y) {
     var inst = tileAt(s, x, y);
     if (!inst) return true;
     // A strategy may return { solid } or carrier requirements. Static boolean
@@ -388,6 +470,21 @@
     }
     return false;
   }
+  function closureAt(s, x, y) {
+    var inst = tileAt(s, x, y);
+    var requested = requestedSolidAt(s, x, y);
+    var pending = !!(inst && inst.closingSurface && requested && crateAt(s, x, y));
+    return { requestedSolid: requested, pendingClose: pending, effectiveSolid: requested && !pending };
+  }
+  function isSolid(s, x, y) { return closureAt(s, x, y).effectiveSolid; }
+  function enforceDotClosure(s) {
+    var inst = tileAt(s, s.player.x, s.player.y);
+    if (!s.won && !s.failed && inst && inst.closingSurface && isSolid(s, s.player.x, s.player.y)) {
+      s.failed = true; s.failureReason = 'closure'; return true;
+    }
+    return false;
+  }
+  RULES.closureAt = closureAt;
   RULES.isSolid = isSolid;
 
   function tilePassability(s, inst, x, y) {
@@ -469,59 +566,6 @@
     var inst = object.inst || object;
     var rule = rayInteraction(s, inst, x, y, object);
     return rule && rule.type === 'object' ? rule.profile : objectCapabilities(object);
-  }
-
-  function rayTransportKey(object) {
-    return object.entityId || (isTargetEntity(object)
-      ? 'target:' + object.inst.id + '@' + object.x + ',' + object.y
-      : 'crate:' + object.id);
-  }
-
-  function transportObjectsOnRay(s, ray, steps) {
-    var processed = {};
-    var entityCount = 0;
-    for (var y = 0; y < s.height; y++) {
-      for (var x = 0; x < s.width; x++) if (crateAt(s, x, y)) entityCount++;
-    }
-    for (var i = 0; i < s.switches.length; i++) {
-      if (isTargetEntity(s.switches[i])) entityCount++;
-    }
-
-    for (var attempt = 0; attempt < entityCount; attempt++) {
-      var cells = traceRay(s, ray.x, ray.y);
-      var candidate = null;
-      var distance = -1;
-      for (var ci = 0; ci < cells.length; ci++) {
-        var cell = cells[ci];
-        var occupants = [crateAt(s, cell.x, cell.y), targetAt(s, cell.x, cell.y)];
-        for (var oi = 0; oi < occupants.length; oi++) {
-          var object = occupants[oi];
-          if (!object || rayProfile(s, object, cell.x, cell.y).ray !== 'transport') continue;
-          var key = rayTransportKey(object);
-          if (processed[key]) continue;
-          if (ci > distance) { candidate = { object: object, x: cell.x, y: cell.y, key: key }; distance = ci; }
-        }
-      }
-      if (!candidate) break;
-
-      processed[candidate.key] = true;
-      var xPos = candidate.x, yPos = candidate.y;
-      var nextX = xPos + ray.dir.x, nextY = yPos + ray.dir.y;
-      while (isLegalObjectDestination(s, candidate.object, nextX, nextY)) {
-        moveObjectEntity(s, candidate.object, xPos, yPos, nextX, nextY, steps, 'move');
-        xPos = nextX; yPos = nextY;
-        nextX += ray.dir.x; nextY += ray.dir.y;
-      }
-    }
-  }
-
-  function transportObjectsAlongRays(s, steps) {
-    // Each ray sees the settled board left by previous emitters; ordering is
-    // intentionally stable and transport is completed before player exposure.
-    var emitters = traceRays(s);
-    for (var i = 0; i < emitters.length; i++) {
-      transportObjectsOnRay(s, emitters[i], steps);
-    }
   }
 
   function isCaught(s, player) {
@@ -662,9 +706,10 @@
   /* Generic state/event operations injected into tile strategy contexts.   */
   /* ---------------------------------------------------------------------- */
 
-  function makeEngine(s, steps) {
-    return {
+  function makeEngine(s, steps, round) {
+    return Object.freeze({
       checkGoal: function (ctx) {
+        if (round && !round.goalCheckpoint) return;
         if (s.player.x === s.goal.x && s.player.y === s.goal.y && s.P === s.W) {
           s.won = true;
           steps.push({ type: 'goal', x: s.player.x, y: s.player.y, won: true });
@@ -690,12 +735,15 @@
         steps.push({ type: 'polarity', x: ctx.x, y: ctx.y, from: from, to: s.polarity });
       },
       teleportPlayer: function (ctx) {
+        if (ctx.trigger && (ctx.trigger.portalArrival || ctx.trigger.transportHandled)) return;
+        if (s.player.x !== ctx.x || s.player.y !== ctx.y) return;
         var dest = partnerPortal(s, ctx.x, ctx.y, ctx.inst.params.link);
         if (!dest) return;
+        if (!canEnter(s, dest.x, dest.y)) return;
         steps.push({ type: 'teleport', from: { x: ctx.x, y: ctx.y }, to: dest });
         s.player.x = dest.x; s.player.y = dest.y;
       }
-    };
+    });
   }
   RULES.makeEngine = makeEngine;
 
@@ -735,6 +783,11 @@
     return SM.ENTITIES.capabilities(object);
   }
 
+  function effectiveCapabilities(s, object) {
+    return objectCapabilities(object);
+  }
+  RULES.effectiveCapabilities = effectiveCapabilities;
+
   function moveObjectEntity(s, object, fromX, fromY, toX, toY, steps, eventType) {
     // Destination preflight is a separate pure query; the entity helper owns
     // only one-position commit and the corresponding stable display event.
@@ -752,119 +805,6 @@
     });
   }
 
-  function runObjectForceChain(s, object, startX, startY, incoming, steps) {
-    // Preconditions: the initiating move already committed this object's
-    // first position. Each subsequent hop is capability- and destination-
-    // checked; a directed-state set and board-derived cap guarantee termination.
-    var capabilities = objectCapabilities(object);
-    var x = startX, y = startY, d = incoming;
-    var hops = 0;
-    var cap = s.width * s.height * FORCE_CHAIN_STATES_PER_CELL;
-    var seen = {};
-
-    while (hops < cap) {
-      var inst = tileAt(s, x, y);
-      if (!inst) break;
-      var force = forcedMovementFor(s, inst, x, y, d, object);
-
-      if (force && force.type === 'portal' && capabilities.portal) {
-        var partner = partnerPortal(s, x, y, force.link);
-        if (!partner || !isLegalObjectDestination(s, object, partner.x, partner.y)) break;
-        moveObjectEntity(s, object, x, y, partner.x, partner.y, steps, 'teleport');
-        break; // teleport ends this entity's chain; the destination is not re-entered
-      }
-
-      if (force && force.type === 'flow' && capabilities.conveyor) {
-        d = force.direction || { x: 1, y: 0 };
-      } else if (force && force.type === 'ice' && capabilities.conveyor && d) {
-        d = force.direction || d;
-      } else {
-        break;
-      }
-
-      var stateKey = (object.entityId || object.id) + ':' + x + ',' + y + ',' + d.x + ',' + d.y;
-      if (seen[stateKey]) {
-        steps.push({ type: 'force-loop', entityId: object.entityId, x: x, y: y,
-          dir: { x: d.x, y: d.y } });
-        break;
-      }
-      seen[stateKey] = true;
-
-      var tx = x + d.x, ty = y + d.y;
-      if (!isLegalObjectDestination(s, object, tx, ty)) break;
-      moveObjectEntity(s, object, x, y, tx, ty, steps, 'move');
-      x = tx; y = ty;
-      hops++;
-    }
-
-    if (hops >= cap) {
-      steps.push({ type: 'object-force-cap', entityId: object.entityId,
-        cap: cap, x: x, y: y });
-    }
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /* Player force chains (conveyors and ice)                               */
-  /*                                                                        */
-  /*  Player belts carry in their declared direction. Ice carries the      */
-  /*  incoming direction. Crate belts retain their explicit one-cell shove. */
-  /*  Repeated directed positions stop loops; a board-derived cap is a      */
-  /*  final guard for malformed or dynamically changing chains.             */
-  /* ---------------------------------------------------------------------- */
-
-  function runPlayerForceChain(s, incoming, steps) {
-    // Player force uses the same tile hook protocol as objects, but the engine
-    // retains player occupancy, gate legality, crate-belt eligibility, and
-    // bounded iteration as shared movement invariants.
-    var hops = 0;
-    var cap = s.width * s.height * FORCE_CHAIN_STATES_PER_CELL;
-    var seen = {};
-    var d = incoming;
-    while (hops < cap) {
-      var inst = tileAt(s, s.player.x, s.player.y);
-      if (!inst) break;
-      var force = forcedMovementFor(s, inst, s.player.x, s.player.y, d, null);
-      if (force && force.type === 'flow') d = force.direction || { x: 1, y: 0 };
-      else if (force && force.type === 'ice') d = force.direction || d;
-      else break;
-
-      var stateKey = s.player.x + ',' + s.player.y + ',' + d.x + ',' + d.y;
-      if (seen[stateKey]) {
-        steps.push({ type: 'force-loop', x: s.player.x, y: s.player.y,
-                     dir: { x: d.x, y: d.y } });
-        break;
-      }
-      seen[stateKey] = true;
-
-      var tx = s.player.x + d.x, ty = s.player.y + d.y;
-      if (!inBounds(s, tx, ty) || isSolid(s, tx, ty)) break;
-
-      var c = crateAt(s, tx, ty);
-      var feature = targetAt(s, tx, ty);
-      var object = c || feature;
-      if (object) {
-        if (!force || force.type !== 'flow' || force.kind !== 'crate' ||
-            !objectCapabilities(object).conveyor) break;
-        var bx = tx + d.x, by = ty + d.y;
-        if (!isLegalObjectDestination(s, object, bx, by)) break;
-        moveObjectEntity(s, object, tx, ty, bx, by, steps, 'move');
-        runObjectForceChain(s, object, bx, by, d, steps);
-      } else {
-        var target = tileAt(s, tx, ty);
-        var passability = tilePassability(s, target, tx, ty);
-        if (passability && passability.required && passability.carrier !== passability.required) break;
-      }
-
-      var from = { x: s.player.x, y: s.player.y };
-      s.player.x = tx; s.player.y = ty;
-      steps.push({ type: 'move', from: from, to: { x: tx, y: ty } });
-      hops++;
-    }
-    if (hops >= cap) {
-      steps.push({ type: 'belt-cap', cap: cap, x: s.player.x, y: s.player.y });
-    }
-  }
-
   /* ---------------------------------------------------------------------- */
   /* The resolver (R1-R21, §5.2)                                           */
   /* ---------------------------------------------------------------------- */
@@ -874,94 +814,310 @@
    * `steps` is the ONLY channel to the view; the view must never feed back.
    */
   RULES.resolveTurn = function (s, action) {
-    if (!action || typeof action.type !== 'string') {
-      throw LevelError(s.key, 'resolveTurn: action.type is required');
-    }
-    var steps = [];
-    var engine = makeEngine(s, steps);
-    var before = snapshotSig(s);
-    var wasWon = s.won;
-
-    if (action.type === 'move') {
-      var d = null, i;
-      for (i = 0; i < DIRS.length; i++) if (DIRS[i].name === action.dir) d = DIRS[i];
-      if (!d) throw LevelError(s.key, 'resolveTurn: unknown direction "' + action.dir + '"');
-      moveOne(s, d, steps, engine);
-    } else if (action.type === 'pull') {
-      var pullDir = null, pi;
-      for (pi = 0; pi < DIRS.length; pi++) if (DIRS[pi].name === action.dir) pullDir = DIRS[pi];
-      if (!pullDir) throw LevelError(s.key, 'resolveTurn: unknown pull direction "' + action.dir + '"');
-      pullOne(s, pullDir, steps, engine);
-    } else if (action.type === 'act') {
-      var here = tileAt(s, s.player.x, s.player.y);
-      steps.push({ type: 'press', x: s.player.x, y: s.player.y });
-      if (here) runBehaviour(s, steps, engine, here, s.player.x, s.player.y, true);
-    } else {
-      throw LevelError(s.key, 'resolveTurn: unknown action "' + action.type + '"');
-    }
-
-    // Canonical turn phases (event order is observable by renderer and tests):
-    // 1. Commit the direct move/push/pull or ACT.
-    // 2. Settle object force, then player force, then the player's final entry.
-    // 3. Derive signal/lock state from the settled board.
-    // 4. Transport ray-compatible objects in stable emitter scan order.
-    // 5. Re-derive locks and final rays; catch/respawn an exposed player.
-    // 6. Account for turn/stroke, update persistent discovery, then test goal.
-    // No rendering or wall-clock action participates in these phases.
+    if (!action || ['move', 'pull', 'act'].indexOf(action.type) === -1) throw LevelError(s.key, 'invalid action');
+    if (action.type !== 'act' && ACTION_KEYS.indexOf(action.dir) === -1) throw LevelError(s.key, 'invalid direction');
+    if (s.won || s.failed) return { steps: [{ type: 'blocked', reason: 'terminal', outcome: RULES.outcome(s) }],
+      changed: false, stroke: false };
     rebuildLocks(s);
-    var actionChanged = before !== snapshotSig(s);
-    var movementAction = action.type === 'move' || action.type === 'pull';
-    var resolvedAction = action.type === 'act' || (movementAction && actionChanged);
-    var rayRecords = [];
-    if (resolvedAction) {
-      transportObjectsAlongRays(s, steps);
-      rebuildLocks(s);
-      rayRecords = traceRays(s);
+    if (enforceDotClosure(s)) return { steps: [{ type: 'failed', reason: 'closure', at: { x: s.player.x, y: s.player.y } },
+      { type: 'state', snapshot: RULES.snapshot(s) }], changed: true, stroke: false };
+    var before = RULES.snapshot(s), seenBefore = Object.assign({}, s.seen);
+    try { return resolveAction(s, action); }
+    catch (error) {
+      RULES.restore(s, before);
+      s.seen = seenBefore;
+      return { steps: [{ type: 'effect-abort', reason: error.effectReason || 'exception', message: String(error.message || error) }],
+        aborted: true, changed: false, stroke: false };
     }
-    for (var ri = 0; ri < rayRecords.length; ri++) {
-      steps.push({ type: 'ray', emitter: { x: rayRecords[ri].x, y: rayRecords[ri].y },
-        dir: rayRecords[ri].dir, cells: rayRecords[ri].cells });
-    }
-    var caught = resolvedAction && isCaught(s);
-    if (caught) {
-      var caughtAt = { x: s.player.x, y: s.player.y };
-      var respawnAt = { x: s.start.x, y: s.start.y };
-
-      // Goal entry effects run synchronously as part of movement. If the same
-      // settled position is exposed to a ray, retract that provisional win so
-      // the catch takes precedence over the final goal test below.
-      s.won = wasWon;
-      for (var si = steps.length - 1; si >= 0; si--) {
-        if (steps[si].type === 'goal') steps.splice(si, 1);
-      }
-      steps.push({ type: 'caught', at: caughtAt });
-      s.player.x = respawnAt.x;
-      s.player.y = respawnAt.y;
-      steps.push({ type: 'respawn', from: caughtAt, to: respawnAt });
-      rebuildLocks(s);
-    }
-
-    s.turns++;
-    var inst = tileAt(s, s.player.x, s.player.y);
-    var seenTarget = targetAt(s, s.player.x, s.player.y);
-    if (seenTarget) inst = seenTarget.inst;
-    if (inst) s.seen[inst.id] = true;
-
-    var moved = before !== snapshotSig(s) || caught;
-    var stroke = (movementAction && (actionChanged || caught)) || action.type === 'act';
-    if (stroke) s.strokes++;
-
-    // Goal is re-tested every turn; it is cheap and it means a colour change
-    // anywhere in the resolver can complete the level.
-    if (!s.won && s.player.x === s.goal.x && s.player.y === s.goal.y && s.P === s.W) {
-      s.won = true;
-      steps.push({ type: 'goal', x: s.player.x, y: s.player.y, won: true });
-    }
-
-    return { steps: steps, changed: moved, stroke: stroke };
   };
 
-  function moveOne(s, d, steps, engine) {
+  function resolveAction(s, action) {
+    var round = { queue: RULES.createQueue(s.width, s.height), steps: [], initial: RULES.snapshot(s),
+      signals: signalState(s), raySessions: Object.create(null), seenIds: Object.create(null),
+      attempts: 0, commitId: 0, direct: true, goalCheckpoint: false };
+    round.engine = makeEngine(s, round.steps, round);
+    var direction = DIRS.filter(function (d) { return d.name === action.dir; })[0];
+    var initialPositions = positions(s);
+    atomicEffect(s, round, function () {
+      if (action.type === 'move') moveOne(s, direction, round.steps);
+      else if (action.type === 'pull') pullOne(s, direction, round.steps);
+    }, action.type);
+    var committed = action.type === 'act' || !samePositions(initialPositions, positions(s));
+    if (!committed) { s.turns++; return { steps: round.steps, changed: false, stroke: false }; }
+    if (action.type === 'act') {
+      round.steps.push({ type: 'press', x: s.player.x, y: s.player.y });
+      enqueueBehavior(round, tileAt(s, s.player.x, s.player.y), 'onAct', 'dot', s.player.x, s.player.y, {});
+    }
+    seedBelts(s, round);
+    seedRays(s, round);
+    round.direct = false;
+    var visited = Object.create(null), budget = 64 * s.width * s.height;
+    while (round.queue.length && !s.won && !s.failed) {
+      var signature = snapshotSig(s) + '|' + s.strokes + ',' + s.turns + '|' + round.queue.signature() +
+        '|' + JSON.stringify(Object.keys(round.raySessions).sort()) + '|' + JSON.stringify(round.signals);
+      if (visited[signature]) abortEffect('cycle', 'repeated gameplay and ordered queue');
+      if (round.attempts >= budget) abortEffect('budget', 'effect attempt budget exhausted');
+      visited[signature] = true;
+      var effect = round.queue.shift();
+      round.attempts++;
+      round.goalCheckpoint = effect.kind === 'checkpoint';
+      atomicEffect(s, round, function () { dispatchEffect(s, round, effect); }, effect.op);
+      round.goalCheckpoint = false;
+    }
+    if (!s.won && !s.failed) {
+      traceRays(s).forEach(function (ray) {
+        round.steps.push({ type: 'ray', emitter: { x: ray.x, y: ray.y }, dir: ray.dir, cells: ray.cells });
+      });
+      if (isCaught(s)) failAttempt(s, round, 'ray');
+    }
+    s.turns++; s.strokes++;
+    Object.keys(round.seenIds).forEach(function (id) { s.seen[id] = true; });
+    validateState(s);
+    round.steps.push({ type: 'state', snapshot: RULES.snapshot(s), seen: Object.assign({}, s.seen) });
+    return { steps: round.steps, changed: true, stroke: true, effects: round.attempts };
+  }
+
+  function abortEffect(reason, message) {
+    var error = new Error(message); error.effectReason = reason; throw error;
+  }
+
+  function positions(s) {
+    var result = [{ actorId: 'dot', type: 'dot', x: s.player.x, y: s.player.y, object: null }];
+    for (var y = 0; y < s.height; y++) for (var x = 0; x < s.width; x++) {
+      var object = crateAt(s, x, y);
+      if (object) result.push({ actorId: object.entityId, type: 'crate', x: x, y: y, object: object });
+    }
+    s.switches.filter(isTargetEntity).forEach(function (target) {
+      result.push({ actorId: target.entityId, type: 'target', x: target.x, y: target.y, object: target });
+    });
+    return result;
+  }
+  function samePositions(a, b) {
+    return a.length === b.length && a.every(function (actor) {
+      return b.some(function (other) { return actor.actorId === other.actorId && actor.x === other.x && actor.y === other.y; });
+    });
+  }
+  function actorAt(s, identity) {
+    return positions(s).filter(function (actor) { return actor.actorId === identity; })[0] || null;
+  }
+  function profileFor(actor) { return actor.type === 'dot' ? SM.DOT_DEFINITION.capabilities : objectCapabilities(actor.object); }
+  function signalState(s) {
+    var result = {};
+    s.switches.forEach(function (sw) { result[sw.entityId || sw.inst.id + '@' + sw.x + ',' + sw.y] = switchActive(s, sw); });
+    return result;
+  }
+
+  function validateState(s) {
+    var allowed = RULES.STATE_CONTRACT.fixed.concat(RULES.STATE_CONTRACT.mutable,
+      RULES.STATE_CONTRACT.derived, RULES.STATE_CONTRACT.persistent);
+    if (Object.keys(s).length !== allowed.length || Object.keys(s).some(function (key) { return allowed.indexOf(key) < 0; })) abortEffect('invariant', 'untracked state field');
+    if (SM.GAME_COLOURS.indexOf(s.P) < 0 || SM.GAME_COLOURS.indexOf(s.W) < 0 ||
+        ['red-open', 'blue-open'].indexOf(s.polarity) < 0 ||
+        typeof s.won !== 'boolean' || typeof s.failed !== 'boolean' || (s.won && s.failed) ||
+        (s.failed ? typeof s.failureReason !== 'string' || !s.failureReason : s.failureReason !== null) ||
+        !Number.isInteger(s.turns) || s.turns < 0 || !Number.isInteger(s.strokes) || s.strokes < 0) abortEffect('invariant', 'invalid carrier, outcome, or counter');
+    function validPosition(actor) { return actor && Number.isInteger(actor.x) && Number.isInteger(actor.y) && inBounds(s, actor.x, actor.y); }
+    if (!validPosition(s.player) || Object.keys(s.player).sort().join(',') !== 'x,y') abortEffect('invariant', 'invalid dot position');
+    if (requestedSolidAt(s, s.player.x, s.player.y) && !tileAt(s, s.player.x, s.player.y).closingSurface) abortEffect('invariant', 'dot in solid terrain');
+    function canonicalArray(array, length) {
+      return Array.isArray(array) && array.length === length && Object.keys(array).length === length &&
+        Object.keys(array).every(function (key, index) { return key === String(index); });
+    }
+    if (!canonicalArray(s.crates, s.height) || s.crates.some(function (row) { return !canonicalArray(row, s.width); })) abortEffect('invariant', 'invalid object grid');
+    if (!s.seen || typeof s.seen !== 'object' || Array.isArray(s.seen) || Object.keys(s.seen).some(function (id) {
+      return !/^\d+$/.test(id) || !SM.getTile(Number(id)) || s.seen[id] !== true;
+    })) abortEffect('invariant', 'invalid observation state');
+    var expected = {}, identities = {}, featureCells = {};
+    s.level.cratesInit.forEach(function (row) { row.forEach(function (crate) { if (crate) expected[crate.entityId] = crate; }); });
+    for (var y = 0; y < s.height; y++) for (var x = 0; x < s.width; x++) {
+      var crate = crateAt(s, x, y);
+      if (!crate) continue;
+      if (identities[crate.entityId] || expected[crate.entityId] !== crate) abortEffect('invariant', 'invalid crate identity/configuration');
+      identities[crate.entityId] = true;
+      if (s.player.x === x && s.player.y === y) abortEffect('invariant', 'dot/crate overlap');
+      if (requestedSolidAt(s, x, y) && !tileAt(s, x, y).closingSurface) abortEffect('invariant', 'crate in solid terrain');
+    }
+    if (Object.keys(expected).length !== Object.keys(identities).length) abortEffect('invariant', 'lost crate');
+    if (!canonicalArray(s.switches, s.level.switchesInit.length)) abortEffect('invariant', 'invalid feature/switch inventory');
+    s.switches.forEach(function (sw, index) {
+      var original = s.level.switchesInit[index];
+      if (!validPosition(sw) || Object.keys(sw).sort().join(',') !== 'capabilities,entityId,inst,latched,x,y' ||
+          sw.inst !== original.inst || sw.entityId !== original.entityId || typeof sw.latched !== 'boolean') abortEffect('invariant', 'invalid switch identity/state');
+      if (isTargetEntity(sw)) {
+        if (requestedSolidAt(s, sw.x, sw.y) && !tileAt(s, sw.x, sw.y).closingSurface) abortEffect('invariant', 'target in solid terrain');
+        var key = sw.x + ',' + sw.y;
+        if (featureCells[key] || !SM.validateTileCapabilities(sw.inst, sw.capabilities, key).ok ||
+            Object.keys(sw.capabilities).sort().join(',') !== Object.keys(original.capabilities).sort().join(',')) abortEffect('invariant', 'invalid target profile/overlap');
+        featureCells[key] = true;
+      } else if (sw.x !== original.x || sw.y !== original.y || !sw.capabilities || Object.keys(sw.capabilities).length) abortEffect('invariant', 'invalid fixed switch configuration');
+    });
+  }
+  RULES.validateState = validateState;
+
+  function enqueueBehavior(round, inst, hook, actorId, x, y, payload) {
+    if (!inst || !inst.strategies || !inst.strategies[hook]) return;
+    round.queue.add({ kind: hook === 'onActivate' || hook === 'onRelease' ? 'signal' : 'ordinary',
+      op: hook, inst: inst, actorId: actorId, x: x, y: y, payload: payload });
+  }
+
+  function failAttempt(s, round, reason) {
+    if (s.failed) return;
+    s.failed = true; s.won = false; s.failureReason = reason;
+    round.steps.push({ type: 'failed', reason: reason, at: { x: s.player.x, y: s.player.y } });
+  }
+
+  function atomicEffect(s, round, operation, cause) {
+    var before = RULES.snapshot(s), oldActors = positions(s), start = round.steps.length, knowledge = JSON.stringify(s.seen);
+    operation();
+    var hints = round.steps.splice(start);
+    validateState(s);
+    if (knowledge !== JSON.stringify(s.seen)) abortEffect('invariant', 'handler changed core-owned observation state');
+    if (s.turns !== before.turns || s.strokes !== before.strokes) abortEffect('invariant', 'handler changed action counters');
+    if (s.won && !before.won && !round.goalCheckpoint) abortEffect('invariant', 'victory outside entry checkpoint');
+    rebuildLocks(s);
+    var here = tileAt(s, s.player.x, s.player.y);
+    if (!s.failed && here.closingSurface && isSolid(s, s.player.x, s.player.y)) failAttempt(s, round, 'closure');
+    if (s.failed && !before.failed && !round.steps.slice(start).some(function (step) { return step.type === 'failed'; })) {
+      round.steps.push({ type: 'failed', reason: s.failureReason, at: { x: s.player.x, y: s.player.y } });
+    }
+    var actors = positions(s), commit = ++round.commitId;
+    round.steps.slice(start).forEach(function (step) { if (step.commit === undefined) step.commit = commit; });
+    // Readable movement events remain flat; commit IDs and the authoritative
+    // snapshot describe the complete atomic mutation to passive renderers.
+    actors.slice().sort(function (a, b) { return (a.type === 'dot') - (b.type === 'dot') || a.y - b.y || a.x - b.x; }).forEach(function (actor) {
+      var prior = oldActors.filter(function (old) { return old.actorId === actor.actorId; })[0];
+      if (!prior || (prior.x === actor.x && prior.y === actor.y)) return;
+      var from = { x: prior.x, y: prior.y }, to = { x: actor.x, y: actor.y };
+      var portal = cause === 'portal' || hints.some(function (hint) { return (hint.type === 'teleport' || hint.type === 'object-teleport') && hint.to.x === actor.x && hint.to.y === actor.y; });
+      var step = actor.type === 'dot' ? { type: portal ? 'teleport' : 'move', from: from, to: to } :
+        actor.type === 'target' ? { type: portal ? 'object-teleport' : 'target-move', objectType: 'target',
+          entityId: actor.actorId, id: actor.object.inst.id, from: from, to: to } :
+        portal ? { type: 'object-teleport', objectType: 'crate', entityId: actor.actorId,
+          id: actor.object.id, from: from, to: to } : { type: cause === 'pull' ? 'pull' : 'push',
+          entityId: actor.actorId, crate: from, to: to };
+      round.steps.push(Object.assign(step, { commit: commit, cause: cause }));
+      var direction = Math.abs(actor.x - prior.x) + Math.abs(actor.y - prior.y) === 1 ? { x: actor.x - prior.x, y: actor.y - prior.y } : null;
+      enqueueBehavior(round, tileAt(s, prior.x, prior.y), 'onExit', actor.actorId, prior.x, prior.y, { from: from, to: to });
+      enqueueBehavior(round, tileAt(s, actor.x, actor.y), 'onEnter', actor.actorId, actor.x, actor.y,
+        { from: from, to: to, portalArrival: portal, transportHandled: !!forcedMovementFor(s, tileAt(s, actor.x, actor.y), actor.x, actor.y, direction, actor.object) });
+      if (actor.type === 'dot') {
+        round.seenIds[tileAt(s, actor.x, actor.y).id] = true;
+        if (tileAt(s, actor.x, actor.y).levelRole === 'goal') round.queue.add({ kind: 'checkpoint', op: 'goal',
+          actorId: 'dot', inst: tileAt(s, actor.x, actor.y), x: actor.x, y: actor.y, payload: {} });
+      }
+      queueForce(s, round, actor, direction, portal);
+    });
+    ['P', 'W'].forEach(function (carrier) {
+      if (before[carrier] !== s[carrier]) round.steps.push({ type: 'colour', which: carrier, from: before[carrier], to: s[carrier], commit: commit });
+    });
+    if (before.polarity !== s.polarity) round.steps.push({ type: 'polarity', from: before.polarity, to: s.polarity, commit: commit });
+    s.switches.forEach(function (sw, index) {
+      if (before.switches[index].latched !== sw.latched) round.steps.push({ type: 'switch', entityId: sw.entityId, x: sw.x, y: sw.y, latched: sw.latched, commit: commit });
+    });
+    if (s.won && !before.won) round.steps.push({ type: 'goal', x: s.player.x, y: s.player.y, won: true, commit: commit });
+    hints.filter(function (hint) { return hint.type === 'blocked' || hint.type === 'press'; }).forEach(function (hint) { round.steps.push(hint); });
+    var currentSignals = signalState(s);
+    s.switches.forEach(function (sw) {
+      var identity = sw.entityId || sw.inst.id + '@' + sw.x + ',' + sw.y;
+      if (round.signals[identity] === currentSignals[identity]) return;
+      round.steps.push({ type: 'signal-edge', entityId: identity, x: sw.x, y: sw.y, active: currentSignals[identity], commit: commit });
+      enqueueBehavior(round, sw.inst, currentSignals[identity] ? 'onActivate' : 'onRelease', null, sw.x, sw.y,
+        { wasActive: round.signals[identity], active: currentSignals[identity] });
+    });
+    round.signals = currentSignals;
+    if (!samePositions(oldActors, actors) || JSON.stringify(before) !== JSON.stringify(RULES.snapshot(s))) {
+      round.steps.push({ type: 'state', snapshot: RULES.snapshot(s), commit: commit });
+    }
+    if (!round.direct) seedRays(s, round);
+  }
+
+  function queueForce(s, round, actor, direction, portalArrival) {
+    var force = forcedMovementFor(s, tileAt(s, actor.x, actor.y), actor.x, actor.y, direction, actor.object);
+    if (!force) return;
+    var profile = profileFor(actor);
+    if ((force.type === 'flow' && (!profile.conveyor || round.direct)) ||
+        (force.type === 'ice' && (!profile.conveyor || !direction)) ||
+        (force.type === 'portal' && (!profile.portal || portalArrival))) return;
+    round.queue.add({ kind: 'transport', op: force.type, actorId: actor.actorId, x: actor.x, y: actor.y,
+      inst: tileAt(s, actor.x, actor.y), payload: { direction: force.direction || direction, link: force.link } });
+  }
+  function seedBelts(s, round) {
+    positions(s).sort(function (a, b) { return a.y - b.y || a.x - b.x || (a.type === 'target') - (b.type === 'target'); }).forEach(function (actor) {
+      var inst = tileAt(s, actor.x, actor.y), force = forcedMovementFor(s, inst, actor.x, actor.y, null, actor.object);
+      if (force && force.type === 'flow' && profileFor(actor).conveyor) round.queue.add({ kind: 'transport', op: 'flow',
+        actorId: actor.actorId, x: actor.x, y: actor.y, inst: inst, payload: { direction: force.direction, link: undefined } });
+    });
+  }
+  function seedRays(s, round) {
+    if (s.failed || s.won) return;
+    traceRays(s).forEach(function (ray) {
+      ray.cells.slice().reverse().forEach(function (cell) {
+        [crateAt(s, cell.x, cell.y), targetAt(s, cell.x, cell.y)].forEach(function (object) {
+          if (!object || rayProfile(s, object, cell.x, cell.y).ray !== 'transport') return;
+          var session = ray.x + ',' + ray.y + ':' + object.entityId;
+          if (round.raySessions[session]) return;
+          round.raySessions[session] = true;
+          round.queue.add({ kind: 'transport', op: 'ray', actorId: object.entityId, x: ray.x, y: ray.y,
+            inst: tileAt(s, ray.x, ray.y), payload: { source: { x: cell.x, y: cell.y }, direction: ray.dir, emitter: { x: ray.x, y: ray.y } } });
+        });
+      });
+    });
+  }
+
+  function dispatchEffect(s, round, effect) {
+    if (!effect.inst || !SM.getTile(effect.inst.id) ||
+        (effect.inst !== tileAt(s, effect.x, effect.y) && !s.level.switchesInit.some(function (sw) { return sw.inst === effect.inst; }))) {
+      abortEffect('invariant', 'invalid queued tile/source reference');
+    }
+    var actor = effect.actorId ? actorAt(s, effect.actorId) : null;
+    if (effect.actorId && !actor) abortEffect('invariant', 'queued actor reference is missing');
+    if (effect.kind === 'transport') {
+      var source = effect.op === 'ray' ? effect.payload.source : effect;
+      if (!actor || actor.x !== source.x || actor.y !== source.y) return;
+      var profile = profileFor(actor), destination, direction = effect.payload.direction;
+      var force = forcedMovementFor(s, tileAt(s, actor.x, actor.y), actor.x, actor.y, direction, actor.object);
+      if (effect.op !== 'ray' && (!force || force.type !== effect.op)) abortEffect('invariant', 'invalid transport source policy');
+      if (effect.op === 'portal') {
+        if (effect.payload.link !== force.link) abortEffect('invariant', 'invalid portal link');
+        if (!profile.portal) return;
+        destination = partnerPortal(s, actor.x, actor.y, effect.payload.link);
+      } else {
+        if (effect.op === 'ray') {
+          var emitter = rayInteraction(s, effect.inst, effect.x, effect.y, null);
+          if (!emitter || emitter.type !== 'emitter' || !direction || emitter.direction.x !== direction.x || emitter.direction.y !== direction.y ||
+              effect.payload.emitter.x !== effect.x || effect.payload.emitter.y !== effect.y) abortEffect('invariant', 'invalid emitter transport source');
+          if (actor.type === 'dot' || rayProfile(s, actor.object, actor.x, actor.y).ray !== 'transport' ||
+              !traceRay(s, effect.payload.emitter.x, effect.payload.emitter.y).some(function (cell) { return cell.x === actor.x && cell.y === actor.y; })) return;
+        } else if (!profile.conveyor) return;
+        if (!direction || Math.abs(direction.x) + Math.abs(direction.y) !== 1) abortEffect('invariant', 'invalid transport direction');
+        if (effect.op === 'flow' && (direction.x !== force.direction.x || direction.y !== force.direction.y)) abortEffect('invariant', 'invalid conveyor exit');
+        destination = { x: actor.x + direction.x, y: actor.y + direction.y };
+      }
+      if (!destination || !(actor.type === 'dot' ? canEnter(s, destination.x, destination.y) : isLegalObjectDestination(s, actor.object, destination.x, destination.y))) return;
+      if (actor.type === 'dot') { s.player.x = destination.x; s.player.y = destination.y; }
+      else moveObjectEntity(s, actor.object, actor.x, actor.y, destination.x, destination.y, round.steps, effect.op === 'portal' ? 'teleport' : 'move');
+      if (effect.op === 'ray') round.queue.add({ kind: 'transport', op: 'ray', actorId: effect.actorId,
+        inst: effect.inst, x: effect.x, y: effect.y, payload: Object.assign({}, effect.payload, { source: destination }) });
+      return;
+    }
+    if (effect.kind === 'checkpoint') {
+      if (!actor || actor.type !== 'dot' || actor.x !== effect.x || actor.y !== effect.y ||
+          effect.inst.levelRole !== 'goal' || !canEnter(s, actor.x, actor.y)) return;
+    } else if (effect.kind === 'ordinary' && actor && actor.type !== 'dot' &&
+        !(effect.inst.triggerActors && effect.inst.triggerActors.indexOf(actor.type) >= 0)) return;
+    if (effect.kind === 'signal') {
+      var sourceSwitch = s.switches.filter(function (sw) { return sw.inst === effect.inst; })[0];
+      if (!sourceSwitch || switchActive(s, sourceSwitch) !== effect.payload.active) return;
+    }
+    var hook = effect.kind === 'checkpoint' ? 'onEnter' : effect.op;
+    var result = SM.resolveTileHook(effect.inst, hook, { state: s, engine: round.engine, inst: effect.inst,
+      x: effect.x, y: effect.y, phase: hook, press: hook === 'onAct', trigger: effect.payload,
+      actor: { entityId: effect.actorId, type: actor && actor.type },
+      enqueue: function (record) { return round.queue.add(record); } });
+    if (result && typeof result.then === 'function') abortEffect('invariant', 'asynchronous effect is unsupported');
+  }
+
+  function moveOne(s, d, steps) {
     var tx = s.player.x + d.x, ty = s.player.y + d.y;
 
     if (!inBounds(s, tx, ty)) {
@@ -970,26 +1126,31 @@
     }
 
     var target = tileAt(s, tx, ty);
+    var entryRule = tilePassability(s, target, tx, ty);
+    if (isSolid(s, tx, ty) || (entryRule && entryRule.required && entryRule.carrier !== entryRule.required)) {
+      steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: isSolid(s, tx, ty) ? 'wall' : 'colour',
+        need: entryRule && entryRule.required, have: entryRule && entryRule.carrier });
+      return;
+    }
     var c = crateAt(s, tx, ty);
     var feature = targetAt(s, tx, ty);
-    var forcedObject = null, forcedObjectX = -1, forcedObjectY = -1;
+    if (feature && !objectCapabilities(feature).pushable) feature = null;
 
     if (c) {
       var bx = tx + d.x, by = ty + d.y;
-      if (!c.capabilities.pushable || !isLegalObjectDestination(s, c, bx, by)) {
+      if (!effectiveCapabilities(s, c, tx, ty).pushable || !isLegalObjectDestination(s, c, bx, by)) {
         steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'crate' });
         return;
       }
       s.crates[ty][tx] = null;
       s.crates[by][bx] = c;
       steps.push({ type: 'push', crate: { x: tx, y: ty }, to: { x: bx, y: by } });
-      forcedObject = c; forcedObjectX = bx; forcedObjectY = by;
       var from = { x: s.player.x, y: s.player.y };
       s.player.x = tx; s.player.y = ty;
       steps.push({ type: 'move', from: from, to: { x: tx, y: ty } });
     } else if (feature) {
       var targetX = tx + d.x, targetY = ty + d.y;
-      var targetCapabilities = feature.capabilities || feature.inst.capabilities || {};
+      var targetCapabilities = effectiveCapabilities(s, feature, tx, ty);
       if (!targetCapabilities.pushable || !isLegalObjectDestination(s, feature, targetX, targetY)) {
         steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'target' });
         return;
@@ -999,7 +1160,6 @@
       steps.push({ type: 'target-move', objectType: 'target',
         entityId: feature.entityId, id: feature.inst.id,
         from: targetFrom, to: { x: targetX, y: targetY } });
-      forcedObject = feature; forcedObjectX = targetX; forcedObjectY = targetY;
       var targetStepFrom = { x: s.player.x, y: s.player.y };
       s.player.x = tx; s.player.y = ty;
       steps.push({ type: 'move', from: targetStepFrom, to: { x: tx, y: ty } });
@@ -1021,10 +1181,9 @@
       steps.push({ type: 'move', from: f2, to: { x: tx, y: ty } });
     }
 
-    finishPlayerMove(s, d, steps, engine, forcedObject, forcedObjectX, forcedObjectY);
   }
 
-  function pullOne(s, d, steps, engine) {
+  function pullOne(s, d, steps) {
     var tx = s.player.x + d.x, ty = s.player.y + d.y;
     if (!canEnter(s, tx, ty)) {
       steps.push({ type: 'blocked', x: tx, y: ty, dir: d.name, reason: 'pull' });
@@ -1033,14 +1192,13 @@
 
     var bx = s.player.x - d.x, by = s.player.y - d.y;
     var object = crateAt(s, bx, by) || targetAt(s, bx, by);
-    if (!object || !(object.capabilities || object.inst.capabilities).pullable ||
+    if (!object || !effectiveCapabilities(s, object, bx, by).pullable ||
         !isLegalObjectDestination(s, object, s.player.x, s.player.y, true)) {
       steps.push({ type: 'blocked', x: bx, y: by, dir: d.name, reason: 'pull' });
       return;
     }
 
     var fromObject = { x: bx, y: by };
-    var forcedObjectX = s.player.x, forcedObjectY = s.player.y;
     if (isTargetEntity(object)) {
       object.x = s.player.x; object.y = s.player.y;
       steps.push({ type: 'target-move', objectType: 'target',
@@ -1056,16 +1214,18 @@
     var fromPlayer = { x: s.player.x, y: s.player.y };
     s.player.x = tx; s.player.y = ty;
     steps.push({ type: 'move', from: fromPlayer, to: { x: tx, y: ty } });
-    finishPlayerMove(s, d, steps, engine, object, forcedObjectX, forcedObjectY);
   }
 
-  function isLegalObjectDestination(s, object, x, y, allowCurrentPlayerCell) {
+  function isLegalObjectDestination(s, object, x, y, allowCurrentPlayerCell, vacating) {
     // Pure destination predicate shared by push/pull, conveyors, ice, and
     // portals. It never moves the entity; commit only after this returns true.
     return SM.ENTITIES.canOccupy(s, object, x, y, {
       inBounds: function (cellX, cellY) { return inBounds(s, cellX, cellY); },
       isSolid: function (cellX, cellY) { return isSolid(s, cellX, cellY); },
-      crateAt: function (cellX, cellY) { return crateAt(s, cellX, cellY); },
+      crateAt: function (cellX, cellY) {
+        var occupant = crateAt(s, cellX, cellY);
+        return vacating && vacating.indexOf(occupant) !== -1 ? null : occupant;
+      },
       playerAt: function (cellX, cellY) {
         return s.player.x === cellX && s.player.y === cellY;
       },
@@ -1076,36 +1236,12 @@
       }
     }, !!allowCurrentPlayerCell);
   }
-
-  function finishPlayerMove(s, d, steps, engine, forcedObject, forcedObjectX, forcedObjectY) {
-    // Forced movement, then the single on_enter pass of the FINAL resting tile.
-    if (forcedObject) {
-      runObjectForceChain(s, forcedObject, forcedObjectX, forcedObjectY, d, steps);
-    }
-    runPlayerForceChain(s, d, steps);
-
-    var rest = tileAt(s, s.player.x, s.player.y);
-    if (rest) runBehaviour(s, steps, engine, rest, s.player.x, s.player.y, false);
-  }
-
-  function runBehaviour(s, steps, engine, inst, x, y, isPress) {
-    // No guard is needed against re-firing a portal on arrival: on_enter runs
-    // exactly once per turn, for the tile the player FINALLY rests on after the
-    // move and any belt chain. A teleport destination is never re-entered.
-    // Legacy handler context contract: `state` is the live mutable rules
-    // state; `engine` exposes documented synchronous rule operations; `inst`
-    // and x/y identify the current tile; `press` distinguishes ACT from entry.
-    // This is an internal boundary, not permission to access DOM or timing.
-    var hook = isPress ? 'onAct' : 'onEnter';
-    SM.resolveTileHook(inst, hook, {
-      state: s, engine: engine, inst: inst, x: x, y: y,
-      press: isPress, phase: hook
-    });
-  }
+  RULES.isLegalObjectDestination = isLegalObjectDestination;
 
   /** Cheap identity of the mutable parts of the state. */
   function snapshotSig(s) {
-    var sig = s.player.x + ',' + s.player.y + '|' + s.P + '|' + s.W + '|' + s.polarity;
+    var sig = (s.level.rulesIdentity || s.key) + '|' + s.player.x + ',' + s.player.y + '|' + s.P + '|' + s.W + '|' + s.polarity +
+      '|' + s.won + '|' + s.failed + '|' + s.failureReason;
     for (var i = 0; i < s.switches.length; i++) {
       var sw = s.switches[i];
       sig += '|' + (sw.latched ? 1 : 0);
@@ -1143,10 +1279,17 @@
     var view = {
       inst: inst,
       terrain: tileAt(s, x, y),
+      crateCapabilities: crateAt(s, x, y) ? effectiveCapabilities(s, crateAt(s, x, y), x, y) : null,
+      capabilities: target ? effectiveCapabilities(s, target, x, y) : null,
+      dotHere: s.player.x === x && s.player.y === y,
+      P: s.P,
       target: target,
       crate: crateAt(s, x, y),
       locked: isLocked(s, x, y),
       solid: isSolid(s, x, y),
+      requestedSolid: closureAt(s, x, y).requestedSolid,
+      pendingClose: closureAt(s, x, y).pendingClose,
+      outcome: RULES.outcome(s),
       active: sw ? switchActive(s, sw) : false,
       latched: sw ? sw.latched : false,
       W: s.W,

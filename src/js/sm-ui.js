@@ -45,11 +45,13 @@
     this.el = {
       levels:   this.root.querySelector('#levels'),
       worldName: this.root.querySelector('#world-name'),
+      worldScore: this.root.querySelector('#world-score'),
       tutorial: this.root.querySelector('#tutorial'),
       codex:    this.root.querySelector('#codex'),
       hud:      this.root.querySelector('#hud'),
       strokes:  this.root.querySelector('#v-strokes'),
       par:      this.root.querySelector('#v-par'),
+      parKind:  this.root.querySelector('#v-par-kind'),
       best:     this.root.querySelector('#v-best'),
       moves:    this.root.querySelector('#v-turns'),
       win:      queryFromRootOrDocument(this.root, '#win'),
@@ -80,6 +82,7 @@
   /* ------------------------------------------------------------------ */
 
   Game.prototype.unlocked = function (i) {
+    if (!this.levels[i]) return false;
     if (this.levels[i] && this.levels[i].worldId !== 'prologue') return true;
     if (i === 0) return true;
     var entry = SM.STORE.entry(this.levels[i - 1].key, this.levels[i - 1].worldId);
@@ -87,8 +90,8 @@
   };
 
   Game.prototype.load = function (i) {
-    this.clearWinPicture();
     i = Math.max(0, Math.min(this.levels.length - 1, i));
+    this.clearWinPicture();
     this.index = i;
     var level = this.levels[i];
     this.state = SM.RULES.newState(level);
@@ -98,6 +101,7 @@
     SM.STORE.setLastLevel(level.key, level.worldId);
     this.syncAll();
     this.r.say(level.goalText || '');
+    return true;
   };
 
   Game.prototype.restart = function () {
@@ -111,6 +115,7 @@
 
   Game.prototype.act = function (action) {
     if (!this.state || this.state.won) return;
+    if (this.state.failed) { this.r.say('Attempt failed. Restart (R) or choose another level.', 'warn'); return; }
     // Interrupt: finish any running animation instantly. Input is never gated.
     if (this.pending) { this.r.cancel(); this.pending = false; }
 
@@ -163,8 +168,13 @@
     this.syncCodex();
     this.syncHud();
 
+    if (s.failed) {
+      this.clearWinPicture(); this.dismissWin();
+      this.r.say('Attempt failed (' + s.failureReason + '). Restart (R) or choose another level; undo is unavailable.', 'warn');
+      return;
+    }
     if (s.won) this.onWin();
-    else if (s.strokes > (level.par || Infinity) && !this.overParSaid) {
+    else if (scoreInfo(level).proven && s.strokes > scoreInfo(level).value && !this.overParSaid) {
       this.overParSaid = true;
       this.r.say('Over par. Undo (Z) or restart (R) if this run is not the one you want.', 'warn');
     } else {
@@ -173,19 +183,17 @@
   };
 
   Game.prototype.onWin = function () {
+    if (!this.state || !this.state.won || this.state.failed) return;
     var level = this.state.level;
-    var i = this.index;
     var strokes = this.state.strokes;
-    SM.STORE.complete(level.key, this.levels[i + 1] && this.levels[i + 1].key,
-      strokes, this.state.turns, level.worldId);
+    SM.STORE.complete(level.key, strokes, this.state.turns, level.worldId);
 
-    var par = level.par;
-    var cls = strokes <= par ? 'under' : strokes === par + 1 ? 'over' : 'over';
+    var info = scoreInfo(level), par = info.value;
     this.el.winTitle.textContent = 'Solved';
     this.el.winScore.textContent = String(strokes);
-    this.el.winScore.className = 'score ' + (strokes < par ? 'under' : strokes === par ? '' : 'over');
-    this.el.winPar.textContent = 'par ' + par + ' · ' +
-      (strokes < par ? 'under par' : strokes === par ? 'exactly par' : strokes - par + ' over par') +
+    this.el.winScore.className = 'score ' + (info.proven && strokes > par ? 'over' : '');
+    this.el.winPar.textContent = info.label + ' · ' +
+      (!info.proven ? 'minimum not proven' : strokes < par ? 'proof needs review' : strokes === par ? 'at proven PAR' : strokes - par + ' over PAR') +
       ' · ' + this.state.turns + ' attempts';
     this.showWinPicture(level);
     this.el.win.classList.add('on');
@@ -203,15 +211,7 @@
   };
 
   function isWorldOneLevel(level) {
-    if (level.worldId) return level.worldId === 'world-01-sokoban';
-    // Before packs carry normalized world identity, target tiles are the
-    // authoritative signature of the World 1 mechanic in its level data.
-    for (var y = 0; y < level.tiles.length; y++) {
-      for (var x = 0; x < level.tiles[y].length; x++) {
-        if (level.tiles[y][x].entityRole === 'target') return true;
-      }
-    }
-    return false;
+    return level.worldId === 'world-01-sokoban';
   }
 
   function solvedBoardDataUri(state) {
@@ -289,6 +289,7 @@
   /* ------------------------------------------------------------------ */
 
   Game.prototype.undo = function () {
+    if (this.state && this.state.failed) { this.r.say('A failed attempt cannot be undone. Restart (R).', 'warn'); return; }
     if (this.pending) { this.r.cancel(); this.pending = false; }
     if (!this.history.length) { this.r.say('Nothing to undo.', 'warn'); return; }
     var snap = this.history.pop();
@@ -308,6 +309,7 @@
   Game.prototype.flashBlock = function (steps) {
     var s = steps[0];
     if (!s) return;
+    if (s.type === 'effect-abort') { this.r.say('Action rolled back (' + s.reason + '). No stroke charged. ' + (s.message || ''), 'warn'); return; }
     if (s.reason === 'colour') {
       this.r.say('The ' + (s.have === 'wht' ? 'white' : s.have) + ' mark will not open that gate; it wants ' +
         (s.need === 'wht' ? 'white' : s.need) + '.', 'warn');
@@ -333,7 +335,11 @@
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) &&
           !(target.tagName === 'INPUT' && target.type === 'file')) return;
       var dir = KEYMAP[e.key];
-      if (dir) { e.preventDefault(); self.act({ type: e.shiftKey ? 'pull' : 'move', dir: dir }); return; }
+      if (dir) {
+        e.preventDefault();
+        self.act({ type: e.shiftKey ? 'pull' : 'move', dir: dir });
+        return;
+      }
 
       switch (e.key) {
         case ' ': case 'Enter': case 'f': case 'F':
@@ -399,7 +405,10 @@
   Game.prototype.jump = function (delta) {
     var i = this.index + delta;
     if (i < 0 || i >= this.levels.length) return;
-    if (!this.unlocked(i)) { this.r.say('Solve the level before this one first.', 'warn'); return; }
+    if (!this.unlocked(i)) {
+      this.r.say('Solve the level before this one first.', 'warn');
+      return;
+    }
     this.dismissWin();
     this.load(i);
   };
@@ -413,6 +422,16 @@
     var description = formatPresentation(i.presentation && i.presentation.inspection,
       d, this.state, x, y);
     if (description) bits.push(description);
+    {
+      if (d.crate) bits.push(formatPresentation(d.crate.presentation.inspection,
+        Object.assign({}, d, { inst: d.crate, capabilities: d.crateCapabilities }), this.state, x, y));
+      if (d.dotHere) bits.push(SM.COLOUR_NAMES[this.state.P] + ' dot');
+      bits.push('world/goal ' + SM.COLOUR_NAMES[this.state.W],
+        'requested ' + (d.requestedSolid ? 'closed' : 'open'), 'effective ' + (d.solid ? 'closed' : 'open'),
+        d.pendingClose ? 'pending close until crate leaves' : 'no pending closure',
+        'latch ' + (d.latched ? 'on' : 'off'), 'polarity ' + d.polarity, 'outcome ' + d.outcome);
+      if (d.target || d.crate) bits.push('supporting terrain ' + d.terrain.name);
+    }
     var rays = SM.RULES.traceRays(this.state);
     for (var ri = 0; ri < rays.length; ri++) {
       var ray = rays[ri];
@@ -460,45 +479,68 @@
       b.disabled = !self.unlocked(i);
       b.setAttribute('aria-current', i === self.index ? 'true' : 'false');
       var entry = SM.STORE.entry(lv.key, lv.worldId);
+      var info = scoreInfo(lv);
       b.innerHTML = '<span class="n">' + (i + 1) + '</span>' +
         '<span class="nm">' + escapeHtml(lv.name) + '</span>' +
         '<span class="sc"></span>';
       var sc = b.querySelector('.sc');
       if (entry.best) {
-        sc.textContent = entry.best.strokes + '/' + lv.par;
-        sc.className = 'sc ' + (entry.best.strokes < lv.par ? 'under' : entry.best.strokes > lv.par ? 'over' : '');
+        sc.textContent = 'best ' + entry.best.strokes + ' · ' + info.label;
+        sc.className = 'sc ' + (info.proven && entry.best.strokes > info.value ? 'over' : '');
       } else if (!self.unlocked(i)) {
         sc.textContent = 'locked';
       } else {
-        sc.textContent = 'par ' + lv.par;
+        sc.textContent = info.label;
       }
       b.addEventListener('click', function () { if (self.unlocked(i)) { self.dismissWin(); self.load(i); } });
       li.appendChild(b);
       ul.appendChild(li);
     });
+    if (this.el.worldScore) {
+      var summary = SM.LEVELS.worldScores(this.levels, function (level) { return SM.STORE.entry(level.key, level.worldId); });
+      this.el.worldScore.textContent = (summary.par === null ? 'World PAR ' + summary.parStatus + ' · ' + summary.proven + '/' + summary.total + ' minima proven' : 'World PAR ' + summary.par) +
+        ' · ' + (summary.bestComplete ? 'world best ' + summary.best : 'partial best ' + summary.partialBest + ' · ' + summary.completed + '/' + summary.total + ' cleared');
+    }
   };
 
   Game.prototype.syncHud = function () {
     var s = this.state;
     if (!s) return;
     this.el.strokes.textContent = s.strokes;
-    this.el.par.textContent = s.level.par;
+    var info = scoreInfo(s.level);
+    this.el.par.textContent = info.value === null ? '—' : info.value;
+    this.el.par.title = info.label; this.el.par.dataset.proof = info.status;
+    if (this.el.parKind) this.el.parKind.textContent = info.proven ? 'par' : info.value === null ? 'par ' + info.status : 'declared · ' + info.status;
     this.el.moves.textContent = s.turns;
     var e = SM.STORE.entry(s.level.key, s.level.worldId);
     this.el.best.textContent = e.best ? e.best.strokes : '—';
-    this.root.querySelector('#btn-undo').disabled = this.history.length === 0;
+    this.root.querySelector('#btn-undo').disabled = this.history.length === 0 || s.failed;
+    var act = this.root.querySelector('#btn-act');
+    if (act) act.disabled = s.failed || s.won;
+    if (this.el.dpad) this.el.dpad.querySelectorAll('button').forEach(function (button) { button.disabled = s.failed || s.won; });
+    if (this.el.storage) this.el.storage.textContent = SM.STORE.durable() ? 'Progress is saved in this browser.' : 'Progress is in memory for this session. Export current progress for a durable backup.';
   };
 
   Game.prototype.syncCarriers = function () {
     var s = this.state;
     var pw = this.root.querySelector('#swatch-P');
     var ww = this.root.querySelector('#swatch-W');
-    if (pw) { pw.style.background = SM.PALETTE[s.P]; pw.dataset.c = s.P; }
-    if (ww) { ww.style.background = SM.PALETTE[s.W]; ww.dataset.c = s.W; }
+    if (pw) {
+      pw.style.background = SM.PALETTE[s.P]; pw.dataset.c = s.P;
+      pw.title = SM.COLOUR_NAMES[s.P] + ' dot'; pw.setAttribute('role', 'img'); pw.setAttribute('aria-label', pw.title);
+    }
+    if (ww) {
+      ww.style.background = SM.PALETTE[s.W]; ww.dataset.c = s.W;
+      ww.title = SM.COLOUR_NAMES[s.W] + ' world and goal'; ww.setAttribute('role', 'img'); ww.setAttribute('aria-label', ww.title);
+    }
   };
 
   Game.prototype.syncTutorial = function () {
     var lv = this.state.level;
+    var actButton = this.root.querySelector('#btn-act');
+    if (actButton) actButton.textContent = 'Action / Rest';
+    var padAction = this.root.querySelector('#dpad [data-act="act"]');
+    if (padAction) padAction.setAttribute('aria-label', 'ACTION / REST');
     var tileTutorial = null;
     lv.tiles.some(function (row) {
       return row.some(function (tile) {
@@ -515,7 +557,8 @@
       (tileTutorial || '') +
       '<p><strong>Tile visuals:</strong> tiles are static unless explicitly marked animated. The player marker pulses through eight display frames, about 250 ms per frame; this never changes moves or game rules.</p>' +
       '<p><strong>Win picture:</strong> omit <code>win_picture</code> for the built-in 250×250 PASS image, or set a level-specific PNG data URI, for example <code>win_picture: "data:image/png;base64,…"</code>. It appears only after the goal is achieved.</p>' +
-      '<p style="color:var(--mute);font-size:.78rem">Arrows / WASD / HJKL move · Shift+direction pulls · Space presses (ACT) · ' +
+      '<p style="color:var(--mute);font-size:.78rem">Arrows / WASD / HJKL move · ' +
+      'Shift+direction pulls eligible objects · Space: ACTION / REST on the current tile · ' +
       'Z undo · R restart · N next · click a tile to inspect it.</p>';
   };
 
@@ -545,7 +588,9 @@
         '<span class="id">' + id + '</span>' +
         '</div>';
     });
-    this.el.codex.innerHTML = html +
+    this.el.codex.innerHTML = '<div class="row dot-definition">' + wrapSvg(SM.glyph(SM.DOT_DEFINITION, { P: this.state.P, W: this.state.W })) +
+      '<span class="nm">dot<small class="detail">' + escapeHtml(SM.DOT_DEFINITION.presentation.codex) + '</small></span>' +
+      '<span class="id">object</span></div>' + html +
       '<p style="margin:.5rem 0 0;font-size:.72rem;color:var(--mute)">' + count + ' of ' + total +
       ' tile kinds seen in this level. Standing on one logs it.</p>';
   };
@@ -556,7 +601,7 @@
     var inst = view.inst || view;
     var params = inst.params || {};
     var presentation = inst.presentation || {};
-    var capabilities = inst.capabilities || {};
+    var capabilities = view.capabilities || inst.capabilities || {};
     var mobility = capabilities.pushable ? 'pushable' : 'fixed';
     if (capabilities.pullable) mobility += ', pullable';
     var rayCount = '';
@@ -569,7 +614,9 @@
       mode: params.mode || 'signal',
       scope: params.scope || 'tagged',
       carrierLabel: params.carrier === 'W' ? 'world' : 'player',
-      lockLabel: view.locked ? 'locked' : 'open',
+      lockLabel: view.pendingClose ? 'pending close' : (view.solid === undefined ? view.locked : view.solid) ? 'closed' : 'open',
+      playerColour: state ? SM.COLOUR_NAMES[state.P] : 'White',
+      worldColour: state ? SM.COLOUR_NAMES[state.W] : 'White',
       solidLabel: view.solid ? 'closed' : 'open',
       activeLabel: view.active ? 'active' : 'idle',
       latchLabel: view.latched ? 'latched' : 'idle',
@@ -599,6 +646,16 @@
 
   function wrapSvg(inner) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>'; }
 
+  function scoreInfo(level) {
+    var proof = level.solve, declared = Number.isInteger(level.par) ? level.par : null;
+    var proven = !!(proof && proof.status === 'solvable' && proof.verified === true && Number.isInteger(proof.optimal));
+    var status = proven ? 'proven' : proof && (proof.status === 'unknown' || proof.status === 'unsolvable') ? proof.status : 'unverified';
+    var value = proven ? proof.optimal : declared;
+    return { proven: proven, status: status, value: value,
+      label: proven ? 'PAR ' + value + (declared !== null && declared !== value ? ' (declared ' + declared + ')' : '') :
+        value === null ? 'PAR ' + status : 'declared ' + value + ' (' + status + ')' };
+  }
+  Game.scoreInfo = scoreInfo;
   SM.Game = Game;
 
 })(typeof window !== 'undefined' ? window : globalThis);

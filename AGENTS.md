@@ -21,6 +21,13 @@ references rather than duplicating their details here.
 - Solver success alone does not prove a level is well designed; an `unknown`
   solver result does not prove solvability.
 
+The selected `v2-global-pack-migration` implements the explicitly breaking sole
+queued contract, documented in its deltas and the maintained Tile Mechanics
+Reference. The runtime no longer selects an earlier interpretation. Its 61-row
+ledger and generated proofs record content/math evidence, not acceptance or
+final browser verification. Accepted-spec synchronization remains a separate
+approval/release dependency; do not infer it from checked implementation tasks.
+
 ## Pre-implementation validation
 
 Before implementing a scoped OpenSpec change:
@@ -96,8 +103,12 @@ checklist and the relevant section of the worlds blueprint. In particular:
   resolver. Report `unknown` distinctly; do not claim it proves solvability.
 - Review early levels for unintended irreversible softlocks, including plausible
   wrong pushes and dead ends. Review intended-mechanic use, safe starts and
-  respawns, gate or shield necessity, bypasses, target/link correspondence, and
+  intended settled positions, gate or shield necessity, bypasses, target/link correspondence, and
   whether the shortest route teaches the stated lesson.
+- Final exposure or effective closure beneath the dot fails the attempt and
+  blocks gameplay/player undo; restart/navigation recover it, not an automatic
+  hazard teleport. Diagnostic cycle/invariant/budget abort instead rolls back
+  the whole action without counters or progress. Review those outcomes separately.
 - For documented PAR route examples, use `npm run levels:routes` when applicable.
   PAR is the minimum stroke count; directional balance only selects a
   representative route among tied minimum routes. Count explicit moves and

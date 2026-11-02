@@ -26,7 +26,7 @@
     red: '#E23D28',  // red    — ring slot 1
     gre: '#2FA84F',  // green  — ring slot 2
     blu: '#2D5BE3',  // blue   — ring slot 3
-    blk: '#0B0B0C',  // chrome only — backgrounds, idle strokes
+    blk: '#0B0B0C',  // presentation only
     mute: '#6B6B72'  // chrome only — dimmed ink, never a gameplay state
   });
 
@@ -34,6 +34,7 @@
   SM.GAME_COLOURS = Object.freeze(['wht', 'red', 'gre', 'blu']);
   SM.W_COLOURS = SM.GAME_COLOURS;
   SM.P_COLOURS = SM.GAME_COLOURS;
+  SM.COLOUR_NAMES = Object.freeze({ wht: 'White', blu: 'Blue', red: 'Red', gre: 'Green', blk: 'Black' });
 
   /* ---------------------------------------------------------------------- */
   /* Catalogue                                                              */
@@ -46,8 +47,8 @@
   var PRESENTATION = Object.freeze({
     generic: { inspection: 'No additional effect.', codex: 'Registered tile.' },
     floor: { inspection: 'Walkable floor.', codex: 'Walkable, ordinary floor.' },
-    start: { inspection: 'Authored start and respawn location.', codex: 'Start and safe respawn point.' },
-    goal: { inspection: 'Goal; win when player and world colours match.', codex: 'Exit; requires matching player/world colours.' },
+    start: { inspection: 'Authored start; restart reconstructs the dot here.', codex: 'Start marker; not a hazard recovery destination.' },
+    goal: { inspection: 'Goal; win on a legal matching-color entry.', codex: 'Matching entry wins after signals, before later effects or rays.' },
     wall: { inspection: 'Always solid; blocks movement and rays.', codex: 'Solid wall; blocks movement and line of sight.' },
     void: { inspection: 'Passable unless the master void switch is latched.', codex: 'Passage becomes a wall while master void is active.' },
     ice: { inspection: 'Slides entities in their incoming direction.', codex: 'Slides in the entering direction; belts set their own direction.' },
@@ -76,15 +77,14 @@
     },
     receiver: { inspection: 'Detects adjacent {colour} crates on link {link}; currently {activeLabel}.', codex: 'Lights when a matching crate is orthogonally adjacent.' },
     target: { inspection: 'movable floor target; link {link}; currently {activeLabel}.', codex: 'Momentary link {link}; active only while a crate occupies it.' },
-    crateBelt: { inspection: 'Crate belt carries compatible objects {direction}.', codex: 'Crate-force belt directed {direction}.' },
-    playerBelt: { inspection: 'Player belt carries the player {direction}.', codex: 'Player belt directed {direction}.' },
+    conveyor: { inspection: 'Conveyor floor; exit {direction}; tint {colour} has no effect.', codex: 'Conveyor exits {direction}; carries every eligible passenger. Tint is reserved.' },
     crate: { inspection: 'Movable crate; {mobilityLabel}; colour {colour}.', codex: 'Movable {colour} crate; profile controls movement and ray interaction.' },
-    portal: { inspection: 'Player portal; matching link {link}.', codex: 'Teleports the player to a matching portal link.' },
+    portal: { inspection: 'Portal link {link}; carries compatible occupants to its partner.', codex: 'Dot transport enabled; other passengers require portal capability. Arrival does not bounce back.' },
     ray: {
       inspection: 'static ray points {direction}; {rayCount} unobstructed cells. Stops at walls, crates, and closed barriers.',
       codex: 'Static {direction} ray · crates shield it',
       rayEmitter: true,
-      tutorial: '<p><strong>Line of sight:</strong> Rays are static and resolve on turns. Push a crate into a ray to shield cells beyond it. If caught after an action, you return to the start for that one stroke; crates and switches remain, and undo restores the turn. There is no timer or sweeping beam.</p>'
+      tutorial: '<p><strong>Line of sight:</strong> Rays are static and turn-based. Crates can shield them. Final exposure fails the attempt and freezes its board; restart is required and undo is unavailable. A matching goal entry that already won skips final rays. No timer or sweeping beam.</p>'
     },
     cycleDial: { inspection: 'Advances world colour on entry or ACT.', codex: 'Advances world colour: white → red → green → blue → red.' },
     cycleReset: { inspection: 'Resets world colour to white on entry or ACT.', codex: 'Sets world colour to white.' },
@@ -97,6 +97,10 @@
     }
     if (!def.params) def.params = {};
     if (!def.strategies) def.strategies = {};
+    def.layer = def.entityRole === 'crate' ? 'object' : def.entityRole === 'target' ? 'feature' : 'terrain';
+    def.category = def.entityRole || (def.solid === true ? 'wall' : 'floor');
+    def.closingSurface = typeof def.solid === 'string';
+    if (!def.colourRole) def.colourRole = def.params.colour === undefined ? 'presentation' : 'mechanic';
     // Presentation metadata is display-only and never participates in rules.
     var presentationKey = def.presentationKey || 'generic';
     def.presentation = Object.assign({}, PRESENTATION.generic,
@@ -107,22 +111,35 @@
 
   // The player marker is an animated display entity, not a gameplay tile.
   SM.PLAYER_PRESENTATION = Object.freeze({
-    motion: 'animated', animation: 'pulse8', frames: 8, frameMs: 250
+    motion: 'animated', animation: 'pulse8', frames: 8, frameMs: 250,
+    inspection: 'Dot object; aura {playerColour}; world/goal {worldColour}.',
+    codex: 'Dot object; moves, pushes and explicitly pulls eligible objects; uses current-tile ACTION and common queued transport.'
+  });
+  SM.DOT_DEFINITION = Object.freeze({
+    name: 'dot', family: 'dot', glyph: 'dot', category: 'object', layer: 'object', entityRole: 'dot', selfMovable: true,
+    defaultColour: 'wht', colourRole: 'carrier-P', closingSurface: false, vulnerableToRays: true,
+    params: Object.freeze({}), strategies: Object.freeze({}),
+    state: Object.freeze({ hooks: Object.freeze([]),
+      reads: Object.freeze(['grid', 'player', 'P', 'W', 'crates', 'switches', 'polarity']),
+      writes: Object.freeze(['player', 'P', 'won', 'failed', 'failureReason']),
+      events: Object.freeze(['move', 'teleport', 'colour', 'goal', 'failed']) }),
+    capabilities: Object.freeze({ pushable: false, pullable: false, conveyor: true, portal: true, ray: 'ignore' }),
+    presentation: SM.PLAYER_PRESENTATION
   });
 
   /* ===== TERRAIN ========================================================= */
 
-  add({ id:  0, family: 'terrain', name: 'floor',  glyph: 'floor',  solid: false, walkable: true,
+   add({ id:  0, family: 'terrain', name: 'floor',  glyph: 'floor',  solid: false, walkable: true,
        presentationKey: 'floor' });
-  add({ id:  1, family: 'terrain', name: 'start',  glyph: 'start',  solid: false, walkable: true,
+   add({ id:  1, family: 'terrain', name: 'start',  glyph: 'start',  solid: false, walkable: true,
        levelRole: 'start', presentationKey: 'start' });
-  add({ id:  2, family: 'terrain', name: 'goal',   glyph: 'goal',   solid: false, walkable: true,
+   add({ id:  2, family: 'terrain', name: 'goal',   glyph: 'goal',   solid: false, walkable: true,
        levelRole: 'goal', presentationKey: 'goal', strategies: { onEnter: 'goal', onAct: 'goal' } });
   add({ id:  3, family: 'terrain', name: 'wall',   glyph: 'wall',   solid: true,  walkable: false,
        presentationKey: 'wall', strategies: { passability: 'solidTrait' } });
   add({ id:  4, family: 'terrain', name: 'void',   glyph: 'void',   solid: 'phaseVoid', walkable: 'phaseVoid',
        presentationKey: 'void', strategies: { passability: 'masterVoid' } });
-  add({ id:  5, family: 'terrain', name: 'ice',    glyph: 'ice',    solid: false, walkable: true,
+   add({ id:  5, family: 'terrain', name: 'ice',    glyph: 'ice',    solid: false, walkable: true,
        presentationKey: 'ice', strategies: { forcedMovement: 'incomingIce' } });
   // 6,7 retired (V4 one-way arrows)
   // 8,9 reserved
@@ -267,17 +284,17 @@
   /* ===== TARGETS (crate-occupancy) ======================================= */
   // A target is momentary and uses crate occupancy, unlike ID 50's adjacency.
   add({ id: 23, family: 'target', name: 'target_link_1', glyph: 'target',
-        solid: false, walkable: true, entityRole: 'target',
+         solid: false, walkable: true, entityRole: 'target',
         capabilities: { pushable: false, pullable: false, conveyor: false, portal: false, ray: 'ignore' },
         params: { mode: 'momentary', scope: 'tagged', link: 1 },
         presentationKey: 'target', strategies: { activation: 'targetCrateOccupancy' } });
   add({ id: 24, family: 'target', name: 'target_link_2', glyph: 'target',
-        solid: false, walkable: true, entityRole: 'target',
+         solid: false, walkable: true, entityRole: 'target',
         capabilities: { pushable: false, pullable: false, conveyor: false, portal: false, ray: 'ignore' },
         params: { mode: 'momentary', scope: 'tagged', link: 2 },
         presentationKey: 'target', strategies: { activation: 'targetCrateOccupancy' } });
   add({ id: 25, family: 'target', name: 'target_link_3', glyph: 'target',
-        solid: false, walkable: true, entityRole: 'target',
+         solid: false, walkable: true, entityRole: 'target',
         capabilities: { pushable: false, pullable: false, conveyor: false, portal: false, ray: 'ignore' },
         params: { mode: 'momentary', scope: 'tagged', link: 3 },
         presentationKey: 'target', strategies: { activation: 'targetCrateOccupancy' } });
@@ -285,44 +302,35 @@
   /* ===== FLOW (belts) ==================================================== */
   // §7.6.  All belts are one-way; cycles are constructed by chaining.
 
-  // 60..63 — crate belts (push a crate forward as part of §5.2)
-  add({ id: 60, family: 'flow', name: 'crate_east',  glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'crateBelt', params: { dir: { x:  1, y:  0 }, kind: 'crate' }, strategies: { forcedMovement: 'directionalFlow' } });
-  add({ id: 61, family: 'flow', name: 'crate_west',  glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'crateBelt', params: { dir: { x: -1, y:  0 }, kind: 'crate' }, strategies: { forcedMovement: 'directionalFlow' } });
-  add({ id: 62, family: 'flow', name: 'crate_north', glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'crateBelt', params: { dir: { x:  0, y:  1 }, kind: 'crate' }, strategies: { forcedMovement: 'directionalFlow' } });
-  add({ id: 63, family: 'flow', name: 'crate_south', glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'crateBelt', params: { dir: { x:  0, y: -1 }, kind: 'crate' }, strategies: { forcedMovement: 'directionalFlow' } });
-
-  // 64..67 — player belts (move the player)
-  add({ id: 64, family: 'flow', name: 'player_east',  glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'playerBelt', params: { dir: { x:  1, y:  0 }, kind: 'player' }, strategies: { forcedMovement: 'directionalFlow' } });
-  add({ id: 65, family: 'flow', name: 'player_west',  glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'playerBelt', params: { dir: { x: -1, y:  0 }, kind: 'player' }, strategies: { forcedMovement: 'directionalFlow' } });
-  add({ id: 66, family: 'flow', name: 'player_north', glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'playerBelt', params: { dir: { x:  0, y:  1 }, kind: 'player' }, strategies: { forcedMovement: 'directionalFlow' } });
-  add({ id: 67, family: 'flow', name: 'player_south', glyph: 'belt', solid: false, walkable: true,
-       presentationKey: 'playerBelt', params: { dir: { x:  0, y: -1 }, kind: 'player' }, strategies: { forcedMovement: 'directionalFlow' } });
+  // Stable IDs, one current passenger policy. Direction always names the exit.
+  [
+    [60, 'east', 1, 0], [61, 'west', -1, 0], [62, 'north', 0, 1], [63, 'south', 0, -1],
+    [64, 'east', 1, 0], [65, 'west', -1, 0], [66, 'north', 0, 1], [67, 'south', 0, -1]
+  ].forEach(function (variant) {
+    add({ id: variant[0], family: 'flow', category: 'floor', name: 'conveyor_' + variant[1],
+      glyph: 'belt', solid: false, walkable: true, colourRole: 'reserved-tint',
+      presentationKey: 'conveyor', params: { dir: { x: variant[2], y: variant[3] }, colour: 'wht' },
+      strategies: { forcedMovement: 'directionalFlow' } });
+  });
 
   // 68..69 reserved
 
   /* ===== CRATES ========================================================== */
-  // §7.7.  Colour comes from overrides; default red (50) is a sane default.
+  // Stable crate variants; color matches receivers, never movement permission.
 
-  add({ id: 70, family: 'crate', name: 'crate_wht', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
+   add({ id: 70, family: 'crate', name: 'crate_wht', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
        solid: true, walkable: false, pushable: true,
         capabilities: { pushable: true, pullable: false, conveyor: true, portal: false, ray: 'block' },
         params: { colour: 'wht' }, strategies: { rayInteraction: 'rayObjectProfile' } });
-  add({ id: 71, family: 'crate', name: 'crate_red', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
+   add({ id: 71, family: 'crate', name: 'crate_red', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
        solid: true, walkable: false, pushable: true,
         capabilities: { pushable: true, pullable: false, conveyor: true, portal: false, ray: 'block' },
         params: { colour: 'red' }, strategies: { rayInteraction: 'rayObjectProfile' } });
-  add({ id: 72, family: 'crate', name: 'crate_gre', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
+   add({ id: 72, family: 'crate', name: 'crate_gre', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
        solid: true, walkable: false, pushable: true,
         capabilities: { pushable: true, pullable: false, conveyor: true, portal: false, ray: 'block' },
         params: { colour: 'gre' }, strategies: { rayInteraction: 'rayObjectProfile' } });
-  add({ id: 73, family: 'crate', name: 'crate_blu', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
+   add({ id: 73, family: 'crate', name: 'crate_blu', glyph: 'crate', entityRole: 'crate', presentationKey: 'crate',
        solid: true, walkable: false, pushable: true,
         capabilities: { pushable: true, pullable: false, conveyor: true, portal: false, ray: 'block' },
         params: { colour: 'blu' }, strategies: { rayInteraction: 'rayObjectProfile' } });
@@ -412,31 +420,31 @@
       events: Object.freeze(['goal'])
     }),
     setPlayerColour: Object.freeze({
-      phases: Object.freeze(['onEnter', 'onAct']),
+      phases: Object.freeze(['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease']),
       reads: Object.freeze(['tile.params.colour', 'P']),
       writes: Object.freeze(['P']),
       events: Object.freeze(['colour'])
     }),
     advanceWorld: Object.freeze({
-      phases: Object.freeze(['onEnter', 'onAct']),
+      phases: Object.freeze(['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease']),
       reads: Object.freeze(['W', 'worldColourRing']),
       writes: Object.freeze(['W']),
       events: Object.freeze(['colour'])
     }),
     resetWorld: Object.freeze({
-      phases: Object.freeze(['onEnter', 'onAct']),
+      phases: Object.freeze(['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease']),
       reads: Object.freeze([]),
       writes: Object.freeze(['W']),
       events: Object.freeze(['colour'])
     }),
     setWorldIfLinked: Object.freeze({
-      phases: Object.freeze(['onEnter', 'onAct']),
+      phases: Object.freeze(['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease']),
       reads: Object.freeze(['switches', 'tile.params.link', 'tile.params.colour', 'W']),
       writes: Object.freeze(['W']),
       events: Object.freeze(['colour'])
     }),
     toggleLatched: Object.freeze({
-      phases: Object.freeze(['onEnter', 'onAct']),
+      phases: Object.freeze(['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease']),
       reads: Object.freeze(['switches', 'tile', 'x', 'y']),
       writes: Object.freeze(['switches[].latched']),
       events: Object.freeze(['switch'])
@@ -465,13 +473,16 @@
    * context: { state, inst, x, y, phase, direction, crateAt, isLocked,
    *            masterVoidActive, sensorLit, switchAt }
    * Strategies are read-only queries/descriptors; only onEnter/onAct behavior
-   * handlers may mutate canonical state through the legacy rules context.
+   * handlers may mutate declared canonical gameplay state through the rules context.
    */
   var HOOK_DEFAULTS = Object.freeze({
     passability: null,       // no tile-specific restriction; use generic traits
     activation: false,       // no active signal
     onEnter: null,            // no entry effect
     onAct: null,              // no ACT effect
+    onExit: null,             // no departure effect
+    onActivate: null,         // no signal-edge reaction
+    onRelease: null,          // no signal-release reaction
     forcedMovement: null,    // no automatic transport
     rayInteraction: null     // not an emitter/object ray rule
   });
@@ -479,7 +490,7 @@
 
   var BEHAVIOR_HANDLERS = Object.freeze({
     goal: function (ctx) { return ctx.engine.checkGoal(ctx); },
-    setPlayerColour: function (ctx) { ctx.state.P = ctx.inst.params.colour; },
+    setPlayerColour: function (ctx) { ctx.engine.setColour('P', ctx.inst.params.colour); },
     advanceWorld: function (ctx) {
       var index = SM.RING.indexOf(ctx.state.W);
       var next = index < 0 ? 'red' : SM.RING[(index + 1) % SM.RING.length];
@@ -511,12 +522,9 @@
   // expose a behavior deliberately bind the same named strategy to both.
   var behaviorStrategies = {};
   Object.keys(BEHAVIOR_HANDLERS).forEach(function (name) {
-    behaviorStrategies[name] = name === 'flipPolarity'
-      ? Object.freeze({ onAct: BEHAVIOR_HANDLERS[name] })
-      : Object.freeze({
-        onEnter: BEHAVIOR_HANDLERS[name],
-        onAct: BEHAVIOR_HANDLERS[name]
-      });
+    var hooks = {};
+    BEHAVIOR_CONTRACTS[name].phases.forEach(function (phase) { hooks[phase] = BEHAVIOR_HANDLERS[name]; });
+    behaviorStrategies[name] = Object.freeze(hooks);
   });
 
   var TILE_STRATEGIES = Object.freeze(Object.assign({}, behaviorStrategies, {
@@ -560,8 +568,7 @@
     }),
     directionalFlow: Object.freeze({
       forcedMovement: function (ctx) {
-        return { type: 'flow', direction: ctx.inst.params.dir,
-          kind: ctx.inst.params.kind || 'player' };
+        return { type: 'flow', direction: ctx.inst.params.dir };
       }
     }),
     incomingIce: Object.freeze({
@@ -589,11 +596,11 @@
 
   var STRATEGY_CONTRACTS = Object.freeze({
     goal: { hooks: ['onEnter', 'onAct'], reads: ['player', 'goal', 'P', 'W'], writes: ['won'], events: ['goal'] },
-    setPlayerColour: { hooks: ['onEnter', 'onAct'], reads: ['tile.params.colour', 'P'], writes: ['P'], events: ['colour'] },
-    advanceWorld: { hooks: ['onEnter', 'onAct'], reads: ['W', 'worldColourRing'], writes: ['W'], events: ['colour'] },
-    resetWorld: { hooks: ['onEnter', 'onAct'], reads: [], writes: ['W'], events: ['colour'] },
-    setWorldIfLinked: { hooks: ['onEnter', 'onAct'], reads: ['switches', 'tile.params.link', 'tile.params.colour', 'W'], writes: ['W'], events: ['colour'] },
-    toggleLatched: { hooks: ['onEnter', 'onAct'], reads: ['switches', 'tile', 'x', 'y'], writes: ['switches[].latched'], events: ['switch'] },
+    setPlayerColour: { hooks: ['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease'], reads: ['tile.params.colour', 'P'], writes: ['P'], events: ['colour'] },
+    advanceWorld: { hooks: ['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease'], reads: ['W', 'worldColourRing'], writes: ['W'], events: ['colour'] },
+    resetWorld: { hooks: ['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease'], reads: [], writes: ['W'], events: ['colour'] },
+    setWorldIfLinked: { hooks: ['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease'], reads: ['switches', 'tile.params.link', 'tile.params.colour', 'W'], writes: ['W'], events: ['colour'] },
+    toggleLatched: { hooks: ['onEnter', 'onAct', 'onExit', 'onActivate', 'onRelease'], reads: ['switches', 'tile', 'x', 'y'], writes: ['switches[].latched'], events: ['switch'] },
     teleport: { hooks: ['onEnter', 'onAct'], reads: ['player', 'portals', 'tile.params.link'], writes: ['player'], events: ['teleport'] },
     solidTrait: { hooks: ['passability'], reads: ['tile.solid'], writes: [], events: [] },
     lockedBarrier: { hooks: ['passability'], reads: ['locked'], writes: [], events: [] },
@@ -607,7 +614,7 @@
     },
     targetCrateOccupancy: { hooks: ['activation'], reads: ['crates[][]'], writes: [], events: [] },
     crateAdjacencySensor: { hooks: ['activation'], reads: ['crates[][]', 'tile.params.colour'], writes: [], events: [] },
-    directionalFlow: { hooks: ['forcedMovement'], reads: ['tile.params.dir', 'tile.params.kind'], writes: [], events: [] },
+    directionalFlow: { hooks: ['forcedMovement'], reads: ['tile.params.dir'], writes: [], events: [] },
     incomingIce: { hooks: ['forcedMovement'], reads: ['incoming direction'], writes: [], events: [] },
     linkedPortal: { hooks: ['forcedMovement'], reads: ['tile.params.link'], writes: [], events: [] },
     cardinalRayEmitter: { hooks: ['rayInteraction'], reads: ['tile.params.dir'], writes: [], events: [] },
@@ -738,6 +745,18 @@
         return;
       }
       validateParameterValue(overrides[key], definition.params[key], key, errors);
+      if (key === 'colour' && SM.GAME_COLOURS.indexOf(overrides[key]) === -1) {
+        errors.push('"' + overrides[key] + '" is not a gameplay colour; valid: ' + SM.GAME_COLOURS.join(', '));
+      }
+      var enums = { carrier: ['P', 'W'], mode: ['momentary', 'toggle', 'sensor'],
+        scope: ['tagged', 'global'], key: ['master_lock', 'master_void'], openWhen: ['red-open', 'blue-open'] };
+      if (enums[key] && enums[key].indexOf(overrides[key]) === -1) errors.push(key + ' must be one of ' + enums[key].join(', '));
+      if (key === 'link' && (!Number.isInteger(overrides[key]) || overrides[key] < 0)) errors.push('link must be a nonnegative integer');
+      if (key === 'dir') {
+        var direction = overrides[key];
+        if (!direction || !Number.isInteger(direction.x) || !Number.isInteger(direction.y) ||
+            Math.abs(direction.x) + Math.abs(direction.y) !== 1) errors.push('dir must be an exact cardinal unit vector');
+      }
     });
     return { ok: errors.length === 0, errors: errors };
   };
@@ -777,6 +796,10 @@
           errors.push('tile ' + key + ' requires a non-empty ' + field);
         }
       });
+      if (['terrain', 'feature', 'object'].indexOf(def.layer) === -1 ||
+          typeof def.category !== 'string' || typeof def.closingSurface !== 'boolean') {
+        errors.push('tile ' + key + ' requires category, layer, and closure metadata');
+      }
       if (def.solid === undefined || !(typeof def.solid === 'boolean' || typeof def.solid === 'string')) {
         errors.push('tile ' + key + ' requires boolean or named solid metadata');
       }
@@ -787,6 +810,8 @@
         errors.push('tile ' + key + ' params must be an object of defaults/schema values');
       } else if (!parameterValueIsSupported(def.params)) {
         errors.push('tile ' + key + ' has an unsupported parameter default value');
+      } else {
+        errors = errors.concat(SM.validateTileParameters(def, def.params).errors);
       }
       if (def.pushable !== undefined && typeof def.pushable !== 'boolean') {
         errors.push('tile ' + key + ' pushable metadata must be boolean');
@@ -841,7 +866,7 @@
   /* ---------------------------------------------------------------------- */
 
   SM.TILES = TILES;
-  // Compatibility API: handlers, not tile definitions, live in this map.
+  // Registered generic handler API; not a second resolver or policy.
   SM.BEHAVIORS = BEHAVIOR_HANDLERS;
 
   // P3 — hot-reloadable registry. The resolver always reads through this

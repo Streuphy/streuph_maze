@@ -23,6 +23,7 @@
    * tile IDs, families, names, or gate types.
    */
   function canOccupy(state, object, x, y, policy, allowCurrentPlayerCell) {
+    if (policy.canDepart && !policy.canDepart(object)) return false;
     if (!policy.inBounds(x, y) || policy.isSolid(x, y) || policy.crateAt(x, y)) return false;
     if (!isTarget(object) && !allowCurrentPlayerCell && policy.playerAt(x, y)) return false;
     var feature = policy.targetAt(x, y);

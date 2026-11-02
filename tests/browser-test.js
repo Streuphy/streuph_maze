@@ -118,7 +118,7 @@ function key(k, modifiers) {
   ok(doc.querySelectorAll('#levels button')[1].disabled, 'level 2 starts locked');
 
   /* ---- the codex is generated from SM.TILES ---------------------------- */
-  const codexRows = doc.querySelectorAll('#codex .row');
+  const codexRows = doc.querySelectorAll('#codex .row:not(.dot-definition)');
   const implemented = Object.keys(SM.TILES).filter(k => SM.TILES[k].implemented !== false).length;
   eq(codexRows.length, implemented, 'the codex lists every implemented tile, generated from SM.TILES');
   ok(doc.querySelector('#codex .row svg'), 'codex rows carry a glyph');
@@ -229,6 +229,14 @@ function key(k, modifiers) {
 
   /* ---- a bad file changes nothing -------------------------------------- */
   const before = SM.game.levels.map(l => l.key).join(',');
+  const rulesetState = SM.game.state;
+  const rulesetLevels = SM.game.levels;
+  eq(SM.io.applyObject({ name: 'Future rules', world_id: 'future-rules',
+    ruleset: 'future', num_level: 1, levels: { level_1: {
+      name: 'Unknown', width: 2, height: 1, grid: [[1, 2]]
+    } } }, 'future.yaml'), false, 'unknown ruleset is rejected by the shared UI loader');
+  ok(SM.game.state === rulesetState && SM.game.levels === rulesetLevels,
+    'unknown ruleset leaves the active pack and playable state untouched');
   SM.io.applyText('name: "x"\nnum_level: 3\nlevels:\n  level_1:\n    name: "y"\n');
   eq(SM.game.levels.map(l => l.key).join(','), before,
     'a document with too few levels is rejected and the live levels survive');
@@ -572,14 +580,14 @@ function key(k, modifiers) {
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
 
-  /* ---- World 2 ray shielding, catch, and respawn ------------------------ */
+  /* ---- Ray shielding, terminal failure, and restart --------------------- */
   const rayPack = [
     'name: "Ray Browser Test"',
     'world_id: world-02-ray-test',
     'num_level: 1',
     'levels:',
     '  level_1:',
-    '    name: "Strategic Respawn"',
+    '    name: "Terminal Exposure"',
     '    width: 5',
     '    height: 3',
     '    golf_score: 7',
@@ -588,11 +596,11 @@ function key(k, modifiers) {
     '      - [3, 0, 70, 23, 3]',
     '      - [1, 0, 81, 10, 2]'
   ].join('\n');
-  ok(SM.io.applyText(rayPack), 'a World 2 ray/respawn browser pack loads');
+  ok(SM.io.applyText(rayPack), 'a ray/failure interaction fixture loads');
   await waitFor(() => doc.querySelectorAll('#board .cell').length === 15);
   const rayPlayerCell = (x, y) => doc.querySelector('#board .cell[data-x="' + x + '"][data-y="' + y + '"]');
   ok(/Line of sight/.test(doc.querySelector('#tutorial').textContent) &&
-      /no timer or sweeping beam/.test(doc.querySelector('#tutorial').textContent),
+      /no timer or sweeping beam/i.test(doc.querySelector('#tutorial').textContent),
     'World 2 tutorial describes turn-based rays without timed or sweeping behavior');
   rayPlayerCell(2, 0).click();
   ok(/static ray points north/.test(doc.querySelector('#banner').textContent) &&
@@ -609,22 +617,22 @@ function key(k, modifiers) {
   key('ArrowUp');
   await waitFor(() => !g().pending);
   const resolveTurn = SM.RULES.resolveTurn;
-  let caughtResult = null;
+  let failureResult = null;
   SM.RULES.resolveTurn = function (state, action) {
-    caughtResult = resolveTurn(state, action);
-    return caughtResult;
+    failureResult = resolveTurn(state, action);
+    return failureResult;
   };
   key('ArrowRight');
   SM.RULES.resolveTurn = resolveTurn;
   await waitFor(() => !g().pending);
-  ok(!!caughtResult && caughtResult.steps.some(step => step.type === 'ray' &&
+  ok(!!failureResult && failureResult.steps.some(step => step.type === 'ray' &&
       step.cells.some(cell => cell.x === 2 && cell.y === 1)),
     'resolver returns the settled ray path that reaches the player');
-  ok(caughtResult && caughtResult.steps.some(step => step.type === 'caught') &&
-      caughtResult.steps.some(step => step.type === 'respawn'),
-    'resolver returns explicit catch and respawn steps');
-  eq(g().state.player, { x: 0, y: 0 }, 'caught animation finishes with the player at the authored start');
-  eq(g().state.crates[1][3].id, 70, 'caught animation preserves the crate pushed onto the target');
+  ok(failureResult && failureResult.steps.some(step => step.type === 'failed') &&
+      !failureResult.steps.some(step => step.type === 'respawn'),
+    'resolver returns committed failure without a recovery teleport');
+  eq(g().state.player, { x: 2, y: 1 }, 'failed playback preserves the exposed player position');
+  eq(g().state.crates[1][3].id, 70, 'failed playback preserves the committed crate position');
   eq(g().r.view.player, g().state.player, 'renderer mirror reaches the resolver final player state');
   eq(g().r.view.crates[1][3].id, 70, 'renderer mirror reaches the resolver final crate state');
   ok(rayPlayerCell(2, 1).dataset.ray === 'north' &&
@@ -632,8 +640,20 @@ function key(k, modifiers) {
     'unshielded ray is visibly drawn through the vacated crate cell');
   ok(!rayPlayerCell(3, 1).dataset.ray && /<rect/.test(rayPlayerCell(3, 1).innerHTML),
     'the target crate visibly shields its own cell from the ray');
-  ok(!doc.querySelector('#player').classList.contains('caught'),
-    'respawn clears the transient caught presentation');
+  ok(doc.querySelector('#player').classList.contains('failed') &&
+     doc.querySelector('#board').dataset.outcome === 'failed', 'terminal failure remains visibly marked');
+  ok(doc.querySelector('#btn-undo').disabled && doc.querySelector('#btn-act').disabled,
+    'failed undo and gameplay controls are disabled');
+  const frozenFailure = SM.RULES.snapshot(g().state);
+  key('z'); key('ArrowLeft');
+  eq(SM.RULES.snapshot(g().state), frozenFailure, 'failed attempt cannot undo or move');
+  eq(SM.STORE.entry('level_1', 'world-02-ray-test').best, null, 'failed attempt awards no personal best');
+  ok(doc.querySelector('#win-picture-panel').hidden, 'failure never displays victory art');
+  ok(/declared/.test(doc.querySelector('#v-par-kind').textContent), 'unproven authored score is not labeled a proved minimum');
+  key('r');
+  eq([g().state.failed, g().state.strokes, g().state.turns], [false, 0, 0], 'restart reconstructs a fresh attempt');
+  ok(!doc.querySelector('#player').classList.contains('failed') && !doc.querySelector('#btn-act').disabled,
+    'restart clears failure presentation and restores controls');
 
   const vectorPack = [
     'name: "Vector Browser Test"',
@@ -774,8 +794,11 @@ function key(k, modifiers) {
     '#board .cell[data-x="2"][data-y="1"]');
   eq([g().state.polarity, g().state.crates[1][2].id,
     closedCrateBarrier.className, !!closedCrateBarrier.querySelector('svg')],
-  ['blue-open', 70, 'cell wall', true],
-  'World 3 browser route leaves a crate visible on the red barrier closed by ACT');
+  ['blue-open', 70, 'cell pending-close', true],
+  'World 3 browser route shows crate-held closure as pending/effectively open after ACT');
+  ok(closedCrateBarrier.querySelector('.pending-indicator') &&
+     /requested closed; effective open; pending close/.test(closedCrateBarrier.getAttribute('aria-label')),
+    'World 3 pending barrier has an explicit glyph and accessible requested/effective distinction');
   key('z');
   eq([g().state.polarity, g().state.crates[1][2].id, closedCrateBarrier.className],
     ['red-open', 70, 'cell'],
@@ -864,6 +887,88 @@ function key(k, modifiers) {
   eq(g().r.view.switches.find(sw => sw.inst.family === 'target').x, 1,
     'renderer mirror matches the restored target position');
 
+  const queuedLayers = { name: 'Queued Layers', world_id: 'queued-browser-layers', num_level: 1,
+    levels: { level_1: { name: 'Queued push', goal: 'Inspect a complete atomic push and transport.', width: 6, height: 2,
+      grid: [[0, 0, 0, 0, 2, 0], [1, 70, 60, 0, 0, 0]] } } };
+  ok(SM.io.applyObject(queuedLayers, 'queued-layers.yaml'), 'current queued layer fixture loads');
+  const queuedDraw = g().r.draw, halfPushes = [];
+  g().r.draw = function (view) { halfPushes.push(!!view.crates[view.player.y][view.player.x]); return queuedDraw.call(this, view); };
+  key('ArrowRight');
+  await waitFor(() => !g().pending);
+  g().r.draw = queuedDraw;
+  ok(halfPushes.every(value => !value), 'playback never draws a half-push occupancy');
+  eq(g().state.player.x, 1, 'atomic push follows the vacated cell');
+  eq(g().state.crates[0][3].id, 70, 'queued conveyor carries the crate one exit step');
+  eq(SM.RULES.snapshotSig(g().r.view), SM.RULES.snapshotSig(g().state), 'complete playback agrees with authoritative state');
+  ok(doc.querySelector('#board .cell[data-x="2"][data-y="0"] [data-exit="east"]'), 'belt shows its unique East exit');
+  doc.querySelector('#board .cell[data-x="3"][data-y="0"]').click();
+  ok(/supporting terrain floor/.test(doc.querySelector('#banner').textContent), 'inspection exposes the independent supporting layer');
+  const markupBeforeRedraw = doc.querySelector('#board').innerHTML;
+  g().r.draw(g().snapshotView());
+  eq(doc.querySelector('#board').innerHTML, markupBeforeRedraw, 'fresh redraw agrees with completed playback');
+  key('z');
+  eq(g().state.crates[0][1].id, 70, 'whole-round undo restores direct and automatic movement');
+
+  const queuedPull = { name: 'Queued Controls', world_id: 'queued-browser-controls', num_level: 1,
+    levels: { level_1: { name: 'Explicit pulling', width: 5, height: 1,
+      object_overrides: { A1: { pullable: true } }, grid: [[70, 1, 0, 0, 2]] } } };
+  ok(SM.io.applyObject(queuedPull, 'queued-controls.yaml'), 'explicit profile-enabled pull fixture loads');
+  ok(/Shift\+direction pulls/.test(doc.querySelector('#tutorial').textContent), 'help describes explicit capability-enabled pulling');
+  eq(doc.querySelectorAll('#dpad button[data-act]').length, 5, 'pad exposes four directions and ACTION');
+  key('ArrowRight', { shiftKey: true });
+  await waitFor(() => !g().pending);
+  eq(g().state.player.x, 2, 'explicit pull advances the dot');
+  eq(g().state.crates[0][1].id, 70, 'declared pullable profile permits the trailing relocation');
+  key('z');
+  eq(g().state.crates[0][0].id, 70, 'pull is undone as a complete round');
+
+  const queuedGoal = { name: 'Queued Goal', world_id: 'queued-browser-goal', num_level: 1,
+    levels: { level_1: { name: 'Matching entry', width: 3, height: 1,
+      initial_world_colour: 'red', grid: [[1, 11, 2]] } } };
+  ok(SM.io.applyObject(queuedGoal, 'queued-goal.yaml'), 'current goal-color fixture loads');
+  key('ArrowRight'); await waitFor(() => !g().pending);
+  eq(g().state.P, 'red', 'captured prism effect supplies the aura');
+  key('ArrowRight'); await waitFor(() => !g().pending && g().state.won);
+  const goalCell = () => doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
+  ok(/Red goal/.test(goalCell().getAttribute('aria-label')), 'goal appearance follows the current world color');
+  eq(SM.RULES.snapshotSig(g().r.view), SM.RULES.snapshotSig(g().state), 'color and goal event playback agrees with the final outcome');
+
+  const pendingPack = { name: 'Pending Closure', world_id: 'queued-browser-pending', num_level: 1,
+    levels: { level_1: { name: 'Inspect pending closure', width: 6, height: 3,
+      overrides: { 10: { defaultLocked: false } }, object_overrides: { A2: { pullable: true } },
+      grid: [[44, 0, 0, 0, 0, 2], [70, 0, 0, 0, 0, 0], [1, 0, 10, 0, 0, 0]] } } };
+  ok(SM.io.applyObject(pendingPack, 'pending.yaml'), 'pending-closure browser fixture loads');
+  g().state.crates[0][2] = g().state.crates[1][0]; g().state.crates[1][0] = null;
+  g().state.player = { x: 0, y: 2 }; SM.RULES.rebuildLocks(g().state);
+  g().r.view = g().snapshotView(); g().r.draw(g().r.view); g().r.placePlayer(g().r.view, false);
+  key(' ');
+  await waitFor(() => !g().pending);
+  const pendingCell = () => doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
+  ok(pendingCell().classList.contains('pending-close') && !pendingCell().classList.contains('wall'), 'pending physical closure renders as effectively open');
+  ok(pendingCell().querySelector('.pending-indicator'), 'pending closure has a distinct glyph cue');
+  pendingCell().click();
+  ok(/requested closed.*effective open.*pending close/.test(doc.querySelector('#banner').textContent), 'inspection separates requested and effective closure');
+  key('z');
+  ok(!pendingCell().classList.contains('pending-close'), 'nonterminal undo restores derived closure presentation');
+  g().restart();
+  eq(g().state.crates[1][0].id, 70, 'restart reconstructs the authored object layer');
+  const scorePack = { name: 'Current Score Labels', world_id: 'queued-browser-scores', num_level: 2,
+    levels: { level_1: { name: 'One stroke', width: 2, height: 1, golf_score: 1, grid: [[1, 2]] },
+      level_2: { name: 'Two strokes', width: 3, height: 1, golf_score: 2, grid: [[1, 0, 2]] } } };
+  ok(SM.io.applyObject(scorePack, 'scores.yaml'), 'current score label fixture loads');
+  ok(/World PAR 3.*partial best 0.*0\/2 cleared/.test(doc.querySelector('#world-score').textContent),
+    'world labels separate proven minimum and partial personal total');
+  eq(g().load(1), true, 'imported current levels remain directly selectable');
+  g().load(0); key('ArrowRight'); await waitFor(() => !g().pending && g().state.won);
+  ok(/partial best 1.*1\/2 cleared/.test(doc.querySelector('#world-score').textContent), 'one completion remains a partial personal world score');
+  g().next(); key('ArrowRight'); await waitFor(() => !g().pending);
+  key('ArrowRight'); await waitFor(() => !g().pending && g().state.won);
+  ok(/World PAR 3.*world best 3/.test(doc.querySelector('#world-score').textContent), 'complete world personal score is derived separately from PAR');
+  g().levels[1].solve = { status: 'unknown', optimal: null };
+  g().syncAll();
+  ok(/declared.*unknown/.test(doc.querySelector('#v-par-kind').textContent), 'authored score stays unverified when analysis is unknown');
+  ok(/World PAR unknown.*world best 3/.test(doc.querySelector('#world-score').textContent), 'unknown theoretical total does not erase a valid personal total');
+
   SM.io.applyObject(SM.DEFAULT_LEVELS, 'levels.default.js', SM.YAML_HEADER);
   await waitFor(() => g().levels.length === 13 && doc.querySelectorAll('#board .cell').length === 25);
 
@@ -876,6 +981,38 @@ function key(k, modifiers) {
       fromDisk.problems.map(p => p.level + ': ' + p.message).join(' | '));
     eq(fromDisk.levels.length, 13, 'the shipped levels.yaml has all 13 levels');
   }
+
+  /* ---- standalone classic-script gallery ------------------------------- */
+  const galleryErrors = [], galleryConsole = new VirtualConsole();
+  galleryConsole.on('jsdomError', error => galleryErrors.push(String(error.message || error)));
+  galleryConsole.on('error', error => galleryErrors.push(String(error)));
+  const galleryDom = new JSDOM(fs.readFileSync(path.join(ROOT, 'glyphs.html'), 'utf8'), {
+    runScripts: 'dangerously', resources: 'usable', url: 'file://' + ROOT + '/glyphs.html',
+    pretendToBeVisual: true, virtualConsole: galleryConsole
+  });
+  try {
+    const galleryDoc = galleryDom.window.document;
+    await waitFor(() => galleryDoc.documentElement.dataset.galleryReady === 'true');
+    eq(galleryErrors, [], 'standalone gallery loads local classic scripts without module errors');
+    const gallerySM = galleryDom.window.SM;
+    eq(Array.from(galleryDoc.querySelectorAll('[data-tile-id]')).map(card => Number(card.dataset.tileId)),
+      Object.keys(gallerySM.getActiveRegistry()).map(Number).sort((a, b) => a - b), 'gallery enumerates actual registered IDs including zero, not numeric gaps');
+    ok(galleryDoc.querySelector('[data-object-id="dot"] .preview svg circle'), 'gallery defines the dot separately from start ID 1');
+    for (let id = 60; id <= 67; id++) {
+      const arrow = galleryDoc.querySelector('[data-tile-id="' + id + '"] .conveyor-arrow');
+      ok(arrow && ['north', 'east', 'south', 'west'].includes(arrow.dataset.exit), 'gallery conveyor ' + id + ' has one named exit arrow');
+    }
+    const arrowBeforeTint = galleryDoc.querySelector('[data-tile-id="60"] .preview').innerHTML;
+    const tint = galleryDoc.querySelector('#sample-tint'); tint.value = 'red';
+    tint.dispatchEvent(new galleryDom.window.Event('change', { bubbles: true }));
+    eq(galleryDoc.querySelector('[data-tile-id="60"] .preview').innerHTML, arrowBeforeTint, 'reserved conveyor tint never changes the exit glyph');
+    const pending = galleryDoc.querySelector('[data-tile-id="10"] select'); pending.value = 'pending';
+    pending.dispatchEvent(new galleryDom.window.Event('change', { bubbles: true }));
+    ok(galleryDoc.querySelector('[data-tile-id="10"] .pending-indicator'), 'gallery shows the pending-close presentation contract');
+    const dotSample = galleryDoc.querySelector('[data-object-id="dot"] select'); dotSample.value = 'failed';
+    dotSample.dispatchEvent(new galleryDom.window.Event('change', { bubbles: true }));
+    eq(galleryDoc.querySelector('[data-object-id="dot"] .preview').dataset.outcome, 'failed', 'gallery exposes a failed-attempt presentation sample');
+  } finally { galleryDom.window.close(); }
 
   /* ---- summary --------------------------------------------------------- */
   console.log('--- Streuph\'s Maze: browser smoke test ---');

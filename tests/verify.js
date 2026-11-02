@@ -59,6 +59,19 @@ function checkTileRegistry() {
   ok(true, 'REG  shared registry unit suite passed');
 }
 
+function checkV2Levels() {
+  require('./unit/v2').levels(SM);
+  ok(true, 'V2 shared YAML/sole-policy regression suite passed');
+}
+function checkV2Rules() {
+  require('./unit/v2').rules(SM);
+  ok(true, 'V2 board and movement regression suite passed');
+}
+function checkV2Helpers() {
+  require('./unit/v2').helpers(SM);
+  ok(true, 'V2 progress/helper regression suite passed');
+}
+
 /* ---------------------------------------------------------------------- */
 /* Canonical state contract                                                 */
 /* ---------------------------------------------------------------------- */
@@ -74,14 +87,14 @@ function checkStateContract() {
   eq(Object.keys(R.cloneState(state)).sort(), roots,
     'STATE  solver clones preserve the canonical runtime root-field shape');
   eq(Object.keys(R.snapshot(state)).sort(), [
-    'P', 'W', 'crates', 'latched', 'player', 'polarity', 'strokes', 'targets', 'turns', 'won'
+    'P', 'W', 'crates', 'failed', 'failureReason', 'player', 'polarity', 'strokes', 'switches', 'turns', 'won'
   ], 'STATE  undo snapshots contain the explicit reversible payload');
   eq(contract.undo, [
-    'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won',
-    'switches[].latched', 'switches[target].position', 'crates[][]'
+    'player', 'P', 'W', 'polarity', 'strokes', 'turns', 'won', 'failed', 'failureReason',
+    'switches[]:identity+position+latch+capabilities', 'crates[][]'
   ], 'STATE  undo contract names nested switch, target, and crate state');
   eq(contract.solverIdentity, [
-    'player', 'P', 'W', 'polarity', 'switches[].latched', 'targets[].position',
+    'player', 'P', 'W', 'polarity', 'won', 'failed', 'failureReason', 'switches[].latched', 'targets[].position',
     'crates[][]:id+colour+capabilities'
   ], 'STATE  solver identity contract names every gameplay-relevant entity/carrier value');
   ok(R.cloneState(state).seen !== state.seen && R.cloneState(state).crates !== state.crates,
@@ -111,7 +124,7 @@ function checkTileHookDispatch() {
   const S = SM;
   const defaults = S.TILE_HOOK_DEFAULTS;
   eq(Object.keys(defaults).sort(), [
-    'activation', 'forcedMovement', 'onAct', 'onEnter', 'passability', 'rayInteraction'
+    'activation', 'forcedMovement', 'onAct', 'onActivate', 'onEnter', 'onExit', 'onRelease', 'passability', 'rayInteraction'
   ], 'HOOK  the registry publishes the complete documented hook vocabulary');
   eq(S.resolveTileHook({ strategies: {} }, 'passability', {}), null,
     'HOOK  missing passability strategy has the neutral fallback');
@@ -133,11 +146,11 @@ function checkTileHookDispatch() {
   eq(S.resolveTileHook({ strategies: { activation: 'playerOccupancy' } },
     'activation', playerContext), true,
   'HOOK  activation strategy reads player occupancy');
-  eq(S.resolveTileHook({ params: { dir: { x: 1, y: 0 }, kind: 'crate' },
+  eq(S.resolveTileHook({ params: { dir: { x: 1, y: 0 } },
     strategies: { forcedMovement: 'directionalFlow' } }, 'forcedMovement',
-    { inst: { params: { dir: { x: 1, y: 0 }, kind: 'crate' } } }),
-  { type: 'flow', direction: { x: 1, y: 0 }, kind: 'crate' },
-  'HOOK  forced-movement strategy returns a direction/kind descriptor');
+    { inst: { params: { dir: { x: 1, y: 0 } } } }),
+  { type: 'flow', direction: { x: 1, y: 0 } },
+  'HOOK  forced-movement strategy returns one shared exit-direction descriptor');
   eq(S.resolveTileHook({ strategies: { forcedMovement: 'incomingIce' } },
     'forcedMovement', { direction: { x: 0, y: -1 } }),
   { type: 'ice', direction: { x: 0, y: -1 } },
@@ -157,7 +170,8 @@ function checkTileHookDispatch() {
     'HOOK  unknown hook name fails loudly');
 
   const state = { P: 'wht' };
-  const behaviorContext = { state, inst: { params: { colour: 'red' } }, press: false };
+  const behaviorContext = { state, inst: { params: { colour: 'red' } }, press: false,
+    engine: { setColour: (which, colour) => { state[which] = colour; } } };
   S.resolveTileHook({ strategies: { onEnter: 'setPlayerColour' } }, 'onEnter', behaviorContext);
   eq(state.P, 'red', 'HOOK  entry phase dispatches its named behavior strategy');
   state.P = 'wht';
@@ -405,7 +419,7 @@ function checkPolaritySwitch() {
   const beforeFlip = R.snapshot(state);
   const flip = act(state);
   eq([state.polarity, state.crates[0][2].id, R.isSolid(state, 2, 0)],
-    ['blue-open', 70, true], 'POLARITY  ACT closes the red barrier without moving its crate');
+    ['blue-open', 70, false], 'POLARITY  occupying crate defers effective closure');
   eq(flip.steps.filter(step => step.type === 'polarity').map(step => [step.from, step.to]),
     [['red-open', 'blue-open']], 'POLARITY  one ACT emits exactly one ordered polarity transition');
 
@@ -423,7 +437,8 @@ function checkPolaritySwitch() {
   go(state, 'south');
   go(state, 'east');
   eq([state.crates[0][3].id, state.player, R.isSolid(state, 2, 0)],
-    [70, { x: 2, y: 0 }, true], 'POLARITY  a crate may be pushed off a closed barrier');
+    [70, { x: 2, y: 0 }, true], 'POLARITY  crate departure realizes physical closure');
+  eq([state.failed, state.failureReason], [true, 'closure'], 'POLARITY  following dot fails on the closing surface');
   go(state, 'north'); go(state, 'east'); go(state, 'east'); go(state, 'south');
   const beforeRejectedPush = [state.strokes, state.crates[0][3], state.player];
   const rejectedPush = go(state, 'west');
@@ -431,7 +446,7 @@ function checkPolaritySwitch() {
     [false, beforeRejectedPush], 'POLARITY  crate cannot be pushed back onto its closed barrier');
 
   // Defensive invariant: no normal switch action can close a barrier under
-  // the player, so construct that state directly and verify departure/re-entry.
+  // the player, so construct that state directly and verify terminal guarding.
   const playerPack = SM.LEVELS.validate(polarityDocument([[1, 46, 0, 2]]), { solve: false });
   const playerState = st(playerPack.levels[0]);
   playerState.player.x = 1;
@@ -439,11 +454,11 @@ function checkPolaritySwitch() {
   eq([playerState.player, R.isSolid(playerState, 1, 0)],
     [{ x: 1, y: 0 }, true], 'POLARITY  defensive fixture keeps a player on a newly closed barrier');
   const leave = go(playerState, 'east');
-  eq([leave.stroke, playerState.player], [true, { x: 2, y: 0 }],
-    'POLARITY  player may leave a barrier closed beneath them');
+  eq([leave.stroke, playerState.player, playerState.failed], [false, { x: 1, y: 0 }, true],
+    'POLARITY  a defensively restored closed-dot state cannot escape by moving');
   const reenter = go(playerState, 'west');
   eq([reenter.stroke, playerState.strokes, playerState.player],
-    [false, 1, { x: 2, y: 0 }], 'POLARITY  player cannot re-enter a closed barrier');
+    [false, 0, { x: 1, y: 0 }], 'POLARITY  terminal closure freezes subsequent commands');
 }
 
 function checkPolaritySolver() {
@@ -519,9 +534,9 @@ function checkRayQueries() {
     eq(R.traceRay(s, 2, 2), item.cells,
       'RAY  ' + item.dir + ' emitter traces to the board edge');
     s.player = item.player;
-    eq(R.isCaught(s), true, 'RAY  ' + item.dir + ' ray catches an aligned player');
+    eq(R.isCaught(s), true, 'RAY  ' + item.dir + ' ray exposes an aligned player');
     s.player = item.offAxis;
-    eq(R.isCaught(s), false, 'RAY  ' + item.dir + ' ray does not catch an off-axis player');
+    eq(R.isCaught(s), false, 'RAY  ' + item.dir + ' ray does not expose an off-axis player');
   }
 
   const wall = rayTestState(82, { x: 3, y: 2, id: 3 });
@@ -581,26 +596,25 @@ function checkRayQueries() {
     'RAY  a target with transport capability travels without losing its link identity');
 }
 
-function checkCatchTransitions() {
+function checkFailureTransitions() {
   const R = SM.RULES;
 
-  // Entering a north belt returns the player to the authored start after the
-  // forced hop reaches a westbound ray. The final coordinates equal the
-  // pre-action coordinates, but the successful caught move still costs one.
+  // A forced hop reaches a westbound ray; failure preserves that settled board.
   const samePosition = st(mkLevel([
     [0, 0, 0, 0, 2],
     [0, 0, 84, 0, 0],
     [1, 66, 0, 0, 0]
   ]));
   const returned = R.resolveTurn(samePosition, { type: 'move', dir: 'east' });
-  eq(samePosition.player, { x: 0, y: 0 }, 'CATCH  forced ray encounter respawns to the pre-action position');
-  eq(samePosition.strokes, 1, 'CATCH  respawned move is charged exactly one stroke');
-  eq(returned.stroke, true, 'CATCH  same-position outcome is reported as stroked');
-  eq(returned.changed, true, 'CATCH  same-position outcome is reported as changed');
-  ok(returned.steps.some(step => step.type === 'caught' && step.at.x === 1 && step.at.y === 1),
-    'CATCH  resolver reports the caught position');
-  ok(returned.steps.some(step => step.type === 'respawn' &&
-    step.to.x === 0 && step.to.y === 0), 'CATCH  resolver reports the respawn destination');
+  eq(samePosition.player, { x: 1, y: 1 }, 'FAILURE  forced encounter preserves the exposed position');
+  eq([samePosition.failed, samePosition.strokes, returned.stroke, returned.changed], [true, 1, true, true],
+    'FAILURE  committed exposure is terminal and costs its initiating stroke');
+  ok(returned.steps.some(step => step.type === 'failed' && step.at.x === 1 && step.at.y === 1),
+    'FAILURE  resolver reports the terminal position');
+  ok(!returned.steps.some(step => step.type === 'respawn'), 'FAILURE  no recovery teleport is emitted');
+  const frozenFailure = canonicalSnapshot(samePosition);
+  R.resolveTurn(samePosition, { type: 'move', dir: 'west' });
+  eq(canonicalSnapshot(samePosition), frozenFailure, 'FAILURE  further gameplay cannot escape or charge counters');
 
   const retained = st(mkLevel([
     [0, 41, 0, 0, 70, 2],
@@ -612,26 +626,26 @@ function checkCatchTransitions() {
   retained.W = 'blu';
   retained.switches.find(sw => sw.inst.id === 41).latched = true;
   R.rebuildLocks(retained);
-  const caughtTurn = R.resolveTurn(retained, { type: 'move', dir: 'east' });
-  eq(retained.player, { x: 0, y: 0 }, 'CATCH  caught player returns to the authored start');
-  eq(retained.crates[2][4].id, 70, 'CATCH  unrelated crate position is preserved');
-  eq([retained.P, retained.W], ['red', 'blu'], 'CATCH  player and world colors are preserved');
+  const failedTurn = R.resolveTurn(retained, { type: 'move', dir: 'east' });
+  eq(retained.player, { x: 3, y: 1 }, 'FAILURE  dot stays on the exposed player plate');
+  eq(retained.crates[2][4].id, 70, 'FAILURE  unrelated crate position is preserved');
+  eq([retained.P, retained.W], ['red', 'blu'], 'FAILURE  player and world colors are preserved');
   eq(retained.switches.find(sw => sw.inst.id === 41).latched, true,
-    'CATCH  latched switch state is preserved');
-  eq(retained.locked[0][5], true,
-    'CATCH  player-occupancy gate is rebuilt after respawn and closes');
-  eq(caughtTurn.stroke, true, 'CATCH  push-independent caught move is one stroke');
+    'FAILURE  latched switch state is preserved');
+  eq(retained.locked[0][5], false,
+    'FAILURE  plate occupancy remains derived from the failed board');
+  eq(failedTurn.stroke, true, 'FAILURE  exposed committed move costs its normal stroke');
 
-  const caughtGoal = st(mkLevel([
+  const exposedGoal = st(mkLevel([
     [0, 0, 0, 0, 0],
     [1, 82, 2, 0, 0]
   ]));
-  go(caughtGoal, 'east');
-  const goalTurn = go(caughtGoal, 'east');
-  eq(caughtGoal.won, false, 'CATCH  exposed goal entry loses to catch and is not a win');
-  eq(caughtGoal.player, { x: 0, y: 0 }, 'CATCH  goal catch respawns before final goal test');
-  eq(goalTurn.steps.some(step => step.type === 'goal'), false,
-    'CATCH  provisional goal event is removed when ray catch takes precedence');
+  go(exposedGoal, 'east');
+  const goalTurn = go(exposedGoal, 'east');
+  eq(exposedGoal.won, true, 'GOAL  matching entry wins before final ray sampling');
+  eq([exposedGoal.player.x, exposedGoal.failed], [2, false], 'GOAL  immediate victory preserves the goal position');
+  eq(goalTurn.steps.some(step => step.type === 'goal'), true,
+    'GOAL  committed winning entry is not retracted by later hazards');
 
   const moveUndo = st(mkLevel([
     [0, 0, 0, 0, 2],
@@ -642,7 +656,7 @@ function checkCatchTransitions() {
   R.resolveTurn(moveUndo, { type: 'move', dir: 'east' });
   R.restore(moveUndo, beforeMoveCatch);
   eq(canonicalSnapshot(moveUndo), beforeMoveCatch,
-    'CATCH UNDO  undo restores every snapshotted value after a caught move');
+    'SNAPSHOT  internal restoration remains available independently of player undo');
 
   const pushUndo = st(mkLevel([
     [0, 41, 0, 0, 0, 2],
@@ -657,13 +671,13 @@ function checkCatchTransitions() {
   const beforePushCatch = canonicalSnapshot(pushUndo);
   const beforePushLocks = JSON.stringify(pushUndo.locked);
   const pushed = R.resolveTurn(pushUndo, { type: 'move', dir: 'east' });
-  eq(pushUndo.crates[1][4].id, 70, 'CATCH UNDO  caught push retains the moved crate before undo');
-  eq(pushed.stroke, true, 'CATCH UNDO  caught push has a one-stroke outcome');
+  eq(pushUndo.crates[1][4].id, 70, 'FAILURE SNAPSHOT  failed push retains the moved crate before internal restoration');
+  eq(pushed.stroke, true, 'FAILURE SNAPSHOT  failed push has a one-stroke outcome');
   R.restore(pushUndo, beforePushCatch);
   eq(canonicalSnapshot(pushUndo), beforePushCatch,
-    'CATCH UNDO  undo exactly restores player, crate, colors, latch, and stroke state');
+    'SNAPSHOT  internal restoration includes failure, actors, colors, latch, and counters');
   eq(JSON.stringify(pushUndo.locked), beforePushLocks,
-    'CATCH UNDO  undo rebuilds the exact derived gate state');
+    'SNAPSHOT  internal restoration rebuilds exact derived gates');
 }
 
 function checkRayTransportTransitions() {
@@ -679,21 +693,19 @@ function checkRayTransportTransitions() {
   const before = R.snapshot(state);
   const beforeSignature = R.snapshotSig(state);
   const result = R.resolveTurn(state, { type: 'act' });
-  eq([state.player.x, state.player.y], [0, 0],
-    'RAY TRANSPORT  exposed player is caught after object transport and respawned');
+  eq([state.player.x, state.player.y, state.failed], [4, 1, true],
+    'RAY TRANSPORT  final exposure preserves the failed player position');
   eq(state.crates[1][3].id, 70,
     'RAY TRANSPORT  crate advances until the exposed player blocks its destination');
   eq([state.P, state.W], ['gre', 'blu'],
-    'RAY TRANSPORT  catch preserves player/world colors');
+    'RAY TRANSPORT  failure preserves player/world colors');
   eq([result.stroke, state.strokes], [true, 1],
-    'RAY TRANSPORT  an ACT with transport and catch costs one stroke total');
+    'RAY TRANSPORT  an ACT with transport and failure costs one stroke total');
   ok(result.steps.findIndex(step => step.type === 'push') <
       result.steps.findIndex(step => step.type === 'ray') &&
       result.steps.findIndex(step => step.type === 'ray') <
-      result.steps.findIndex(step => step.type === 'caught') &&
-      result.steps.findIndex(step => step.type === 'caught') <
-      result.steps.findIndex(step => step.type === 'respawn'),
-    'RAY TRANSPORT  object transport and final ray evaluation precede catch and respawn');
+       result.steps.findIndex(step => step.type === 'failed'),
+    'RAY TRANSPORT  object transport and final ray evaluation precede terminal failure');
 
   R.restore(state, before);
   eq([state.player.x, state.player.y, state.crates[1][2].id,
@@ -721,7 +733,7 @@ function checkRayTransportTransitions() {
   eq(sawTransport, true, 'RAY TRANSPORT BFS  solver replay includes the same ray transport transition');
 }
 
-function checkCatchSolver() {
+function checkFailureSolver() {
   const R = SM.RULES;
   const level = mkLevel([
     [3, 3, 3, 3, 3],
@@ -729,26 +741,17 @@ function checkCatchSolver() {
     [1, 0, 81, 10, 2]
   ], { 10: { link: 1 } }, 7);
   const search = SM.LEVELS.solve(level, { maxStates: 10000, maxDepth: 20 });
-  eq(search.status, 'solvable', 'CATCH BFS  solver finds a route requiring a strategic respawn');
-  eq(search.optimal, level.par, 'CATCH BFS  declared par equals the solver-proven minimum');
-  ok(search.explored <= 10000, 'CATCH BFS  search terminates inside its configured state budget');
+  eq(search.status, 'unsolvable', 'FAILURE BFS  search cannot route through terminal exposure');
+  eq(search.optimal, null, 'FAILURE BFS  an incompatible declared score is not a solution proof');
+  ok(search.explored <= 10000, 'FAILURE BFS  search terminates inside its configured state budget');
 
   const replay = st(level);
-  const initialSignature = R.snapshotSig(replay);
-  let sawStrategicCatch = false;
-  for (const action of search.path || []) {
-    const result = R.resolveTurn(replay, action);
-    if (!result.steps.some(step => step.type === 'caught')) continue;
-    sawStrategicCatch = true;
-    eq(replay.player, { x: level.start.x, y: level.start.y },
-      'CATCH BFS  replayed catch respawns to the authored start');
-    eq(replay.crates[1][3].id, 70, 'CATCH BFS  pushed crate remains on its target after respawn');
-    eq(replay.locked[0][3], false, 'CATCH BFS  target-controlled exit stays open after respawn');
-    ok(R.snapshotSig(replay) !== initialSignature,
-      'CATCH BFS  state signature retains the crate change across respawn');
-  }
-  eq(sawStrategicCatch, true, 'CATCH BFS  optimal solver path includes the caught push');
-  eq(replay.won, true, 'CATCH BFS  replay reaches the goal after strategic respawn');
+  ['east', 'north', 'east'].forEach(dir => go(replay, dir));
+  eq([replay.failed, replay.won], [true, false], 'FAILURE BFS  unsafe push is a non-winning terminal successor');
+  eq(replay.crates[1][3].id, 70, 'FAILURE BFS  failed push keeps the crate on its target');
+  const frozen = R.snapshot(replay);
+  go(replay, 'east');
+  eq(R.snapshot(replay), frozen, 'FAILURE BFS  another move cannot exploit the open exit after failure');
 }
 
 function checkParRouteSelection() {
@@ -811,9 +814,9 @@ function checkParRouteSelection() {
         const next = R.cloneState(node.state);
         let resolved;
         try { resolved = R.resolveTurn(next, action); } catch (_) { continue; }
-        if (!resolved.stroke) continue;
+        if (!resolved.stroke || next.failed) continue;
         const path = node.path.concat([action]);
-        if (next.player.x === next.goal.x && next.player.y === next.goal.y && next.P === next.W) {
+        if (next.won) {
           return { optimal: next.strokes, path: path };
         }
         const key = R.snapshotSig(next);
@@ -825,10 +828,9 @@ function checkParRouteSelection() {
     return null;
   }
 
-  const world2Path = path.join(ROOT, 'data/worlds/world-02-lolos-castle.levels.yaml');
-  const world2 = SM.LEVELS.load(fs.readFileSync(world2Path, 'utf8'), { solve: false });
-  ok(world2.ok, 'PAR ROUTE  World 2 fixture loads through the shared loader');
-  const level = world2.levels[4]; // Four Medusas has tied optimums with distinct direction balance.
+  // A neutral transport fixture isolates route-label ranking from shipped
+  // worlds whose boards and PARs are awaiting V2 certification.
+  const level = mkLevel([[2, 3], [0, 3], [66, 65], [1, 66]]);
   const original = firstShortestPath(level);
   const balanced = SM.LEVELS.solve(level, { maxStates: 10000, maxDepth: 100 });
   eq(balanced.status, 'solvable', 'PAR ROUTE  balanced fixture remains solvable');
@@ -841,16 +843,16 @@ function checkParRouteSelection() {
   eq(balanced.routeBalance.counts, SM.LEVELS.routeMetrics(balanced.path).counts,
     'PAR ROUTE  reported counts agree with the selected action sequence');
   eq([routeTokens(balanced.path), balanced.routeBalance], [
-    ['U', 'U', 'R', 'R', 'R', 'R', 'R', 'U', 'L', 'U', 'L', 'L', 'L', 'L'],
-    { counts: { up: 4, down: 0, left: 5, right: 5 }, score: 17, complete: true }
-  ], 'PAR ROUTE  documented World 2 example matches the selected route report');
+    ['R', 'U'],
+    { counts: { up: 1, down: 0, left: 0, right: 1 }, score: 1, complete: true }
+  ], 'PAR ROUTE  independent tied-minimum fixture selects balanced command counts');
   const replay = st(level);
   for (const action of balanced.path) R.resolveTurn(replay, action);
   eq([replay.won, replay.strokes], [true, balanced.optimal],
     'PAR ROUTE  selected balanced route replays to a win at PAR');
 
   const limited = SM.LEVELS.solve(level, {
-    maxStates: 120, maxDepth: 100, maxRouteLabels: 10000
+    maxStates: 2, maxDepth: 100, maxRouteLabels: 10000
   });
   eq([limited.status, limited.optimal, limited.routeBalance.complete],
     ['solvable', balanced.optimal, false],
@@ -923,7 +925,9 @@ function checkChromaticContracts() {
   eq(goal.won, false, 'CHROMA CONTRACT  a mismatched P/W pair cannot clear the goal');
   goal.W = 'red';
   act(goal);
-  eq(goal.won, true, 'CHROMA CONTRACT  matching P/W clears the occupied goal');
+  eq(goal.won, false, 'CHROMA CONTRACT  stationary equality does not clear the goal');
+  go(goal, 'west'); go(goal, 'east');
+  eq(goal.won, true, 'CHROMA CONTRACT  matching re-entry clears the goal');
 
   const unsupportedPalette = SM.LEVELS.validate({
     name: 'Unsupported palette', world_id: 'unsupported-palette', num_level: 1,
@@ -1117,7 +1121,7 @@ function checkRules() {
     const r = go(s, 'east');
     eq(s.player.x, 71, 'R9  the belt chain reaches its natural stopping tile');
     eq(s.strokes, 1, 'R9  a long forced chain still costs one stroke');
-    ok(!r.steps.some(x => x.type === 'belt-cap'), 'R9  the natural chain does not hit its safety cap');
+    ok(!r.aborted, 'R9  the natural chain commits without diagnostic abort');
   }
   {
     const L = mkLevel([[1, 5, 5, 0, 2]]);
@@ -1157,11 +1161,11 @@ function checkRules() {
     ]);
     const s = st(L);
     const r = go(s, 'east');
-    eq(s.player, { x: 1, y: 0 }, 'R9  a conveyor loop terminates at its repeated state');
-    ok(r.steps.some(x => x.type === 'force-loop'), 'R9  loop termination is reported in the step list');
+    eq(s.player, { x: 0, y: 0 }, 'R9  a conveyor cycle restores the whole direct action');
+    ok(r.aborted && r.steps.some(x => x.type === 'effect-abort'), 'R9  cycle rollback is reported diagnostically');
     ok(r.steps.filter(x => x.type === 'move').length <= s.width * s.height * 4 + 1,
       'R9  returned movement stays within the board-derived hop bound');
-    eq(s.strokes, 1, 'R9  loop termination keeps the initiating move to one stroke');
+    eq(s.strokes, 0, 'R9  diagnostic rollback commits no stroke');
   }
 
   /* R10/R14 — pushing. */
@@ -1279,7 +1283,9 @@ function checkRules() {
     eq(s.won, false, 'WIN  a mismatched P/W pair on the goal does not clear it');
     s.W = 'red';
     act(s);
-    eq(s.won, true, 'WIN  matching P/W at the goal clears it');
+    eq(s.won, false, 'WIN  matching colors without entry do not clear');
+    go(s, 'west'); go(s, 'east');
+    eq(s.won, true, 'WIN  matching re-entry clears the goal');
   }
   {
     /* Only the colour should decide, not the route. */
@@ -1659,7 +1665,7 @@ function checkWorld2Content() {
     { name: 'First Medusa', width: 5, height: 5, emitters: 1, crates: 1 },
     { name: 'Crossfire', width: 7, height: 5, emitters: 2, crates: 1 },
     { name: 'Crossing Lines', width: 9, height: 6, emitters: 2, crates: 1 },
-    { name: 'The Unhurried Exit', width: 10, height: 8, emitters: 1, crates: 1 },
+    { name: 'The Unhurried Exit', width: 10, height: 8, emitters: 1, crates: 2 },
     { name: 'Four Medusas', width: 12, height: 8, emitters: 4, crates: 1 },
     { name: 'Still Corridor', width: 14, height: 6, emitters: 3, crates: 1 },
     { name: 'Twin Chambers', width: 16, height: 9, emitters: 2, crates: 2 },
@@ -1707,16 +1713,14 @@ function checkWorld2Content() {
     eq(level.solve.optimal, level.par,
       'WORLD 2  ' + level.key + ' par matches its solver-proven minimum');
 
-    let respawnsSafe = true;
+    let routeSafe = true;
     for (const action of level.solve.path || []) {
       const result = SM.RULES.resolveTurn(state, action);
-      if (result.steps.some(step => step.type === 'caught') &&
-          (state.player.x !== state.start.x || state.player.y !== state.start.y ||
-           SM.RULES.isCaught(state))) respawnsSafe = false;
+      if (result.aborted || state.failed) routeSafe = false;
     }
     eq(state.won, true, 'WORLD 2  replay of ' + level.key + ' reaches the goal');
     eq(state.strokes, level.par, 'WORLD 2  replay of ' + level.key + ' uses the recorded par');
-    eq(respawnsSafe, true, 'WORLD 2  every ' + level.key + ' respawn lands safely');
+    eq(routeSafe, true, 'WORLD 2  every ' + level.key + ' intended transition remains non-failed and committed');
   }
 
   for (const number of [4, 7, 8]) {
@@ -1801,8 +1805,8 @@ function checkWorld4Content() {
 
   const expected = [
     { name: 'First Current', width: 5, height: 5, par: 2 },
-    { name: 'Double Circuit', width: 7, height: 5, par: 8 },
-    { name: 'Ice Launch', width: 9, height: 6, par: 7 },
+    { name: 'Double Circuit', width: 7, height: 5, par: 5 },
+    { name: 'Ice Launch', width: 9, height: 6, par: 8 },
     { name: 'Wall Channel', width: 10, height: 8, par: 7 },
     { name: 'Compression Chamber', width: 12, height: 8, par: 13 },
     { name: 'Long Alley', width: 16, height: 6, par: 2 },
@@ -1834,8 +1838,8 @@ function checkWorld4Content() {
     const steps = turns.flatMap(turn => turn.steps);
     ok(!steps.some(step => step.type === 'destroy' || step.type === 'crush'),
       'WORLD 4  ' + level.key + ' resolves without crushing or deleting an entity');
-    ok(!steps.some(step => step.type === 'belt-cap' || step.type === 'object-force-cap'),
-      'WORLD 4  ' + level.key + ' shortest route ends naturally without depending on a safety cap');
+    ok(!steps.some(step => step.type === 'effect-abort'),
+      'WORLD 4  ' + level.key + ' shortest route ends naturally without a diagnostic rollback');
   }
 
   const levels = loaded.levels;
@@ -1845,18 +1849,19 @@ function checkWorld4Content() {
     [{ x: 4, y: 2 }, 4], 'WORLD 4  tutorial rides one east vector to the safe floor stop');
 
   const doubleCircuit = SM.RULES.newState(levels[1]);
-  const loopEvents = [];
+  const circuitEvents = [];
   for (const action of levels[1].solve.path) {
     const turn = SM.RULES.resolveTurn(doubleCircuit, action);
-    loopEvents.push(...turn.steps.filter(step => step.type === 'force-loop'));
+    circuitEvents.push(...turn.steps);
+    eq(turn.aborted, undefined, 'WORLD 4  open circuits never depend on a cycle abort');
   }
-  ok(loopEvents.some(step => step.x === 1 || step.x === 2) &&
-      loopEvents.some(step => step.x === 4 || step.x === 5),
-    'WORLD 4  level_2 shortest route exercises both bounded cardinal loops');
+  ok(circuitEvents.some(step => step.type === 'move' && step.cause === 'flow' && step.to.x === 2) &&
+      circuitEvents.some(step => step.type === 'move' && step.cause === 'flow' && step.to.x === 6),
+    'WORLD 4  level_2 shortest route exercises both finite wall-stopped circuits');
 
   const launch = SM.RULES.newState(levels[2]);
   eq(levels[2].tiles[1][5].id, 60,
-    'WORLD 4  crate ice route uses the crate-force belt rather than a player-only belt');
+    'WORLD 4  crate ice route uses a registered shared-policy East conveyor');
   SM.RULES.resolveTurn(launch, { type: 'move', dir: 'east' });
   const launchPush = SM.RULES.resolveTurn(launch, { type: 'move', dir: 'east' });
   eq([launch.player, launch.crates[1][6] && launch.crates[1][6].id],
@@ -1870,10 +1875,10 @@ function checkWorld4Content() {
   ok(playerFollowIndex >= 0 && firstIcePushIndex > playerFollowIndex,
     'WORLD 4  player follow event precedes the pushed crate ice events');
   const crateBeltTurn = SM.RULES.resolveTurn(launch, { type: 'move', dir: 'east' });
-  eq([launch.player, launch.crates[1][7] && launch.crates[1][7].id],
-    [{ x: 6, y: 1 }, 71], 'WORLD 4  crate belt advances its block while the player follows the vacated cell');
-  ok(crateBeltTurn.steps.some(step => step.type === 'push' && step.crate.x === 6 && step.to.x === 7),
-    'WORLD 4  explicit crate-force effect is represented by an undoable push event');
+  eq([launch.player, launch.crates[1][6] && launch.crates[1][6].id],
+    [{ x: 5, y: 1 }, 71], 'WORLD 4  occupied conveyor exit stops the following dot before its crate');
+  ok(!crateBeltTurn.steps.some(step => step.type === 'push'),
+    'WORLD 4  automatic transport does not shove the front crate');
 
   const recoverablePush = SM.RULES.newState(levels[2]);
   for (const action of [
@@ -1919,8 +1924,8 @@ function checkWorld4Content() {
   const circuitFirst = SM.RULES.resolveTurn(circuit, { type: 'move', dir: 'east' });
   const circuitPush = SM.RULES.resolveTurn(circuit, { type: 'move', dir: 'south' });
   SM.RULES.resolveTurn(circuit, { type: 'move', dir: 'south' });
-  eq(circuitFirst.steps.some(step => step.type === 'force-loop'), true,
-    'WORLD 4  circuit-exit route has a finite four-way loop');
+  eq([circuitFirst.aborted, circuitFirst.steps.some(step => step.cause === 'flow')], [undefined, true],
+    'WORLD 4  circuit-exit route reaches a genuine plain-floor stop without a cycle abort');
   eq([circuit.player, circuit.crates[0][1] && circuit.crates[0][1].id],
     [{ x: 1, y: 1 }, 71], 'WORLD 4  two deliberate pushes move the block out of the loop exit lane');
   ok(circuitPush.steps.some(step => step.type === 'push'),
@@ -2096,13 +2101,13 @@ function checkWorld6Content() {
     'WORLD 6  all eight display names are unique');
 
   const expected = [
-    { name: 'First Dock', width: 5, height: 5, par: 6, sensors: [50], gates: [10], route: 'N E S E E E' },
+    { name: 'First Dock', width: 5, height: 5, par: 6, sensors: [50], gates: [10], route: 'E E N S E E' },
     { name: 'Two Colors, Two Links', width: 7, height: 5, par: 6,
       sensors: [50, 94], gates: [10, 26], route: 'E E E E E E' },
     { name: 'Around the Corner', width: 9, height: 6, par: 12,
-      sensors: [50], gates: [10], route: 'N W N E E E S E S E E E' },
-    { name: 'Belt and Barrier', width: 10, height: 8, par: 8,
-      sensors: [50], gates: [10], route: 'E E E E E E E E' },
+      sensors: [50], gates: [10], route: 'N W N E S S E E E E E E' },
+    { name: 'Belt and Barrier', width: 10, height: 8, par: 13,
+      sensors: [50], gates: [10], route: 'E N N E E E S S E E E E E' },
     { name: 'Castle Basement Rooms', width: 12, height: 8, par: 11,
       sensors: [50, 94], gates: [10, 26], route: 'E E E E E E E E E E E' },
     { name: 'Railway Dock', width: 16, height: 6, par: 19,
@@ -2229,18 +2234,15 @@ function checkWorld6Content() {
   const belt = loaded.levels[3];
   const beltState = R.newState(belt);
   const beltTurn = R.resolveTurn(beltState, belt.solve.path[0]);
-  ok(beltTurn.steps.filter(step => step.type === 'move').length > 1,
-    'WORLD 6  Belt and Barrier shortest route exercises automatic conveyor movement');
+  ok(beltTurn.steps.some(step => step.type === 'push' && step.cause === 'flow'),
+    'WORLD 6  Belt and Barrier shortest route actually docks conveyor cargo');
 
   const corner = R.newState(loaded.levels[2]);
   const cornerReceiver = corner.switches.find(item => item.inst.id === 50);
-  for (const action of loaded.levels[2].solve.path.slice(0, 5)) R.resolveTurn(corner, action);
-  eq([R.crateAt(corner, cornerReceiver.x, cornerReceiver.y).id,
-    R.sensorLit(corner, cornerReceiver).any], [71, false],
-  'WORLD 6  corner level proves a crate occupying the receiver does not count as adjacency');
-  R.resolveTurn(corner, loaded.levels[2].solve.path[5]);
-  eq([R.sensorLit(corner, cornerReceiver).any, corner.locked[0][6]], [true, false],
-  'WORLD 6  pushing that crate off the receiver re-docks it and opens the required gate');
+  for (const action of loaded.levels[2].solve.path.slice(0, 4)) R.resolveTurn(corner, action);
+  eq([R.crateAt(corner, 3, 2).id, R.crateAt(corner, cornerReceiver.x, cornerReceiver.y),
+    R.sensorLit(corner, cornerReceiver).lit.s, corner.locked[0][6]], [71, null, true, false],
+  'WORLD 6  guarded corner docks from the south without occupying the receiver or allowing overshoot');
 
   const redocking = loaded.levels[6];
   const redockingState = R.newState(redocking);
@@ -2291,12 +2293,12 @@ function checkVectorSolver() {
 
   const loopState = st(loopLevel);
   loopState.player = { x: 0, y: 1 };
+  const loopBefore = R.snapshot(loopState);
   const loopTurn = R.resolveTurn(loopState, { type: 'move', dir: 'east' });
-  ok(loopTurn.steps.some(step => step.type === 'force-loop'),
-    'VECTOR BFS  bounded-loop fixture returns a deterministic loop event');
-  ok(loopTurn.steps.filter(step => step.type === 'move').length <=
-      loopState.width * loopState.height * 4 + 1,
-    'VECTOR BFS  loop fixture respects the board-derived forced-hop bound');
+  ok(loopTurn.aborted && loopTurn.steps.some(step => step.type === 'effect-abort' && step.reason === 'cycle'),
+    'VECTOR BFS  complete queue repetition returns a deterministic rollback diagnostic');
+  eq(R.snapshot(loopState), loopBefore,
+    'VECTOR BFS  loop restores all direct/queued movement and counters, not an arbitrary endpoint');
 }
 
 function checkTileMechanicsGuide() {
@@ -2432,7 +2434,7 @@ function checkReceiverValidation() {
     'RECEIVER VALIDATION  a non-integer link is rejected by the parameter schema');
 
   const unsupportedColour = SM.LEVELS.validate(document({ 50: { colour: 'yellow' } }), { solve: false });
-  ok(unsupportedColour.problems.some(problem => /receiver tile id 50 colour must be a supported gameplay colour/.test(problem.message)),
+  ok(unsupportedColour.problems.some(problem => /tile id 50.*receiver.*yellow.*not a gameplay colour/.test(problem.message)),
     'RECEIVER VALIDATION  a non-gameplay receiver color is rejected');
 
   const danglingOverride = SM.LEVELS.validate(document({ 90: { link: 2 } }), { solve: false });
@@ -2492,8 +2494,8 @@ function checkDirectObjectMovement() {
   const fixedTarget = st(mkLevel([[1, 23, 0, 2]]));
   const fixedTargetMove = go(fixedTarget, 'east');
   eq([fixedTarget.player.x, R.targetAt(fixedTarget, 1, 0) !== null,
-    fixedTargetMove.stroke, fixedTarget.strokes], [0, true, false, 0],
-  'OBJECT MOVE  target stays fixed unless movement is explicitly enabled');
+    fixedTargetMove.stroke, fixedTarget.strokes], [1, true, true, 1],
+  'OBJECT MOVE  stationary target remains in place while the dot walks over it');
 
   const targetPush = st(mkLevel([[1, 23, 0, 2]], null, null,
     { B1: { pushable: true } }));
@@ -2634,15 +2636,15 @@ function checkObjectForceChains() {
     [1, 71, 60, 62, 3]
   ]));
   const firstLoopResult = go(beltLoop, 'east');
-  eq(beltLoop.crates[0][2].id, 71,
-    'OBJECT FORCE  repeated object route settles without losing its crate');
-  ok(firstLoopResult.steps.some(step => step.type === 'force-loop'),
-    'OBJECT FORCE  object chain reports repeated directed state termination');
+  eq(beltLoop.crates[0][1].id, 71,
+    'OBJECT FORCE  repeated complete queue restores its source crate');
+  ok(firstLoopResult.aborted && firstLoopResult.steps.some(step => step.type === 'effect-abort'),
+    'OBJECT FORCE  repeated transport aborts the complete action');
   const loopResult = go(beltLoop, 'east');
-  eq([beltLoop.crates.flat().filter(Boolean).length, beltLoop.strokes], [1, 2],
-    'OBJECT FORCE  interacting player/object loops retain one crate and one stroke per action');
-  ok(loopResult.steps.some(step => step.type === 'force-loop'),
-    'OBJECT FORCE  loop termination is reported to playback');
+  eq([beltLoop.crates.flat().filter(Boolean).length, beltLoop.strokes], [1, 0],
+    'OBJECT FORCE  aborted retries retain the crate and commit no strokes');
+  eq([beltLoop.player.x, beltLoop.player.y, loopResult.aborted], [0, 0, true],
+    'OBJECT FORCE  repeated commands reproduce the same complete rollback');
   ok(loopResult.steps.length < beltLoop.width * beltLoop.height * 4 + 10,
     'OBJECT FORCE  cyclic movement remains within a board-derived bound');
 
@@ -2764,7 +2766,7 @@ function checkLevels() {
   ok(res.problems.length === 0, 'V1-V11  the boot levels validate',
     res.problems.map(p => p.level + ': ' + p.message).join('\n      '));
   ok(res.levels.length === 13, 'V3  thirteen boot levels loaded, got ' + res.levels.length);
-  eq(res.levels[0].worldId, 'prologue', 'PACK  legacy Prologue gets its stable internal identity');
+  eq(res.levels[0].worldId, 'prologue', 'PACK  built-in Prologue keeps its stable internal identity');
   ok(typeof res.levels[0].goalText === 'string', 'LEVEL  tutorial text stays distinct from the goal coordinate');
   ok(res.levels[0].goal && typeof res.levels[0].goal.x === 'number', 'LEVEL  goal coordinate remains available to the rules');
 
@@ -2918,10 +2920,10 @@ function checkWorldOneContent() {
 function checkStore() {
   const store = SM.STORE;
   store.reset();
-  store.complete('level_1', null, 8, 12, 'world-alpha');
+  store.complete('level_1', 8, 12, 'world-alpha');
   store.noteTiles('level_1', [1, 70], 'world-alpha');
   store.setLastLevel('level_1', 'world-alpha');
-  store.complete('level_1', null, 5, 9, 'world-beta');
+  store.complete('level_1', 5, 9, 'world-beta');
   store.noteTiles('level_1', [1, 23], 'world-beta');
   store.setLastLevel('level_2', 'world-beta');
   eq(store.entry('level_1', 'world-alpha').best.strokes, 8,
@@ -2941,38 +2943,34 @@ function checkStore() {
   eq(store.lastLevel('world-beta'), 'level_2',
     'STORE  last selection for world beta does not overwrite alpha');
 
-  store.importText(JSON.stringify({
+  const beforeIncompatible = store.exportText();
+  throws(() => store.importText(JSON.stringify({
     schema: 1,
     levels: { level_1: { unlocked: true, cleared: true,
       best: { strokes: 7, turns: 11 }, seenTiles: [1, 70] } },
     lastLevel: 'level_1'
-  }));
-  eq(store.all().schema, 2, 'STORE  legacy progress migrates to the namespaced schema');
-  eq(store.entry('level_1', 'prologue').cleared, true,
-    'STORE  Prologue completion survives migration');
-  eq(store.entry('level_1', 'prologue').best, { strokes: 7, turns: 11 },
-    'STORE  Prologue best score survives migration');
-  eq(store.entry('level_1', 'prologue').seenTiles, [1, 70],
-    'STORE  Prologue codex progress survives migration');
-  eq(store.lastLevel('prologue'), 'level_1',
-    'STORE  legacy last-level selection migrates to Prologue identity');
-  eq(store.entry('level_1', 'world-alpha').cleared, undefined,
-    'STORE  migrated Prologue state does not collide with world packs');
+  })), 'STORE  incompatible progress without the current contract marker is rejected');
+  eq(store.exportText(), beforeIncompatible, 'STORE  rejected import leaves current records untouched');
+  eq([store.all().schema, store.all().contract], [1, 'v2-queued'], 'STORE  current namespace has one explicit contract');
+  eq(store.entry('level_1', 'prologue').cleared, undefined,
+    'STORE  unrelated completion is not imported into the Prologue');
+  eq(store.entry('level_1', 'world-alpha').cleared, true,
+    'STORE  incompatible import preserves existing current world completion');
 }
 
 /* ---------------------------------------------------------------------- */
 
 const unitSuites = {
   registry: [checkTileRegistry],
-  rules: [checkStateContract, checkTileHookDispatch, checkRules, checkRayQueries,
+  rules: [checkV2Rules, checkStateContract, checkTileHookDispatch, checkRules, checkRayQueries,
     checkPolarityBarriers, checkPolaritySwitch, checkPolaritySolver,
-    checkCatchTransitions, checkRayTransportTransitions, checkCatchSolver, checkChromaticContracts,
+    checkFailureTransitions, checkRayTransportTransitions, checkFailureSolver, checkChromaticContracts,
     checkReceiverVariants, checkReceiverLinksAndSolver,
     checkDirectObjectMovement, checkObjectForceChains],
-  levels: [checkYaml, checkPolarityValidation, checkObjectOverrides, checkTargetLayer,
+  levels: [checkV2Levels, checkParRouteSelection, checkYaml, checkPolarityValidation, checkObjectOverrides, checkTargetLayer,
     checkReceiverValidation, checkWorld5Content, checkWorld6Content,
     checkTileMechanicsGuide, checkWorldPackGuide],
-  helpers: [checkGeometryHelpers, checkRulesPurity, checkRulesTileDispatchPurity]
+  helpers: [checkV2Helpers, checkStore, checkGeometryHelpers, checkRulesPurity, checkRulesTileDispatchPurity]
 };
 
 function report(label) {
@@ -3001,13 +2999,16 @@ if (unitArg) {
 } else {
   console.log('--- Streuph\'s Maze: verification ---');
   checkTileRegistry();
+  checkV2Levels();
+  checkV2Rules();
+  checkV2Helpers();
   checkStateContract();
   checkTileHookDispatch();
   checkYaml();
   checkRayQueries();
-  checkCatchTransitions();
+  checkFailureTransitions();
   checkRayTransportTransitions();
-  checkCatchSolver();
+  checkFailureSolver();
   checkParRouteSelection();
   checkChromaticContracts();
   checkRules();

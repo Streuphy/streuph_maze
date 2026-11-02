@@ -4,6 +4,12 @@ Use this checklist whenever creating or revising a level or world pack. The
 repository-root `AGENTS.md` makes the final `npm test` requirement apply to all
 OpenCode work in this project.
 
+The active `v2-global-pack-migration` applies the sole queued four-color contract
+to all shipped content. Its reviewed deltas control changed goal/closure/hazard
+boundaries until accepted-spec synchronization; do not reintroduce recoverable
+exposure to satisfy historical route notes. Track all 61 rows in
+`v2-pack-certification.md` and preserve historical archives unchanged.
+
 ## Design review
 
 - Read the relevant world entry in `worlds-blueprint.txt` and its Golden Rules:
@@ -47,8 +53,9 @@ OpenCode work in this project.
   an incomplete balance comparison does not invalidate a proven minimum PAR,
   but it must not be described as globally best-balanced.
 - Verify every authored start is safe under the initial ray/gate/crate state.
-  Replay every caught transition and verify the respawn cell is safe in that
-  resulting state as well.
+  Replay every intended transition and confirm it never continues after failure.
+  Exposure freezes the settled board; restart/navigation, not a respawn rule,
+  recover the attempt. Review failure paths separately from winning proofs.
 - Check all targets, gates, links, crates, and emitters have the intended
   correspondence. Where a gate or shield is supposed to be essential, test
   that removing or disabling it makes the route impossible or changes the
@@ -57,22 +64,34 @@ OpenCode work in this project.
   If a level still has the same solution when its defining hazard/shield is
   removed, either redesign it or explicitly document that element as decorative.
 - Document route-review findings, especially tutorial recovery, gate necessity,
-  safe respawns, intentional catches, and any deviation from the world blueprint.
+  safe intended positions, terminal mistakes, and blueprint deviations. Record
+  optional/decorative elements explicitly; do not imply PAR exercises them.
+- Use `npm run levels:routes -- --early-review` for bounded reverse-reachability
+  evidence on every first-three-level group. Report incomplete review as unknown.
+  Count terminal failures separately from hidden nonterminal softlocks; manually
+  review wrong pushes, guarded pockets, and actual lesson use as well.
 
 ## World 2 ray-hazard checks
 
-- Test all four static emitter directions and verify ray traversal uses the
-  settled post-action board. Resolve configured ray transport first, in stable
-  emitter scan order, then test player exposure against the resulting board.
+- Test all four static emitter directions. Configured ray-object hops use the
+  common atomic queue, stable source y/x ordering, current destination legality,
+  per-hop signals, and session provenance. Only a non-winning drained queue gets
+  final dot exposure testing. A legal matching goal entry wins after its signal
+  reactions; closure failure takes precedence, and stationary equality cannot win.
 - Confirm walls, crates, and closed/solid barriers stop rays; open gates and
   targets do not. Test pushes that both create and remove shielding.
-- Confirm exposed successful actions catch the player before the final goal
-  test, charge one stroke total, preserve crates/colors/latches, recompute
-  player-dependent locks after respawn, and remain exactly undoable.
-- Verify catches are turn-based and independent of rendering delays. Do not add
-  timers, animation-dependent rules, or a game-over state.
+- Confirm final exposure commits terminal failure with the normal initiating
+  stroke and preserves the settled actors, colors, and latches. Gameplay and
+  player undo are blocked; restart reconstructs initial state and navigation
+  remains available. Failure never awards completion, best scores, or victory art.
+- Check linked gates, polarity barriers, and phase void with the common closure
+  query: crate-held closure stays visibly pending until departure, reopening
+  cancels it, closure beneath the dot fails immediately. Ordinary color mismatch
+  is an entry filter, not physical closure.
+- Verify resolution is turn-based and independent of rendering delays. Do not
+  add timers, automatic recovery teleports, or animation-dependent outcomes.
 - In the codex/tutorial and browser checks, make emitter directions, active ray
-  cells, crate shielding, catches, and respawns inspectable.
+  cells, crate shielding, failed boards, and restart/undo policy inspectable.
 
 ## Required commands
 
@@ -91,7 +110,7 @@ npm test
 `npm test` runs both Node verification and the jsdom browser smoke suite. Use
 `npm run test:browser` only at final validation. When the change affects
 real-browser rendering or local `file://` pack loading, also load the authored
-pack through the actual UI in Chromium, play a representative shield/catch/undo
-path, return to the Prologue, and verify no external resources or unintended
-game-over state. Record that check separately; do not imply that `npm test`
-launched Chromium.
+pack through the actual UI in Chromium, play a representative shield path and
+nonterminal undo, verify terminal input/undo blocking, restart, navigate back to
+the Prologue, and verify no external resources. Inspect arrows and pending
+closure as applicable. Record this separately; `npm test` does not launch Chromium.

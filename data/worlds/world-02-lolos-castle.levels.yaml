@@ -4,68 +4,68 @@ num_level: 8
 levels:
   level_1:
     name: "First Medusa"
-    goal: "Push the shield north into the westbound ray, then reach the exit behind it."
+    goal: "Push the shield north into the westbound ray, then cross behind it to the exit above the ray. Exposure fails the attempt; restart to try again."
     width: 5
     height: 5
-    golf_score: 6
+    golf_score: 7
     grid:
-      - [0, 0, 0, 0, 0]
-      - [0, 0, 0, 0, 0]
-      - [2, 0, 0, 0, 84]
-      - [0, 0, 70, 0, 0]
+      - [3, 3, 3, 3, 3]
+      - [2, 3, 3, 3, 3]
+      - [0, 0, 0, 0, 84]
+      - [0, 0, 70, 3, 0]
       - [1, 0, 0, 0, 0]
   level_2:
     name: "Crossfire"
-    goal: "Two rays meet at the crossing; place one crate on their shared line to protect the exit."
+    goal: "Push north to shield both rays at their intersection. Return west through the protected crossing; the exit is beyond the ray row."
     width: 7
     height: 5
-    golf_score: 6
+    golf_score: 7
     grid:
-      - [0, 0, 83, 0, 0, 0, 0]
-      - [0, 0, 0, 0, 0, 0, 0]
-      - [2, 0, 0, 0, 0, 0, 84]
-      - [0, 0, 70, 0, 0, 0, 0]
+      - [3, 3, 83, 3, 3, 3, 3]
+      - [2, 3, 0, 3, 3, 3, 3]
+      - [0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 70, 3, 0, 0, 0]
       - [1, 0, 0, 0, 0, 0, 0]
   level_3:
     name: "Crossing Lines"
-    goal: "Slide the shield east to the perpendicular ray intersection before approaching the exit."
+    goal: "Move beneath the shield, push it north onto the ray intersection, then return west through the protected crossing."
     width: 9
     height: 6
-    golf_score: 9
+    golf_score: 11
     grid:
-      - [0, 0, 0, 0, 83, 0, 0, 0, 0]
-      - [0, 0, 0, 0, 0, 0, 0, 0, 0]
-      - [0, 0, 0, 0, 0, 0, 0, 0, 0]
-      - [2, 0, 0, 0, 0, 0, 0, 0, 84]
-      - [0, 0, 0, 0, 70, 0, 0, 0, 0]
+      - [3, 3, 3, 3, 83, 3, 3, 3, 3]
+      - [3, 3, 3, 3, 0, 3, 3, 3, 3]
+      - [2, 3, 3, 3, 0, 3, 3, 3, 3]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 0, 0, 70, 3, 0, 0, 0]
       - [1, 0, 0, 0, 0, 0, 0, 0, 0]
   level_4:
     name: "The Unhurried Exit"
-    goal: "A caught push opens the linked exit; respawn keeps the crate on its target. No timer is running."
+    goal: "Park the lower shield in the ray, then push the upper crate onto its target to open the exit gate. Both jobs matter; no timer is running."
     width: 10
     height: 8
-    golf_score: 12
+    golf_score: 20
     grid:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [0, 0, 70, 23, 3, 3, 3, 3, 3, 3]
-      - [1, 0, 81, 0, 0, 0, 0, 0, 10, 2]
+      - [3, 0, 0, 0, 0, 0, 0, 0, 3, 2]
+      - [0, 70, 23, 3, 0, 0, 0, 0, 0, 10]
+      - [0, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 70, 3, 0, 0, 0, 0, 0, 0]
+      - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   level_5:
     name: "Four Medusas"
-    goal: "Shield the courtyard crossing with a block; the side turrets are fixed and wall-occluded."
+    goal: "Shield both courtyard rays before crossing to the exit beyond them. The two side turrets are fixed, wall-occluded scenery."
     width: 12
     height: 8
-    golf_score: 14
+    golf_score: 15
     grid:
-      - [0, 0, 0, 0, 0, 83, 0, 0, 0, 0, 0, 0]
-      - [82, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-      - [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
-      - [0, 0, 0, 0, 0, 70, 0, 0, 0, 0, 0, 0]
+      - [3, 3, 3, 3, 3, 83, 3, 3, 3, 3, 3, 3]
+      - [82, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3, 3]
+      - [2, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 0, 0, 0, 70, 3, 0, 0, 0, 0, 0]
       - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
       - [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0]
       - [1, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0]
@@ -74,43 +74,43 @@ levels:
     goal: "The corridor ray is fixed; move the shield into its line, then use the lower return aisle."
     width: 14
     height: 6
-    golf_score: 14
+    golf_score: 18
     grid:
       - [3, 3, 3, 3, 83, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
-      - [0, 0, 0, 0, 0, 0, 0, 70, 0, 0, 0, 0, 0, 0]
+      - [2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84]
+      - [0, 0, 0, 0, 0, 0, 0, 70, 3, 0, 0, 0, 0, 0]
       - [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0]
       - [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81, 0, 0, 0]
   level_7:
     name: "Twin Chambers"
-    goal: "Activate both crate targets; each caught push leaves its shield in place and returns you to the entrance."
+    goal: "Park the first shield north and the second south on their targets. Cross each protected ray and its linked gate without exposure."
     width: 16
     height: 9
-    golf_score: 28
+    golf_score: 31
     grid:
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [0, 0, 0, 70, 23, 3, 0, 0, 70, 24, 3, 3, 3, 3, 3, 3]
-      - [1, 0, 0, 81, 0, 10, 0, 0, 81, 0, 26, 0, 0, 0, 0, 2]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3]
+      - [10, 3, 3, 0, 3, 0, 0, 70, 0, 3, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 23, 0, 84, 0, 0, 24, 0, 84, 3, 3, 3, 3, 3, 3]
+      - [0, 0, 70, 0, 3, 26, 3, 3, 0, 3, 3, 3, 3, 3, 3, 3]
+      - [1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
   level_8:
     name: "Labyrinth Fortress"
-    goal: "Three shields open three passages. Set each block, accept the strategic respawn, then cross the fortress."
+    goal: "Three shield targets open three gates. Alternate north, south, then north pushes, and cross the protected chambers; exposure ends the attempt."
     width: 16
     height: 9
-    golf_score: 36
+    golf_score: 39
     grid:
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 83, 84]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 3]
+      - [82, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 83, 84]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [82, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
       - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
-      - [0, 0, 70, 23, 3, 0, 70, 24, 3, 0, 70, 25, 3, 3, 3, 3]
-      - [1, 0, 81, 0, 10, 0, 81, 0, 26, 0, 81, 0, 27, 0, 0, 2]
+      - [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 2]
+      - [10, 3, 3, 0, 3, 0, 0, 70, 0, 3, 27, 3, 3, 3, 0, 3]
+      - [0, 0, 23, 0, 84, 0, 0, 24, 0, 84, 0, 0, 25, 0, 0, 84]
+      - [0, 0, 70, 0, 3, 26, 3, 3, 0, 3, 0, 0, 70, 3, 0, 3]
+      - [1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

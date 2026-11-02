@@ -12,9 +12,23 @@ function runRegistrySuite(SM) {
     'the complete catalogue satisfies its registry contract');
 
   const definitions = Object.values(SM.TILES);
+  assert.equal(definitions.length, 62);
+  assert.equal(SM.DOT_DEFINITION.entityRole, 'dot');
+  assert.equal(SM.DOT_DEFINITION.capabilities.conveyor, true);
+  assert.equal(SM.DOT_DEFINITION.vulnerableToRays, true);
+  assert.deepEqual(SM.DOT_DEFINITION.state.hooks, []);
+  assert.ok(SM.DOT_DEFINITION.state.events.includes('failed'));
+  assert.equal(SM.DOT_DEFINITION.colourRole, 'carrier-P');
+  for (const [id, attributes] of [[30, { carrier: 'crate' }], [41, { mode: 'timer' }], [50, { scope: 'all-neighbors' }],
+    [44, { key: 'unknown' }], [46, { openWhen: 'always' }], [80, { link: -1 }]]) {
+    assert.equal(SM.validateTileParameters(SM.TILES[id], attributes).ok, false, 'unsupported enum/value must not acquire guessed behavior');
+  }
   assert.equal(new Set(definitions.map(tile => tile.id)).size, definitions.length,
     'stable tile IDs are unique');
   for (const tile of definitions) {
+    assert.ok(['terrain', 'feature', 'object'].includes(tile.layer));
+    assert.equal(typeof tile.category, 'string');
+    assert.equal(typeof tile.closingSurface, 'boolean');
     assert.equal(typeof tile.name, 'string', `tile ${tile.id} has a readable name`);
     assert.deepEqual(tile.state.hooks.slice().sort(), Object.keys(tile.strategies).sort(),
       `tile ${tile.id} exposes its registered hooks in its state manifest`);
@@ -41,6 +55,26 @@ function runRegistrySuite(SM) {
   }
 
   const ice = SM.TILES[5];
+  for (let id = 60; id <= 67; id++) {
+    const belt = SM.TILES[id];
+    assert.equal(belt.category, 'floor'); assert.equal(belt.layer, 'terrain');
+    assert.equal(belt.colourRole, 'reserved-tint'); assert.equal(belt.params.colour, 'wht');
+    assert.equal(belt.params.kind, undefined);
+    assert.ok(SM.validateTileParameters(belt, { colour: 'red', dir: { x: 0, y: 1 } }).ok);
+    assert.equal(SM.validateTileParameters(belt, { dir: { x: 1, y: 1 } }).ok, false);
+    assert.equal(SM.validateTileParameters(belt, { dir: { x: 0.5, y: 0 } }).ok, false);
+    assert.equal(SM.validateTileParameters(belt, { kind: 'crate' }).ok, false);
+    assert.equal(SM.validateTileParameters(belt, { colour: 'blk' }).ok, false);
+    const force = SM.resolveTileHook(belt, 'forcedMovement', { inst: belt });
+    assert.equal(force.kind, undefined); assert.deepEqual(force.direction, belt.params.dir);
+    const direction = belt.params.dir.x > 0 ? 'east' : belt.params.dir.x < 0 ? 'west' : belt.params.dir.y > 0 ? 'north' : 'south';
+    const glyph = SM.glyph(belt, { W: 'wht' });
+    assert.ok(glyph.includes('data-exit="' + direction + '"'));
+    assert.ok(glyph.includes('stroke="' + SM.PALETTE.wht + '"'), 'exit arrow has an explicit visible stroke');
+    assert.equal((glyph.match(/<path\b/g) || []).length, 1, 'exactly one unambiguous arrow path');
+  }
+  assert.deepEqual(SM.GAME_COLOURS, ['wht', 'red', 'gre', 'blu']);
+  assert.equal(ice.layer, 'terrain', 'explicit ice is terrain, not a tint-derived floor policy');
   assert.deepEqual([ice.family, ice.name, ice.glyph, ice.solid, ice.walkable],
     ['terrain', 'ice', 'ice', false, true], 'ice retains its walkable terrain definition');
   assert.ok(SM.glyph(ice).length > 0, 'ice retains a rendered glyph');
@@ -124,7 +158,7 @@ function runRegistrySuite(SM) {
   }
   assert.deepEqual([SM.TILES[50].params, SM.TILES[50].family, SM.TILES[50].glyph], [
     { mode: 'sensor', scope: 'tagged', link: 1, colour: 'red' }, 'sensor', 'receiver'
-  ], 'legacy receiver ID 50 remains red/link 1 with its original identity');
+  ], 'stable receiver ID 50 remains red/link 1 with its original identity');
   assert.deepEqual([SM.TILES[10].params.link, SM.TILES[26].params.link,
     SM.TILES[27].params.link], [1, 2, 3],
   'World 6 link allocation agrees with World 1 phase-wall links 1–3');

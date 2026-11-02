@@ -1,214 +1,98 @@
-/* =========================================================================
- * sm-store.js  —  STREUPH'S MAZE
- * Progress persistence, with an in-memory fallback for file:// pages.
- *
- * localStorage is NOT guaranteed under file:// — Chrome gives every file://
- * document an opaque origin and may throw on access. So every call is
- * wrapped, and the store degrades to an in-memory object that still works
- * for the session. Export / Import is the durable fallback, and the UI
- * exposes it (G5).
- * ========================================================================= */
+/* Current V2 progress only. Local storage is optional under file://; JSON
+ * export/import is the durable fallback. No other contract's data is read. */
 (function (global) {
   'use strict';
   var SM = global.SM || (global.SM = {});
+  var KEY = 'streuphs-maze/progress/v2';
+  var CONTRACT = 'v2-queued';
+  var SCHEMA = 1;
+  var memory = null;
+  var backend = 'memory';
 
-  var KEY = 'streuphs-maze/progress/v1';
-  var SCHEMA = 2;
-  var LEGACY_SCHEMA = 1;
-  var PROLOGUE_ID = 'prologue';
-
-  var memory = null;      // the always-present fallback
-  var backend = null;     // 'localStorage' | 'memory'
-
-  function probe() {
-    try {
-      var ls = global.localStorage;
-      if (!ls) return null;
-      var t = '__sm_probe__';
-      ls.setItem(t, '1');
-      ls.removeItem(t);
-      return ls;
-    } catch (e) {
-      return null;
-    }
+  function record(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+  function blank() { return { schema: SCHEMA, contract: CONTRACT, levels: {}, lastLevels: {} }; }
+  function worldScope(worldId) {
+    var world = worldId === undefined ? 'prologue' : worldId;
+    if (typeof world !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(world)) throw new Error('invalid world identity');
+    return world;
   }
-
-  backend = probe() ? 'localStorage' : 'memory';
-
-  function blank() {
-    return { schema: SCHEMA, levels: {}, lastLevels: {} };
+  function levelKey(key) {
+    if (typeof key !== 'string' || !/^level_[1-9]\d*$/.test(key)) throw new Error('invalid level key');
+    return key;
   }
-
-  function progressKey(worldId, levelKey) {
-    return (worldId || PROLOGUE_ID) + '::' + levelKey;
-  }
-
-  function qualified(key) {
-    return /^[a-z0-9]+(?:-[a-z0-9]+)*::level_\d+$/.test(key);
-  }
-
-  function mergeEntry(target, source) {
-    target.unlocked = !!(target.unlocked || source.unlocked);
-    if (source.cleared) target.cleared = true;
-    if (source.best && (!target.best || source.best.strokes < target.best.strokes)) {
-      target.best = source.best;
-    }
-    target.seenTiles = target.seenTiles || [];
-    (source.seenTiles || []).forEach(function (id) {
-      if (target.seenTiles.indexOf(id) === -1) target.seenTiles.push(id);
+  function identity(key, worldId) { return worldScope(worldId) + '::' + levelKey(key); }
+  function count(value) { return Number.isInteger(value) && value >= 0; }
+  function validate(obj) {
+    if (!record(obj) || obj.contract !== CONTRACT || obj.schema !== SCHEMA) throw new Error('unsupported current progress contract/schema');
+    if (!record(obj.levels) || !record(obj.lastLevels)) throw new Error('progress requires levels and lastLevels maps');
+    Object.keys(obj.levels).forEach(function (key) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*::level_[1-9]\d*$/.test(key)) throw new Error('invalid progress identity ' + key);
+      var entry = obj.levels[key];
+      if (!record(entry) || (entry.cleared !== undefined && typeof entry.cleared !== 'boolean') ||
+          !Array.isArray(entry.seenTiles) || entry.seenTiles.some(function (id) { return !count(id); })) throw new Error('invalid progress entry ' + key);
+      if (entry.best !== null && (!record(entry.best) || !count(entry.best.strokes) || !count(entry.best.turns))) throw new Error('invalid best score ' + key);
+      if (entry.best !== null && !entry.cleared) throw new Error('best score requires a completed level');
+      if (Object.keys(entry).some(function (field) { return ['cleared', 'best', 'seenTiles'].indexOf(field) < 0; })) throw new Error('unsupported progress field');
     });
+    Object.keys(obj.lastLevels).forEach(function (world) { worldScope(world); levelKey(obj.lastLevels[world]); });
   }
-
-  function migrate(obj) {
-    var next = blank();
-    Object.keys(obj.levels || {}).forEach(function (key) {
-      var destination = qualified(key) ? key : progressKey(PROLOGUE_ID, key);
-      var entry = next.levels[destination] || (next.levels[destination] = {});
-      mergeEntry(entry, obj.levels[key] || {});
-    });
-
-    if (obj.lastLevels && typeof obj.lastLevels === 'object') {
-      Object.keys(obj.lastLevels).forEach(function (worldId) {
-        if (typeof obj.lastLevels[worldId] === 'string') {
-          next.lastLevels[worldId] = obj.lastLevels[worldId];
-        }
-      });
-    }
-    if (typeof obj.lastLevel === 'string' && !next.lastLevels[PROLOGUE_ID]) {
-      var last = obj.lastLevel;
-      next.lastLevels[PROLOGUE_ID] = qualified(last) ? last.slice(last.indexOf('::') + 2) : last;
-    }
-    return next;
+  function storage() {
+    try { return global.localStorage || null; } catch (error) { return null; }
   }
-
+  try {
+    var candidate = storage();
+    if (candidate) { candidate.setItem('__sm_current_probe__', '1'); candidate.removeItem('__sm_current_probe__'); backend = 'localStorage'; }
+  } catch (error) { backend = 'memory'; }
   function read() {
     if (backend === 'memory') return memory || (memory = blank());
     try {
-      var raw = global.localStorage.getItem(KEY);
-      if (!raw) return blank();
-      var obj = JSON.parse(raw);
-      if (!obj || typeof obj.levels !== 'object') return blank();
-      if (obj.schema === LEGACY_SCHEMA) {
-        obj = migrate(obj);
-        write(obj);
-        return obj;
-      }
-      if (obj.schema !== SCHEMA) return blank();
-      if (!obj.lastLevels || typeof obj.lastLevels !== 'object') obj.lastLevels = {};
-      return obj;
-    } catch (e) {
-      return blank();
-    }
+      var text = storage().getItem(KEY);
+      if (!text) return blank();
+      var data = JSON.parse(text); validate(data); return data;
+    } catch (error) { return blank(); }
   }
-
-  function write(obj) {
-    if (backend === 'memory') { memory = obj; return true; }
-    try {
-      global.localStorage.setItem(KEY, JSON.stringify(obj));
-      return true;
-    } catch (e) {
-      // Quota, or a privacy mode that started refusing mid-session.
-      backend = 'memory';
-      memory = obj;
-      return false;
-    }
+  function write(data) {
+    if (backend === 'memory') { memory = data; return true; }
+    try { storage().setItem(KEY, JSON.stringify(data)); return true; }
+    catch (error) { backend = 'memory'; memory = data; return false; }
   }
-
-  function ensure(prog, key, worldId) {
-    var id = progressKey(worldId, key);
-    if (!prog.levels[id]) prog.levels[id] = { unlocked: false, best: null, seenTiles: [] };
-    var e = prog.levels[id];
-    if (!e.seenTiles) e.seenTiles = [];
-    return e;
+  function ensure(data, key, worldId) {
+    var id = identity(key, worldId);
+    if (!data.levels[id]) data.levels[id] = { best: null, seenTiles: [] };
+    return data.levels[id];
   }
-
-  var STORE = {
-    /** 'localStorage' | 'memory' — the UI shows this so the player knows. */
+  SM.STORE = {
     backend: function () { return backend; },
     durable: function () { return backend === 'localStorage'; },
-
     all: function () { return read(); },
-
-    entry: function (key, worldId) {
-      var p = read();
-      return p.levels[progressKey(worldId, key)] || { unlocked: false, best: null, seenTiles: [] };
+    entry: function (key, worldId) { return read().levels[identity(key, worldId)] || { best: null, seenTiles: [] }; },
+    complete: function (key, strokes, turns, worldId) {
+      if (!count(strokes) || !count(turns)) throw new Error('invalid completed-run counters');
+      var data = read(), entry = ensure(data, key, worldId);
+      entry.cleared = true;
+      if (!entry.best || strokes < entry.best.strokes) entry.best = { strokes: strokes, turns: turns };
+      return write(data);
     },
-
-    /** Mark a level finished. Unlocks the NEXT level (G3, gating order = file order). */
-    complete: function (key, nextKey, strokes, turns, worldId) {
-      var p = read();
-      var e = ensure(p, key, worldId);
-      e.unlocked = true;
-      e.cleared = true;
-      if (!e.best || strokes < e.best.strokes) e.best = { strokes: strokes, turns: turns };
-      if (nextKey) {
-        var n = ensure(p, nextKey, worldId);
-        n.unlocked = true;
-      }
-      return write(p);
-    },
-
-    /** Record which tile ids the player has stood on, for the codex (W2). */
     noteTiles: function (key, ids, worldId) {
-      var p = read();
-      var e = ensure(p, key, worldId);
-      var changed = false;
-      for (var i = 0; i < ids.length; i++) {
-        if (e.seenTiles.indexOf(ids[i]) === -1) { e.seenTiles.push(ids[i]); changed = true; }
-      }
-      if (changed) write(p);
+      if (!Array.isArray(ids) || ids.some(function (id) { return !count(id); })) throw new Error('invalid seen tile IDs');
+      var data = read(), entry = ensure(data, key, worldId), changed = false;
+      ids.forEach(function (id) { if (entry.seenTiles.indexOf(id) < 0) { entry.seenTiles.push(id); changed = true; } });
+      if (changed) write(data);
       return changed;
     },
-
-    lastLevel: function (worldId) { return read().lastLevels[worldId || PROLOGUE_ID] || null; },
-    setLastLevel: function (key, worldId) {
-      var p = read();
-      worldId = worldId || PROLOGUE_ID;
-      if (!p.lastLevels) p.lastLevels = {};
-      p.lastLevels[worldId] = key;
-      write(p);
-    },
-
-    isUnlocked: function (key, index, worldId) {
-      var p = read();
-      if (index === 0) return true;                 // the first level is always open
-      if (p.levels[progressKey(worldId, key)] && p.levels[progressKey(worldId, key)].unlocked) return true;
-      // Fall back to "every earlier level is cleared".
-      var order = Object.keys(p.levels).sort();
-      return false;
-    },
-
+    lastLevel: function (worldId) { return read().lastLevels[worldScope(worldId)] || null; },
+    setLastLevel: function (key, worldId) { var data = read(); data.lastLevels[worldScope(worldId)] = levelKey(key); return write(data); },
     reset: function () {
       memory = blank();
       if (backend === 'localStorage') {
-        try { global.localStorage.removeItem(KEY); } catch (e) { /* nothing to do */ }
+        try { storage().removeItem(KEY); } catch (error) { backend = 'memory'; }
       }
     },
-
-    /* --- Export / Import (G5, N4) ------------------------------------- */
-
-    exportText: function () {
-      return JSON.stringify(read(), null, 2);
-    },
-
+    exportText: function () { return JSON.stringify(read(), null, 2); },
     importText: function (text) {
-      var obj;
-      try {
-        obj = JSON.parse(text);
-      } catch (e) {
-        throw new Error('that is not valid JSON');
-      }
-      if (!obj || typeof obj !== 'object') throw new Error('expected a progress object');
-       if (obj.schema !== SCHEMA && obj.schema !== LEGACY_SCHEMA) {
-         throw new Error('progress schema is ' + JSON.stringify(obj.schema) + ', expected ' + SCHEMA + ' or legacy ' + LEGACY_SCHEMA);
-       }
-      if (!obj.levels || typeof obj.levels !== 'object') {
-        throw new Error('the object has no "levels" map');
-      }
-       return write(obj.schema === LEGACY_SCHEMA ? migrate(obj) : obj);
+      var data;
+      try { data = JSON.parse(text); } catch (error) { throw new Error('that is not valid JSON'); }
+      validate(data); return write(data);
     }
   };
-
-  SM.STORE = STORE;
-
 })(typeof window !== 'undefined' ? window : globalThis);

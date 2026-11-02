@@ -116,6 +116,10 @@
         'the header key "name" is required and must be a non-empty string'));
     }
 
+    if (Object.prototype.hasOwnProperty.call(doc, 'ruleset')) {
+      problems.push(diag('(document)', 0, 'Runtime ruleset selection is unsupported; all packs use V2. Remove "ruleset".'));
+    }
+
     var worldId = null;
     if (doc.world_id === undefined && SM.DEFAULT_LEVELS && doc.name === SM.DEFAULT_LEVELS.name) {
       // Keep the shipped Prologue's long-standing document shape intact while
@@ -188,8 +192,8 @@
         problems.push(addWorldContext(res.error, doc.name, worldId, key));
       }
       else {
-        res.level.worldId = worldId;
-        res.level.worldName = doc.name;
+        Object.defineProperty(res.level, 'worldId', { value: worldId, enumerable: true });
+        Object.defineProperty(res.level, 'worldName', { value: doc.name, enumerable: true });
         out.push(res.level);
       }
       for (var di = diagnosticsBeforeLevel; di < diagnostics.length; di++) {
@@ -226,6 +230,9 @@
   function validateLevel(key, raw, diagnostics, seenGoalText, opts) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return { error: diag(key, 0, 'the level must be a mapping') };
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, 'ruleset')) {
+      return { error: diag(key, 0, 'Runtime ruleset selection is unsupported; remove the level "ruleset" field.') };
     }
     if (typeof raw.name !== 'string' || raw.name === '') {
       return { error: diag(key, 0, '"name" is required and must be a non-empty string') };
@@ -363,7 +370,7 @@
         // only adds world/level/cell context to its actionable diagnostic.
         var parameterCheck = SM.validateTileParameters(SM.getTile(Number(oid)), ov);
         if (!parameterCheck.ok) {
-          return { error: diag(key, 0, 'V6: tile id ' + oid + ' has an invalid parameter override: ' +
+          return { error: diag(key, 0, 'V6: tile id ' + oid + ' (' + SM.getTile(Number(oid)).name + ') has an invalid parameter override: ' +
             parameterCheck.errors[0]) };
         }
         var overrideTile = SM.getTile(Number(oid));
@@ -378,7 +385,7 @@
           if (GAMECOLOURS.indexOf(receiverColour) === -1) {
             return { error: diag(key, 0,
               'V6: receiver tile id ' + oid + ' colour must be a supported gameplay colour: ' +
-              GAMECOLOURS.join(', ')) };
+               GAMECOLOURS.join(', ')) };
           }
         }
       }
@@ -389,16 +396,26 @@
     var objectOverrideError = validateObjectOverrides(key, raw, w, h);
     if (objectOverrideError) return { error: objectOverrideError };
 
+    for (var obsolete of ['floor_colours', 'requires']) {
+      if (Object.prototype.hasOwnProperty.call(raw, obsolete)) {
+        return { error: diag(key, 0, 'Unsupported authoring field "' + obsolete + '"; use registered tile parameters and object capabilities.') };
+      }
+    }
+    for (var initial of ['initial_player_colour', 'initial_world_colour']) {
+      if (raw[initial] !== undefined && GAMECOLOURS.indexOf(raw[initial]) === -1) {
+        return { error: diag(key, 0, initial + ' must be one of ' + GAMECOLOURS.join(', ')) };
+      }
+    }
+
     /* V9 — colour overrides must be real gameplay colours. */
     var bad = checkColours(key, raw);
     if (bad) return { error: bad };
 
-    /* V8 — a level with no colour actuator is trivially solvable. */
+    /* V8 — describe absent color-changing mechanics without inferring difficulty. */
     if (actuators === 0) {
       diagnostics.push(diag(key, 0,
-        'V8: this level contains no prism and no colour actuator, so the P === W rule can ' +
-        'never bite. That is fine for a movement tutorial, but a late level like this is ' +
-        'trivially solvable.'));
+        'V8: this level has no carrier-changing tile. Review initial P/W and its intended movement, signal, transport, or hazard lesson; ' +
+        'lack of color changes alone does not establish solvability or difficulty.'));
     }
 
     /* V12 — every portal needs a partner. */
@@ -440,14 +457,14 @@
       } else if (res.status === 'unknown') {
         diagnostics.push(diag(key, 0,
           'V10: solvability is UNKNOWN — the search gave up after ' + res.explored +
-          ' states (budget ' + (opts.maxStates || MAX_STATES) + '). The level may still be fine.'));
+          ' states (budget ' + (opts.maxStates === undefined ? MAX_STATES : opts.maxStates) + '). The level may still be fine.'));
       }
       if (level.par !== null && res.optimal !== null && level.par !== res.optimal) {
         diagnostics.push(diag(key, 0, level.par > res.optimal
           ? '§13: the declared par is ' + level.par + ' but the level can be finished in ' +
-            res.optimal + '. Par must be the minimum number of entries.'
+            res.optimal + '. Par must be the minimum number of strokes.'
           : '§13: the declared par is ' + level.par + ' but the computed optimum is ' +
-            res.optimal + '. Par is unreachable as written — look for a soft-lock.'));
+            res.optimal + '. The declared score is unreachable; review the score or intended route.'));
       }
     }
 
@@ -491,15 +508,16 @@
   }
 
   function checkColours(key, raw) {
+    var colours = GAMECOLOURS;
     var ids = Object.keys(raw.overrides || {});
     for (var i = 0; i < ids.length; i++) {
       var ov = raw.overrides[ids[i]];
       if (!ov || !Object.prototype.hasOwnProperty.call(ov, 'colour')) continue;
       var v = ov.colour;
-      if (GAMECOLOURS.indexOf(v) === -1) {
+      if (colours.indexOf(v) === -1) {
         return diag(key, 0,
-          'V9: "' + String(v) + '" is not a gameplay colour. Valid: ' + GAMECOLOURS.join(', ') +
-          '. "blk" is chrome only and is never a tile state.');
+          'V9: "' + String(v) + '" is not a gameplay colour. Valid: ' + colours.join(', ') +
+          '. Black is presentation-only.');
       }
     }
     return null;
@@ -539,6 +557,38 @@
     { type: 'act' }
   ];
 
+  function actionsFor() {
+    return ACTIONS.map(function (action) { return Object.assign({}, action); });
+  }
+
+  function worldScores(levels, entryFor) {
+    var proven = 0, knownPar = 0, declared = 0, declaredCount = 0;
+    var completed = 0, scored = 0, bestSum = 0, status = 'unverified';
+    levels.forEach(function (level) {
+      var result = level.solve;
+      if (result && result.status === 'solvable' && isInt(result.optimal) &&
+          result.verified === true) {
+        proven++; knownPar += result.optimal;
+      } else if (result && result.status === 'unsolvable') status = 'unsolvable';
+      else if (result && result.status === 'unknown' && status !== 'unsolvable') status = 'unknown';
+      if (isInt(level.par)) { declaredCount++; declared += level.par; }
+      var entry = entryFor ? entryFor(level) : null;
+      if (entry && entry.cleared) {
+        completed++;
+        if (entry.best && isInt(entry.best.strokes) && entry.best.strokes >= 0) {
+          scored++; bestSum += entry.best.strokes;
+        }
+      }
+    });
+    var exact = levels.length > 0 && proven === levels.length;
+    var bestComplete = levels.length > 0 && scored === levels.length;
+    return { total: levels.length, proven: proven, knownPar: knownPar,
+      par: exact ? knownPar : null, parStatus: exact ? 'proven' : status,
+      declaredPar: declaredCount === levels.length && levels.length ? declared : null,
+      completed: completed, scored: scored, best: bestComplete ? bestSum : null,
+      partialBest: bestSum, bestComplete: bestComplete };
+  }
+
   function routeMetrics(path) {
     var counts = { up: 0, down: 0, left: 0, right: 0 };
     for (var i = 0; i < path.length; i++) {
@@ -558,9 +608,14 @@
 
   function solve(level, opts) {
     opts = opts || {};
-    var maxStates = opts.maxStates || MAX_STATES;
-    var maxDepth = opts.maxDepth || MAX_DEPTH;
-    var maxRouteLabels = opts.maxRouteLabels || maxStates;
+    var maxStates = opts.maxStates === undefined ? MAX_STATES : opts.maxStates;
+    var maxDepth = opts.maxDepth === undefined ? MAX_DEPTH : opts.maxDepth;
+    var maxRouteLabels = opts.maxRouteLabels === undefined ? maxStates : opts.maxRouteLabels;
+    if ([maxStates, maxDepth, maxRouteLabels].some(function (budget) { return !isInt(budget) || budget < 0; })) {
+      return { status: 'unknown', reason: 'invalid-budget', optimal: null, explored: 0, path: null,
+        routeBalance: { counts: null, score: null, complete: false } };
+    }
+    var actions = actionsFor(level);
 
     var start = SM.RULES.newState(level);
     var startSig = SM.RULES.snapshotSig(start);
@@ -572,9 +627,10 @@
     var queue = [{ st: start, depth: 0, path: [], counts: [0, 0, 0, 0] }];
     var head = 0, explored = 0, routeLabels = 1;
     var goalDepth = null, best = null, budgetHit = false;
+    var depthLimited = false, transitionFailed = false, reason = null;
 
     function isGoal(st) {
-      return st.player.x === st.goal.x && st.player.y === st.goal.y && st.P === st.W;
+      return st.won;
     }
 
     function countDirection(counts, action) {
@@ -596,8 +652,19 @@
 
     function resultForBest(complete) {
       var metrics = routeMetrics(best.path);
+      {
+        var replay = SM.RULES.newState(level);
+        try {
+          best.path.forEach(function (action) { SM.RULES.resolveTurn(replay, action); });
+          if (!replay.won || replay.strokes !== best.depth) throw new Error('replay disagrees');
+        } catch (e) {
+          return { status: 'unknown', optimal: null, explored: explored, path: null,
+            reason: 'replay', routeBalance: { counts: null, score: null, complete: false } };
+        }
+      }
       return {
         status: 'solvable', optimal: best.depth, explored: explored,
+        verified: true,
         routeLabels: routeLabels, path: best.path,
         routeBalance: {
           counts: metrics.counts,
@@ -617,21 +684,27 @@
       /* BFS has expanded every possible predecessor at the winning depth once
          the next queued label is itself at that depth. */
       if (goalDepth !== null && node.depth >= goalDepth) break;
-      if (explored >= maxStates) { budgetHit = true; break; }
+      if (explored >= maxStates) { budgetHit = true; reason = 'states'; break; }
       node = queue[head++];
       explored++;
-      if (node.depth >= maxDepth) continue;
+      if (node.depth >= maxDepth) { depthLimited = true; continue; }
 
-      for (var a = 0; a < ACTIONS.length; a++) {
-        var action = ACTIONS[a];
+      for (var a = 0; a < actions.length; a++) {
+        var action = actions[a];
         var next = SM.RULES.cloneState(node.st);
         var r;
         try {
           r = SM.RULES.resolveTurn(next, action);
         } catch (e) {
-          continue;                 // never claim about a level we cannot simulate
+          transitionFailed = true; budgetHit = true; reason = 'transition';
+          break;                    // a skipped transition cannot support a proof
+        }
+        if (r.aborted && r.steps[0].reason !== 'cycle' && r.steps[0].reason !== 'budget') {
+          transitionFailed = true; budgetHit = true; reason = 'effect-' + r.steps[0].reason;
+          break;
         }
         if (!r.stroke) continue;
+        if (next.failed) continue;    // failure is not a recoverable search node
 
         var nextDepth = node.depth + 1;
         var nextCounts = countDirection(node.counts, action);
@@ -653,7 +726,7 @@
         if (stateDepth[k] === undefined) stateDepth[k] = nextDepth;
         var labelKey = k + '|' + nextCounts.join(',');
         if (labels[labelKey]) continue;
-        if (routeLabels >= maxRouteLabels) { budgetHit = true; break; }
+        if (routeLabels >= maxRouteLabels) { budgetHit = true; reason = 'route-labels'; break; }
         labels[labelKey] = true;
         routeLabels++;
         queue.push({ st: next, depth: nextDepth, path: path, counts: nextCounts });
@@ -661,9 +734,10 @@
       if (budgetHit) break;
     }
 
-    if (best) return resultForBest(!budgetHit);
-    if (budgetHit) {
+    if (best && !transitionFailed) return resultForBest(!budgetHit && !depthLimited);
+    if (budgetHit || depthLimited) {
       return { status: 'unknown', optimal: null, explored: explored,
+        reason: reason || 'depth',
         routeLabels: routeLabels, path: null,
         routeBalance: { counts: null, score: null, complete: false } };
     }
@@ -677,9 +751,13 @@
   SM.LEVELS = {
     validate: validate,
     solve: solve,
+    actionsFor: actionsFor,
+    worldScores: worldScores,
     routeMetrics: routeMetrics,
     MAX_WIDTH: MAX_WIDTH,
     MAX_HEIGHT: MAX_HEIGHT,
+    MAX_STATES: MAX_STATES,
+    MAX_DEPTH: MAX_DEPTH,
     GAMECOLOURS: GAMECOLOURS,
     parse: function (text) { return SM.parseYAML(text); },
     load: function (text, opts) { return validate(SM.parseYAML(text), opts); },
