@@ -64,6 +64,8 @@
       storage:  this.root.querySelector('#storage-note')
     };
     this.bindInput();
+    var self = this;
+    SM.PRESENTATION.subscribe(function () { if (self.state) { self.syncCodex(); if (self.state.won) self.showWinPicture(self.state.level); } });
     this.load(SM.game.startLevel || 0);
     if (this.el.storage) {
       this.el.storage.textContent = SM.STORE.durable()
@@ -91,6 +93,7 @@
 
   Game.prototype.load = function (i) {
     i = Math.max(0, Math.min(this.levels.length - 1, i));
+    this.dismissWin();
     this.clearWinPicture();
     this.index = i;
     var level = this.levels[i];
@@ -136,12 +139,19 @@
     if (!result.changed && !result.stroke) {
       // Blocked move: no stroke, no history entry. Still flash a reason.
       this.flashBlock(result.steps);
+      this.r.view = this.snapshotView();
+      this.r.draw(this.r.view);
       this.syncHud();
       return;
     }
 
     // Undo restores the state immediately before this resolved action.
     this.history.push(before);
+    // Publish only the fully resolved canonical result, never an animation
+    // callback. A committed win survives immediate navigation/hidden playback.
+    var actionState = this.state, actionLevel = actionState.level;
+    SM.STORE.noteTiles(actionLevel.key, Object.keys(actionState.seen).map(Number), actionLevel.worldId);
+    if (actionState.won && !actionState.failed) SM.STORE.complete(actionLevel.key, actionState.strokes, actionState.turns, actionLevel.worldId);
     this.syncHud();
     this.syncCarriers();
 
@@ -149,6 +159,7 @@
     this.pending = true;
     this.r.play(result.steps, viewBefore, function () {
       self.pending = false;
+      if (self.state !== actionState) return;
       self.r.view = self.snapshotView();
       self.r.draw(self.r.view);
       self.r.placePlayer(self.r.view, false);
@@ -164,7 +175,6 @@
   Game.prototype.afterTurn = function () {
     var s = this.state;
     var level = this.state.level;
-    SM.STORE.noteTiles(level.key, Object.keys(s.seen).map(Number), level.worldId);
     this.syncCodex();
     this.syncHud();
 
@@ -186,7 +196,6 @@
     if (!this.state || !this.state.won || this.state.failed) return;
     var level = this.state.level;
     var strokes = this.state.strokes;
-    SM.STORE.complete(level.key, strokes, this.state.turns, level.worldId);
 
     var info = scoreInfo(level), par = info.value;
     this.el.winTitle.textContent = 'Solved';
@@ -215,40 +224,9 @@
   }
 
   function solvedBoardDataUri(state) {
-    var level = state.level;
-    var cell = Math.min(24, 210 / level.width, 210 / level.height);
-    var left = (250 - level.width * cell) / 2;
-    var top = (250 - level.height * cell) / 2;
-    var parts = [
-      '<svg xmlns="http://www.w3.org/2000/svg" width="250" height="250" viewBox="0 0 250 250">',
-      '<rect width="250" height="250" fill="#0B0B0C"/>'
-    ];
-
-    for (var y = 0; y < level.height; y++) {
-      for (var x = 0; x < level.width; x++) {
-        var px = left + x * cell;
-        var py = top + (level.height - 1 - y) * cell;
-        var ctx = SM.RULES.describeTile(state, x, y);
-        var marks = SM.glyph(ctx.inst, ctx);
-        if (ctx.crate) marks += SM.glyph(ctx.crate, ctx);
-        parts.push('<rect x="' + px + '" y="' + py + '" width="' + cell +
-          '" height="' + cell + '" fill="#141418" stroke="#45454B" stroke-width="0.7"/>');
-        if (marks) {
-          parts.push('<g transform="translate(' + px + ' ' + py + ') scale(' +
-            (cell / 24) + ')">' + marks + '</g>');
-        }
-      }
-    }
-
-    var playerX = left + (state.player.x + 0.5) * cell;
-    var playerY = top + (level.height - state.player.y - 0.5) * cell;
-    var radius = cell * 0.27;
-    parts.push('<circle cx="' + playerX + '" cy="' + playerY + '" r="' + radius +
-      '" fill="' + (SM.PALETTE[state.P] || SM.PALETTE.wht) + '" stroke="' +
-      (SM.PALETTE[state.W] || SM.PALETTE.wht) + '" stroke-width="' +
-      Math.max(1, cell * 0.07) + '"/>');
-    parts.push('</svg>');
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(parts.join(''));
+    var host = document.createElement('div'), surface = new SM.Surface(host, { cellSize: Math.max(20, Math.floor(250 / Math.max(state.width, state.height))) });
+    try { surface.update(SM.VISUALS.board(state)); return surface.exportImage(); }
+    finally { surface.dispose(); }
   }
 
   Game.prototype.showWinPicture = function (level) {
@@ -374,6 +352,7 @@
     this.r.board.addEventListener('click', function (e) {
       var cell = e.target.closest('.cell');
       if (!cell) return;
+      if (self.pending) { self.r.cancel(); self.pending = false; }
       self.describe(+cell.dataset.x, +cell.dataset.y);
     });
 
@@ -583,12 +562,12 @@
       var detail = codexText ? '<small class="detail">' + escapeHtml(codexText) + '</small>' : '';
       html += '<div class="row' + (on ? '' : ' unseen') + '"' +
         (on ? '' : ' title="not yet seen in this level"') + '>' +
-        wrapSvg(SM.glyph(def, ctx)) +
+        SM.GLYPHS.markup(def, ctx) +
         '<span class="nm">' + escapeHtml(def.name) + detail + '</span>' +
         '<span class="id">' + id + '</span>' +
         '</div>';
     });
-    this.el.codex.innerHTML = '<div class="row dot-definition">' + wrapSvg(SM.glyph(SM.DOT_DEFINITION, { P: this.state.P, W: this.state.W })) +
+    this.el.codex.innerHTML = '<div class="row dot-definition">' + SM.GLYPHS.markup(SM.DOT_DEFINITION, { P: this.state.P, W: this.state.W }) +
       '<span class="nm">dot<small class="detail">' + escapeHtml(SM.DOT_DEFINITION.presentation.codex) + '</small></span>' +
       '<span class="id">object</span></div>' + html +
       '<p style="margin:.5rem 0 0;font-size:.72rem;color:var(--mute)">' + count + ' of ' + total +
@@ -644,7 +623,6 @@
     return 'west';
   }
 
-  function wrapSvg(inner) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>'; }
 
   function scoreInfo(level) {
     var proof = level.solve, declared = Number.isInteger(level.par) ? level.par : null;

@@ -86,3 +86,14 @@ resolver path or misleading maintained guidance.
 See the [archived review](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
 for command outcomes, concurrent-work attribution and remaining dependencies.
 No release approval or archival is implied.
+
+## Graphics branch automated gate — 2026-11-02
+
+The shared pixel/vector renderer has producer-refreshed mathematical/native
+evidence and passing strict/preaccept asset checks in its isolated worktree.
+See the [current rendering record](../../openspec/changes/graphiscs-engine-update-pixel-16bit/verification.md).
+The older unchecked draft/readiness item above is its preserved review checkpoint,
+not the current branch result. Unrelated drafts are still preserved separately;
+no audit exception was added for obsolete rule/schema prose. Explicit versioned
+OpenSpec provenance is no longer mistaken for a playable old policy, with
+negative regression tests retaining the stale-guidance checks.

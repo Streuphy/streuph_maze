@@ -1,383 +1,87 @@
-/* =========================================================================
- * sm-render.js  —  STREUPH'S MAZE
- * The display-only view and step playback.
- *
- * This is the ONLY layer that may use a timer. It exists purely to PLAY BACK
- * the step list that sm-rules.js returned; it never decides anything. If the
- * player presses a key during playback, the current turn is finished
- * instantly and the queued animation is dropped — input is never gated
- * (R3, §9.2). "Animation" here means "show the intermediate positions that
- * the rules already committed to"; it can never change the outcome.
- * ========================================================================= */
+/* GPL-3.0: passive shared-board playback of committed state/events. */
 (function (global) {
   'use strict';
   var SM = global.SM || (global.SM = {});
-
-  var STEP_MS = 70;        // per free belt hop / push
-  var MIN_PLAY_MS = 60;    // floor so a 1-step turn still reads as a turn
-
-  function Renderer(root, opts) {
-    this.root = root;
-    this.opts = opts || {};
-    this.board = root.querySelector('#board');
-    this.playerEl = root.querySelector('#player');
-    if (this.playerEl && SM.PLAYER_PRESENTATION) {
-      this.playerEl.dataset.motion = SM.PLAYER_PRESENTATION.motion;
-      this.playerEl.style.setProperty('--pulse-half-duration',
-        (SM.PLAYER_PRESENTATION.frames * SM.PLAYER_PRESENTATION.frameMs / 2) + 'ms');
-    }
-    this.banner = root.querySelector('#banner');
-    this.cellSize = 0;
-    this.queue = null;
-    this.timer = null;
-    this.view = null;      // display-only mirror of the rules state
-    this.resizeObserver = null;
-    if (global.ResizeObserver) {
-      var self = this;
-      this.resizeObserver = new global.ResizeObserver(function () { self.fitBoard(); });
-      var main = root.querySelector('main');
-      if (main) this.resizeObserver.observe(main);
-    }
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Board construction                                                  */
-  /* ------------------------------------------------------------------ */
-
-  Renderer.prototype.build = function (state) {
-    var level = state.level;
-    this.state = state;
-    this.view = mirror(state);
-    this.playerEl.classList.remove('failed');
-
-    var b = this.board;
-    b.style.setProperty('--cols', level.width);
-    b.style.setProperty('--rows', level.height);
-
-    // Keep the player overlay: it is a child of #board purely so it shares
-    // its positioning context, and it is re-appended after the cells.
-    var keep = this.playerEl.parentNode === b ? this.playerEl : null;
-    b.textContent = '';
-
-    var frag = document.createDocumentFragment();
-    // CSS grid lays children out top-to-bottom, while rules coordinates grow
-    // northward from y=0 at the bottom. Create the visual rows in reverse.
-    for (var displayY = 0; displayY < level.height; displayY++) {
-      var y = level.height - 1 - displayY;
-      for (var x = 0; x < level.width; x++) {
-        var cell = document.createElement('div');
-        cell.className = 'cell';
-        cell.dataset.x = x;
-        cell.dataset.y = y;
-        cell.dataset.label = SM.RULES.cellLabel(x, y);
-        frag.appendChild(cell);
-      }
-    }
-    b.appendChild(frag);
-    if (keep) b.appendChild(keep);
-
-    this.renderRulers(level);
-    this.draw(this.view);
-    this.fitBoard();
-  };
-
-  Renderer.prototype.renderRulers = function (level) {
-    var x = this.root.querySelector('#ruler-x');
-    var y = this.root.querySelector('#ruler-y');
-    if (!x || !y) return;
-    x.textContent = '';
-    y.textContent = '';
-    for (var i = 0; i < level.width; i++) {
-      var sx = document.createElement('span');
-      sx.textContent = SM.RULES.colName(i);
-      x.appendChild(sx);
-    }
-    for (var j = 0; j < level.height; j++) {
-      var sy = document.createElement('span');
-      sy.textContent = String(level.height - j);
-      y.appendChild(sy);
-    }
-    x.style.setProperty('--cols', level.width);
-    y.style.setProperty('--rows', level.height);
-  };
-
-  /** Size the display grid to its viewport; game rules never read this value. */
-  Renderer.prototype.fitBoard = function () {
-    if (!this.state || !this.board) return;
-    var main = this.root.querySelector('main');
-    if (!main) return;
-    var style = global.getComputedStyle ? global.getComputedStyle(main) : null;
-    var left = style ? parseFloat(style.paddingLeft) : 16;
-    var right = style ? parseFloat(style.paddingRight) : 16;
-    var top = style ? parseFloat(style.paddingTop) : 16;
-    var bottom = style ? parseFloat(style.paddingBottom) : 16;
-    var padX = (isFinite(left) ? left : 0) + (isFinite(right) ? right : 0);
-    var padY = (isFinite(top) ? top : 0) + (isFinite(bottom) ? bottom : 0);
-    // Reserve room for coordinate rulers, frame borders and gaps.
-    var usableW = Math.max(1, main.clientWidth - padX - 28);
-    var usableH = Math.max(1, main.clientHeight - padY - 24);
-    var maxCell = Math.min(120, Math.max(80, Math.floor(usableW / 12)));
-    var size = Math.floor(Math.min(
-      usableW / this.state.level.width,
-      usableH / this.state.level.height,
-      maxCell
-    ));
-    size = Math.max(20, size);
-    var value = size + 'px';
-    this.board.style.setProperty('--cell', value);
-    var rulerX = this.root.querySelector('#ruler-x');
-    var rulerY = this.root.querySelector('#ruler-y');
-    if (rulerX) rulerX.style.setProperty('--cell', value);
-    if (rulerY) rulerY.style.setProperty('--cell', value);
-    if (this.view) this.placePlayer(this.view, false);
-  };
-
-  /* ------------------------------------------------------------------ */
-  /* Drawing                                                             */
-  /* ------------------------------------------------------------------ */
-
-  Renderer.prototype.cells = function () {
-    return this.board.children;
-  };
-
-  Renderer.prototype.cellAt = function (x, y) {
-    return this.board.children[(this.state.level.height - 1 - y) * this.state.level.width + x];
-  };
-
-  Renderer.prototype.draw = function (view) {
-    var lv = this.state.level;
-    var w = lv.width;
-    var rayAt = {};
-    var rays = SM.RULES.traceRays(view);
-    for (var ri = 0; ri < rays.length; ri++) {
-      for (var ci = 0; ci < rays[ri].cells.length; ci++) {
-        var rayCell = rays[ri].cells[ci];
-        var rayKey = rayCell.x + ',' + rayCell.y;
-        (rayAt[rayKey] || (rayAt[rayKey] = [])).push(rays[ri].dir);
-      }
-    }
-    for (var y = 0; y < lv.height; y++) {
-      for (var x = 0; x < w; x++) {
-        var inst = lv.tiles[y][x];
-        var cell = this.cellAt(x, y);
-        var ctx = SM.RULES.describeTile(view, x, y);
-        var directions = rayAt[x + ',' + y] || [];
-        var html = ctx.target ? SM.glyph(ctx.terrain, ctx) : '';
-        for (var di = 0; di < directions.length; di++) html += rayGlyph(directions[di]);
-        html += SM.glyph(ctx.inst, ctx);
-        if (ctx.crate) html += SM.glyph(ctx.crate, ctx);
-        if (cell.dataset.mark !== html) {
-          cell.innerHTML = html ? wrapSvg(html) : '';
-          cell.dataset.mark = html;
-        }
-        var cls = 'cell' + (ctx.solid ? ' wall' : '') + (ctx.pendingClose ? ' pending-close' : '');
-        if (cell.className !== cls) cell.className = cls;
-        if (directions.length) cell.dataset.ray = directions.map(directionName).join(' ');
-        else delete cell.dataset.ray;
-        {
-          var label = SM.RULES.cellLabel(x, y) + ': ' + ctx.inst.name;
-          if (ctx.target || ctx.crate) label += '; supporting terrain ' + ctx.terrain.name;
-          if (ctx.crate) label += '; ' + SM.COLOUR_NAMES[ctx.crate.params.colour || 'wht'] + ' crate; ' +
-            (ctx.crateCapabilities.pullable ? 'pullable' : ctx.crateCapabilities.pushable ? 'pushable' : 'fixed');
-          if (ctx.dotHere) label += '; ' + SM.COLOUR_NAMES[view.P] + ' dot';
-          if (ctx.target) label += '; target link ' + ctx.inst.params.link;
-          if (ctx.inst.levelRole === 'goal') label += '; ' + SM.COLOUR_NAMES[view.W] + ' goal';
-          label += '; requested ' + (ctx.requestedSolid ? 'closed' : 'open') + '; effective ' + (ctx.solid ? 'closed' : 'open') +
-            (ctx.pendingClose ? '; pending close until crate leaves' : '') + '; latch ' + (ctx.latched ? 'on' : 'off');
-          cell.setAttribute('aria-label', label);
-          cell.title = label;
-          cell.dataset.pendingClose = String(ctx.pendingClose);
-        }
-      }
-    }
-    var aura = this.playerEl.querySelector('.aura');
-    aura.style.background = SM.PALETTE[view.P] || SM.PALETTE.wht;
-    aura.style.borderColor = SM.PALETTE[view.W] || SM.PALETTE.wht;
-    aura.classList.toggle('matched', view.P === view.W);
-    this.playerEl.classList.toggle('failed', view.failed);
-    this.board.dataset.outcome = SM.RULES.outcome(view);
-    this.board.setAttribute('aria-label', 'maze board — ' + SM.RULES.outcome(view));
-  };
-
-  function directionName(dir) {
-    if (dir.y > 0) return 'north';
-    if (dir.x > 0) return 'east';
-    if (dir.y < 0) return 'south';
-    return 'west';
-  }
-
-  function rayGlyph(dir) {
-    var path = dir.x ? 'M0 12 H24' : 'M12 0 V24';
-    return '<path class="ray-beam" d="' + path + '" fill="none" stroke="' +
-      SM.PALETTE.red + '" stroke-width="4" stroke-opacity="0.42" stroke-linecap="round"/>';
-  }
-
-  function wrapSvg(inner) {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + inner + '</svg>';
-  }
-
-  /** A display-only copy of the rules state. The renderer never writes back. */
-  function mirror(state) {
-    return SM.RULES.cloneState(state);
-  }
-
-  Renderer.prototype.placePlayer = function (view, animate) {
-    var lv = this.state.level;
-    var cell = this.cellAt(view.player.x, view.player.y);
-    if (!cell || !this.playerEl.isConnected) return;
-    var rect = cell.getBoundingClientRect();
-    var boardRect = this.board.getBoundingClientRect();
-    var size = rect.width;
-    if (this.cellSize !== size && size > 0) this.cellSize = size;
-    this.playerEl.style.width = size + 'px';
-    this.playerEl.style.height = size + 'px';
-    var tx = rect.left - boardRect.left;
-    var ty = rect.top - boardRect.top;
-    if (!animate) {
-      this.playerEl.style.transition = 'none';
-      this.playerEl.style.transform = 'translate(' + tx + 'px,' + ty + 'px)';
-      void this.playerEl.offsetWidth;
-      this.playerEl.style.transition = '';
-    } else {
-      this.playerEl.style.transform = 'translate(' + tx + 'px,' + ty + 'px)';
-    }
-  };
-
-  /* ------------------------------------------------------------------ */
-  /* Step playback                                                       */
-  /* ------------------------------------------------------------------ */
-
-  /**
-   * Play a step list. `done` fires when the animation finishes OR when the
-   * player interrupts. Never gates the next input.
-   */
-  Renderer.prototype.play = function (steps, view, done) {
-    this.cancel();
-    this.view = view;
-
+  function Renderer(root, options) {
+    this.root = root; this.opts = options || {};
+    this.board = this.opts.board || root.querySelector('#board') || root.querySelector('#test-board');
+    this.banner = root.querySelector('#banner') || root.querySelector('#test-banner');
+    this.view = null; this.sequence = null; this.generation = 0;
+    this.surface = new SM.Surface(this.board, { cellSize: 32 });
     var self = this;
-    var i = 0;
-    var started = now();
-    var finished = false;
-
+    this.surface.onSuspend = function () { self.cancel(); };
+    this.surface.onDispose = function () {
+      self.generation++; if (self.sequence) self.sequence.finished = true; self.sequence = null;
+      if (self.unsubscribe) self.unsubscribe(); if (self.observer) self.observer.disconnect();
+    };
+    this.unsubscribe = SM.PRESENTATION.subscribe(function () { self.cancel(); if (self.view) self.draw(self.view); });
+    if (global.ResizeObserver) { this.observer = new global.ResizeObserver(function () { self.fitBoard(); }); this.observer.observe(this.board.parentElement); }
+  }
+  Renderer.prototype.build = function (state) {
+    this.cancel(); this.state = state; this.view = SM.RULES.cloneState(state); this.draw(this.view); this.fitBoard();
+    var x = this.root.querySelector('#ruler-x'), y = this.root.querySelector('#ruler-y');
+    if (x) { x.textContent = ''; for (var i = 0; i < state.width; i++) { var span = global.document.createElement('span'); span.textContent = SM.RULES.colName(i); x.appendChild(span); } x.style.setProperty('--cols', state.width); }
+    if (y) { y.textContent = ''; for (var j = state.height; j > 0; j--) { var sy = global.document.createElement('span'); sy.textContent = j; y.appendChild(sy); } y.style.setProperty('--rows', state.height); }
+  };
+  Renderer.prototype.draw = function (view, animate) {
+    this.view = view; if (this.surface) this.surface.update(SM.VISUALS.board(view), animate);
+  };
+  Renderer.prototype.fitBoard = function () {
+    if (!this.state || !this.surface) return;
+    var parent = this.board.parentElement, main = this.root.querySelector('main');
+    var width = (main || parent).clientWidth || 800;
+    // Quick-test containers grow with their child; fitting to that child-driven
+    // height creates a ResizeObserver shrink loop. Use the viewport budget.
+    var height = main ? main.clientHeight || 600 : Math.max(200, (global.innerHeight || 800) * 0.55);
+    var size = Math.max(20, Math.min(96, Math.floor((width - 30) / this.state.width), Math.floor((height - 30) / this.state.height)));
+    this.surface.resize(size); this.board.style.setProperty('--cell', size + 'px');
+    ['#ruler-x', '#ruler-y'].forEach(function (selector) { var ruler = this.root.querySelector(selector); if (ruler) ruler.style.setProperty('--cell', size + 'px'); }, this);
+  };
+  Renderer.prototype.cells = function () { return this.surface.grid.children; };
+  Renderer.prototype.cellAt = function (x, y) { return this.surface.grid.querySelector('[data-x="' + x + '"][data-y="' + y + '"]'); };
+  Renderer.prototype.placePlayer = function () { /* actors are composed by the shared surface */ };
+  Renderer.prototype.play = function (steps, view, done) {
+    this.cancel(); this.view = view;
+    var self = this, generation = ++this.generation;
+    var sequence = this.sequence = { frames: SM.VISUALS.frames(steps), index: 0, done: done, finished: false, last: null };
     function finish() {
-      if (finished) return;
-      finished = true;
-      if (self.timer) { clearTimeout(self.timer); self.timer = null; }
-      self.queue = null;
-      done();
+      if (sequence.finished) return; sequence.finished = true;
+      if (self.sequence === sequence) self.sequence = null;
+      self.surface.onTick = null; self.surface.settle();
+      if (generation === self.generation && typeof done === 'function') done();
     }
-    this.queue = finish;
-
-    function tick() {
-      if (i >= steps.length) {
-        var wait = Math.max(0, MIN_PLAY_MS - (now() - started));
-        self.timer = setTimeout(function () { self.timer = null; finish(); }, wait);
-        return;
+    sequence.finish = finish;
+    sequence.advance = function (instant) {
+      while (sequence.index < sequence.frames.length) {
+        var frame = sequence.frames[sequence.index++]; SM.VISUALS.applyFrame(view, frame);
+        var portal = frame.some(function (event) { return event.type === 'teleport' || event.type === 'object-teleport'; });
+        self.draw(view, !instant && !portal);
+        if (frame.some(function (e) { return e.type === 'failed'; })) self.say('Attempt failed. Restart or choose another level.', 'warn');
+        if (!instant) break;
       }
-      var step = steps[i++];
-      var frame = [step];
-      if (step.commit !== undefined) while (i < steps.length && steps[i].commit === step.commit) frame.push(steps[i++]);
-      applyFrame(view, frame);
-      if (frame.some(function (event) { return event.type === 'failed'; })) self.say('Attempt failed. Restart or choose another level.', 'warn');
-      self.draw(view);
-      self.placePlayer(view, true);
-      self.timer = setTimeout(tick, STEP_MS);
-    }
-
-    // Always show at least the first frame synchronously so the board is
-    // never a turn behind the rules state.
-    if (steps.length === 0) { finish(); return; }
-    tick();
+      if (sequence.index >= sequence.frames.length && instant) finish();
+    };
+    if (!sequence.frames.length || SM.PRESENTATION.reduced() || this.surface.error) { sequence.advance(true); return; }
+    this.surface.onTick = function (now) {
+      if (generation !== self.generation || sequence.finished) return;
+      if (sequence.last === null || now - sequence.last >= 70) {
+        sequence.last = now;
+        if (sequence.index >= sequence.frames.length) finish(); else sequence.advance(false);
+      }
+    };
+    // Seed one frame before waiting; prevent reentrant drawing from consuming two.
+    sequence.last = global.performance.now();
+    sequence.advance(false); this.surface.start();
   };
-
   Renderer.prototype.cancel = function () {
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    if (this.queue) { var q = this.queue; this.queue = null; q(); }
+    if (this.sequence && !this.sequence.finished) this.sequence.advance(true);
+    if (this.surface) this.surface.settle();
   };
-
-  function now() {
-    return (global.performance && global.performance.now) ? global.performance.now() : Date.now();
-  }
-
-  /** Apply ONE step to the DISPLAY mirror. Purely visual bookkeeping. */
-  function applyStep(view, step) {
-    switch (step.type) {
-      case 'move':
-        view.player.x = step.to.x; view.player.y = step.to.y;
-        break;
-      case 'push':
-      case 'pull':
-        view.crates[step.to.y][step.to.x] = view.crates[step.crate.y][step.crate.x];
-        view.crates[step.crate.y][step.crate.x] = null;
-        break;
-      case 'target-move':
-        moveTargetInView(view, step);
-        break;
-      case 'teleport':
-        view.player.x = step.to.x; view.player.y = step.to.y;
-        break;
-      case 'object-teleport':
-        if (step.objectType === 'target') moveTargetInView(view, step);
-        else {
-          view.crates[step.to.y][step.to.x] = view.crates[step.from.y][step.from.x];
-          view.crates[step.from.y][step.from.x] = null;
-        }
-        break;
-      case 'state':
-        SM.RULES.restore(view, step.snapshot);
-        if (step.seen) view.seen = Object.assign({}, step.seen);
-        break;
-      case 'failed':
-        view.failed = true; view.won = false; view.failureReason = step.reason;
-        view.player.x = step.at.x; view.player.y = step.at.y;
-        break;
-      case 'goal':
-        view.won = true;
-        break;
-      case 'colour':
-        if (step.which === 'P') view.P = step.to; else view.W = step.to;
-        break;
-      case 'polarity':
-        view.polarity = step.to;
-        break;
-      case 'switch': {
-        for (var i = 0; i < view.switches.length; i++) {
-          if (view.switches[i].x === step.x && view.switches[i].y === step.y) {
-            view.switches[i].latched = step.latched;
-          }
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  function applyFrame(view, frame) { frame.forEach(function (step) { applyStep(view, step); }); }
-  Renderer.applyFrame = applyFrame;
-
-  function moveTargetInView(view, step) {
-    for (var i = 0; i < view.switches.length; i++) {
-      var target = view.switches[i];
-      if (target.inst.entityRole !== 'target') continue;
-      var matchesId = step.entityId && target.entityId === step.entityId;
-      var matchesPosition = target.x === step.from.x && target.y === step.from.y &&
-        target.inst.id === step.id;
-      if (matchesId || matchesPosition) {
-        target.x = step.to.x; target.y = step.to.y;
-        return;
-      }
-    }
-  }
-
-  /* ------------------------------------------------------------------ */
-
-  Renderer.prototype.say = function (text, tone) {
-    this.banner.textContent = text || '';
-    this.banner.className = tone || '';
+  Renderer.prototype.dispose = function () {
+    this.generation++; if (this.sequence) this.sequence.finished = true; this.sequence = null;
+    if (this.unsubscribe) this.unsubscribe(); if (this.observer) this.observer.disconnect(); if (this.surface) this.surface.dispose();
   };
-
+  Renderer.prototype.say = function (text, tone) { if (this.banner) { this.banner.textContent = text || ''; this.banner.className = tone || ''; } };
+  Renderer.applyFrame = function (view, frame) { return SM.VISUALS.applyFrame(view, frame); };
   SM.Renderer = Renderer;
-
 })(typeof window !== 'undefined' ? window : globalThis);

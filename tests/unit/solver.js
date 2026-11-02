@@ -9,7 +9,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const FILES = [
-  'src/js/sm-yaml.js', 'src/js/tiles.js', 'src/js/sm-glyphs.js',
+  'src/js/sm-yaml.js', 'src/js/tiles.js', 'src/js/sm-visuals.js', 'src/js/sm-glyphs.js',
   'src/js/sm-board.js', 'src/js/sm-entities.js', 'src/js/levels.default.js',
   'src/js/sm-solver.js', 'src/js/levels.js', 'src/js/sm-rules.js'
 ];

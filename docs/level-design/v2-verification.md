@@ -123,3 +123,31 @@ Current command results and remaining gates are recorded in the
 No new native Chromium run was performed for prose-only changes. The earlier
 fingerprint-bound mathematical/native-browser JSON remains unchanged; passing
 fresh jsdom checks cannot be substituted for a native-browser run.
+
+## Graphics branch follow-up — 2026-11-02
+
+The shared Konva pixel/vector implementation now has fresh, producer-generated
+evidence; see the [implementation and ambiguity record](../../openspec/changes/graphiscs-engine-update-pixel-16bit/verification.md).
+Both strict/preaccept maintained-asset gates pass in its isolated feature
+worktree. Earlier draft/audit findings above describe their checkpoints; unrelated
+drafts and concurrent editor-v2 work remain preserved in the original checkout.
+
+The prerequisite solver extraction changed fingerprint inputs, so all **61**
+minima/replays and early-state evidence were regenerated through `levels:routes`.
+Scores and boards are unchanged; the aggregate remains **869 strokes**.
+
+Actual Chromium **154.0.8037.97**, ordinary `file://`, verified seven packs per
+identity, complete gallery and shared editor/quick-test/snapshots, PNG export,
+failure/undo/restart, motion/storage fallbacks, real pointer/keyboard coordinates
+and bounded disposal. The native report contains 16 DPR/size/CSS-zoom combinations
+per identity, measured reference performance and screenshots, with zero external
+resources or page exceptions. Fresh repository results are **1120 Node + 269 game
+jsdom + 28 editor-browser** checks. jsdom's recording context is not pixel proof.
+
+These are implementation and automated-readiness results, not an automatic
+GitHub release, main merge, archive or accepted-spec synchronization of the new
+presentation capability. At that implementation checkpoint, the two approved
+prerequisite commits were local and rendering changes awaited scoped review/commit.
+The subsequent user-authorized graphics merge is recorded in the change's
+implementation record and Git history; it does not include the separate editor-v2
+archive work or imply a tagged GitHub release.

@@ -1,0 +1,14 @@
+/* Shared semantic controls above passive Canvas pixels. */
+.graphics-board { isolation:isolate; background:#141923; display:block !important; }
+.graphics-board .graphics-canvas { position:absolute; inset:0; pointer-events:none; }
+.graphics-board .graphics-semantics { position:absolute; inset:0; }
+.graphics-board .cell { display:block; margin:0; padding:0; min-width:0; min-height:0; border:0;
+  background:transparent !important; border-radius:0; box-shadow:none; color:transparent; }
+.graphics-board .cell:focus-visible { outline:2px solid #EDEAE3; outline-offset:-3px; }
+.graphics-board[data-outcome="failed"] { outline:3px double #EDEAE3; }
+.graphics-board[data-outcome="won"] { outline:2px solid #2FA84F; }
+.graphics-controls { display:inline-flex; gap:.7rem; flex-wrap:wrap; padding:.3rem; font-size:.75rem; }
+.graphics-controls label { display:inline-flex; align-items:center; gap:.3rem; }
+.graphics-preview img { image-rendering:pixelated; vertical-align:middle; max-width:100%; }
+.graphics-board canvas { image-rendering:pixelated; }
+.graphics-board[data-theme="vector"] canvas { image-rendering:auto; }

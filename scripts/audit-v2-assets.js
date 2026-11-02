@@ -2,6 +2,8 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const vm = require('node:vm');
 const { loadRuntime } = require('./emit-levels-yaml');
 const { INVENTORY, collect, digest, engineFingerprint } = require('./report-par-routes');
 const { presentationFingerprint } = require('./verify-v2-chromium');
@@ -87,7 +89,11 @@ function auditFiles(files, options = {}) {
       if (file.path === 'glyphs.html' && /type=['"]module['"]|import\s+\*/.test(file.text)) issue = 'gallery does not use the common classic-script boundary';
     }
     const document = /\.(?:md|txt)$/.test(file.path) && !file.path.startsWith('tests/');
-    if (document && (/\bV1\b/i.test(file.text) || /5\s+different\s+colors|Black\s*\(reversed\)/i.test(file.text) ||
+    // A versioned OpenSpec change name is provenance, not a playable policy.
+    // Only this explicit reference form is normalized; actual old-rule prose
+    // and JSON-schema/recovery guidance remain subject to the checks below.
+    const guidance = file.text.replace(/`[a-z][a-z0-9-]*-v\d+`(?= OpenSpec change)/gi, '`change-reference`');
+    if (document && (/\bV1\b/i.test(guidance) || /5\s+different\s+colors|Black\s*\(reversed\)/i.test(file.text) ||
       /Black supports normal color matching|Green beneath[\s\S]{0,80}automatic pulling|On\s+ACTION,\s+all/i.test(file.text) ||
       /exposed player returns[\s\S]{0,80}start|caught.player respawn|respawn keeps|strategic respawn/i.test(file.text) ||
       /catch is not a game.over|do not add[\s\S]{0,100}game.over state|final resting tile entry effect once/i.test(file.text) ||
@@ -162,6 +168,37 @@ function managedFiles(root) {
   ['src', 'data', 'scripts', 'tests', 'docs', 'openspec/specs', 'README.md', 'AGENTS.md', 'index.html', 'glyphs.html', 'package.json', 'package-lock.json'].forEach(walk);
   return files;
 }
+function auditGraphics(SM, report, root = ROOT) {
+  const errors = [];
+  for (const name of ['sm-visuals', 'sm-sprites']) vm.runInNewContext(fs.readFileSync(path.join(root, 'src/js/' + name + '.js'), 'utf8'), { SM });
+  for (const tile of Object.values(SM.getActiveRegistry()).concat(SM.DOT_DEFINITION)) {
+    const d = SM.VISUALS.describe(tile, { P: 'red', W: 'blu' });
+    if (!SM.SPRITES.keys.includes(d.key)) errors.push('missing pixel/vector role ' + tile.name);
+    try { SM.SPRITES.validate(SM.SPRITES.manifest(d.key)); }
+    catch (error) { errors.push(tile.name + ': ' + error.message); }
+  }
+  for (const identity of ['pixel', 'vector']) {
+    const row = report && report.identities && report.identities[identity];
+    if (!row || !Array.isArray(row.packs) || row.packs.length !== INVENTORY.length ||
+        INVENTORY.some(item => row.packs.filter(pack => pack.world === item.world && pack.levels === item.count &&
+          pack.sourceFingerprint === digest(SM.parseYAML(fs.readFileSync(path.join(root, item.file), 'utf8')))).length !== 1) ||
+        !row.gallery || row.gallery.definitions !== 63 ||
+        !row.editor || !row.editor.sharedBoard || !row.editor.sharedSnapshots || !row.editor.sharedQuickTest ||
+        !row.editor.authoredExport || !row.editor.coordinateMatrix || row.editor.coordinateMatrix.length !== 16 ||
+        !row.interruptedPlayback || !row.deniedStorage || !row.reducedMotion ||
+        !row.performance || !Number.isFinite(row.performance.p95WorkMs) || row.performance.p95WorkMs < 0 || row.performance.samples < 50 ||
+        !row.performance.stageCountReturnedToBaseline || row.performance.rebuildCycles !== 100 || row.performance.animatedGlyphs !== 144 ||
+        !row.performance.missingPixelFallback || !row.performance.canvasUnavailable || row.performance.p95WorkMs > 16.7) {
+      errors.push('incomplete native graphics evidence for ' + identity);
+    }
+  }
+  const vendor = path.join(root, 'src/vendor/konva'), provenance = JSON.parse(fs.readFileSync(path.join(vendor, 'provenance.json'), 'utf8'));
+  if (provenance.version !== '10.9.1' || provenance.license !== 'MIT') errors.push('unsupported or unlicensed Canvas backend');
+  for (const [file, expected] of Object.entries(provenance.files)) {
+    if (crypto.createHash('sha256').update(fs.readFileSync(path.join(vendor, file))).digest('hex') !== expected) errors.push('vendor integrity mismatch: ' + file);
+  }
+  return errors;
+}
 function main() {
   const flags = process.argv.slice(2);
   if (flags.some(flag => flag !== '--preaccept')) throw new Error('usage: node scripts/audit-v2-assets.js [--preaccept]');
@@ -189,7 +226,8 @@ function main() {
   const pendingSync = auditSpecSync(deltas, accepted);
   const errors = collected.problems.concat(auditInventory(collected.groups), auditDefinitions(SM, guide, used, usage), references.errors,
     auditEvidence(proof, collected.groups, ledger, engineFingerprint()),
-    auditBrowserEvidence(browserProof, sourceFingerprints, engineFingerprint(), presentationFingerprint()));
+    auditBrowserEvidence(browserProof, sourceFingerprints, engineFingerprint(), presentationFingerprint()),
+    auditGraphics(SM, browserProof));
   if (!preaccept) errors.push(...pendingSync.map(capability => 'accepted specification synchronization pending: ' + capability));
   const result = { mode: preaccept ? 'preaccept' : 'release', ok: errors.length === 0,
     releaseReady: errors.length === 0 && references.deferred.length === 0 && pendingSync.length === 0,
@@ -199,5 +237,5 @@ function main() {
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
 }
-module.exports = { historical, auditDefinitions, auditInventory, auditFiles, auditEvidence, auditBrowserEvidence, auditSpecSync, ledgerRows, managedFiles };
+module.exports = { historical, auditDefinitions, auditInventory, auditFiles, auditEvidence, auditBrowserEvidence, auditSpecSync, ledgerRows, managedFiles, auditGraphics };
 if (require.main === module) { try { main(); } catch (error) { console.error(error.message); process.exitCode = 1; } }

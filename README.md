@@ -46,6 +46,8 @@ restart or navigate to another level to recover.
 - [Documentation guide](docs/README.md) — player, level-author and contributor paths.
 - [World-pack format](docs/world-level-packs.md) — create and load YAML packs.
 - [Tile reference](docs/level-design/tile-mechanics.md) — supported definitions.
+- [Graphics and animation](docs/rendering.md) — shared Konva pixel/vector
+  identities, motion controls, offline assets and original-art provenance.
 
 The sole queued V2 engine ships 61 levels. Minimum-PAR, replay and browser evidence
 are recorded in the [verification record](docs/level-design/v2-verification.md);

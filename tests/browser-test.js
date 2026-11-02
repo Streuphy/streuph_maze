@@ -34,6 +34,7 @@ vc.on('error', (...a) => consoleErrors.push(a.join(' ')));
 
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const dom = new JSDOM(html, {
+  beforeParse: require('./canvas-recording'),
   runScripts: 'dangerously',
   resources: 'usable',
   url: 'file://' + ROOT + '/index.html',
@@ -98,16 +99,16 @@ function key(k, modifiers) {
 
   /* ---- glyphs actually rendered --------------------------------------- */
   let drawn = 0;
-  cells.forEach(c => { if (c.innerHTML.trim()) drawn++; });
-  ok(drawn > 0, 'tiles are drawn as SVG', drawn + ' of ' + cells.length + ' non-empty');
+  cells.forEach(c => { if (c.dataset.mark) drawn++; });
+  ok(drawn > 0 && doc.querySelector('#board canvas'), 'cells have shared descriptions and a real Konva canvas boundary', String(drawn));
 
   /* ---- HUD ------------------------------------------------------------ */
   eq(doc.querySelector('#v-strokes').textContent, '0', 'entries starts at 0');
   eq(doc.querySelector('#v-par').textContent, String(lv1.par), 'par is shown');
   ok(!!doc.querySelector('#tutorial').textContent.trim(), 'the tutorial panel has text');
   ok(doc.querySelector('#tutorial').textContent.indexOf('Arrow keys or WASD') !== -1, 'tutorial hint renders as text rather than an object');
-  ok(doc.querySelector('#player').isConnected, 'the player overlay remains attached above the board');
-  ok(doc.querySelector('#player').dataset.motion === 'animated', 'player is marked as an animated visual');
+  ok(SM.game.r.surface.groups.has('actor:dot'), 'dot is composed in the shared actor layer');
+  ok(SM.game.r.surface.groups.get('actor:dot').group.getChildren()[0]._smAnimation, 'dot has explicit sprite-frame metadata');
   ok(doc.querySelector('#win-picture-panel').hidden, 'no win picture is visible before victory');
   ok(!doc.querySelector('#win-picture').hasAttribute('src'), 'win picture is not loaded before victory');
   ok(/eight display frames/.test(doc.querySelector('#tutorial').textContent), 'tutorial explains the eight-frame player animation');
@@ -121,7 +122,7 @@ function key(k, modifiers) {
   const codexRows = doc.querySelectorAll('#codex .row:not(.dot-definition)');
   const implemented = Object.keys(SM.TILES).filter(k => SM.TILES[k].implemented !== false).length;
   eq(codexRows.length, implemented, 'the codex lists every implemented tile, generated from SM.TILES');
-  ok(doc.querySelector('#codex .row svg'), 'codex rows carry a glyph');
+  ok(doc.querySelector('#codex .row img'), 'codex rows carry a shared raster preview');
   const northRayCodex = Array.from(codexRows).find(row => row.querySelector('.id').textContent === '81');
   ok(northRayCodex && /Static north ray/.test(northRayCodex.textContent) &&
       /crates shield it/.test(northRayCodex.textContent),
@@ -130,8 +131,8 @@ function key(k, modifiers) {
   const beltCodex = Array.from(codexRows).find(row => row.querySelector('.id').textContent === '64');
   ok(iceCodex && /Slides in the entering direction; belts set their own direction/.test(iceCodex.textContent),
     'codex distinguishes direction-preserving ice from directional belts');
-  ok(iceCodex && beltCodex && iceCodex.querySelector('svg').innerHTML !== beltCodex.querySelector('svg').innerHTML,
-    'ice hatching and belt chevrons have visibly distinct glyphs');
+  ok(iceCodex && beltCodex && iceCodex.querySelector('img').src !== beltCodex.querySelector('img').src,
+    'ice and conveyor previews execute distinct draw journals (native screenshots verify appearance)');
 
   /* ---- play level 1 ---------------------------------------------------- */
   const g = () => SM.game;
@@ -388,7 +389,7 @@ function key(k, modifiers) {
   const closedGateMark = linkedGate.dataset.mark;
   const initialTargetView = SM.RULES.describeTile(g().state, 2, 0);
   eq(initialTargetView.active, false, 'the unoccupied target is inactive in its read-only description');
-  ok(!/fill-opacity="0\.8"/.test(inactiveTargetMark), 'the inactive target has an unfilled center');
+  ok(JSON.parse(inactiveTargetMark).some(d => d.key === 'target' && !d.active), 'the inactive target has an inactive presentation description');
   ok(linkedGate.classList.contains('wall'), 'the linked gate renders as closed initially');
   key('ArrowRight');
   await waitFor(() => !g().pending);
@@ -396,20 +397,19 @@ function key(k, modifiers) {
   const sourceView = SM.RULES.describeTile(g().state, 1, 0);
   eq(sourceView.inst.name, 'floor', 'the crate source is described as floor');
   eq(sourceView.crate, null, 'the crate source has no remaining crate entity');
-  ok(crateSource.innerHTML.trim() === '', 'the moved crate exposes its source floor visually');
+  ok(!JSON.parse(crateSource.dataset.mark).some(d => d.key === 'crate'), 'the moved crate exposes its source floor');
   const targetView = SM.RULES.describeTile(g().state, 2, 0);
   eq(targetView.inst.family, 'target', 'the occupied cell retains its target terrain');
   eq(targetView.crate.id, 70, 'the read-only tile description exposes the crate overlay');
   eq(targetView.active, true, 'the occupied target is active in its read-only description');
-  ok(crateTarget.dataset.mark !== inactiveTargetMark && /fill-opacity="0\.8"/.test(crateTarget.dataset.mark),
-    'the occupied target has a visibly active glyph');
+  ok(crateTarget.dataset.mark !== inactiveTargetMark && JSON.parse(crateTarget.dataset.mark).some(d => d.key === 'target' && d.active),
+    'the occupied target has an active shared description');
   const gateView = SM.RULES.describeTile(g().state, 4, 0);
   eq(gateView.locked, false, 'the target opens its linked phase wall in the rules state');
   ok(!linkedGate.classList.contains('wall') && linkedGate.dataset.mark !== closedGateMark,
     'the linked gate renders open after target occupancy');
-  ok(/<circle/.test(crateTarget.innerHTML) && /<rect/.test(crateTarget.innerHTML) &&
-     /<path/.test(crateTarget.innerHTML),
-    'the occupied target renders both the target marks and crate glyph');
+  ok(JSON.parse(crateTarget.dataset.mark).some(d => d.key === 'target') && JSON.parse(crateTarget.dataset.mark).some(d => d.key === 'crate'),
+    'the occupied target composes target marks and the crate layer');
 
   g().load(0);
   ['ArrowRight', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowRight']
@@ -420,12 +420,11 @@ function key(k, modifiers) {
   eq(doc.querySelector('#win-picture').alt, 'Solved World 1 board',
     'the generated picture has descriptive alternative text');
   const generatedSource = doc.querySelector('#win-picture').getAttribute('src') || '';
-  ok(generatedSource.indexOf('data:image/svg+xml;charset=utf-8,') === 0,
-    'a World 1 level without custom art uses an offline SVG snapshot');
-  const generatedSvg = decodeURIComponent(generatedSource.split(',')[1] || '');
-  ok(generatedSvg.indexOf('<circle cx="12" cy="12" r="9"') !== -1 &&
-     generatedSvg.indexOf('M2 2 L22 22') !== -1,
-    'the solved snapshot contains the target and final crate glyphs');
+  ok(generatedSource.indexOf('data:image/png;base64,') === 0,
+    'a World 1 level without custom art uses an offline shared Canvas snapshot');
+  const generatedPng = Buffer.from(generatedSource.split(',')[1] || '', 'base64');
+  ok(generatedPng.readUInt32BE(16) > 0 && SM.VISUALS.board(g().state).cells.some(c => c.layers.some(d => d.key === 'target') && c.layers.some(d => d.key === 'crate')),
+    'snapshot export is PNG and consumes the settled target/crate composition');
   g().restart();
   ok(doc.querySelector('#win-picture-panel').hidden && !doc.querySelector('#win-picture').hasAttribute('src'),
     'restart clears the generated snapshot');
@@ -484,16 +483,15 @@ function key(k, modifiers) {
     { x: 12, y: 2, name: 'north' }, { x: 22, y: 12, name: 'east' },
     { x: 12, y: 22, name: 'south' }, { x: 2, y: 12, name: 'west' }
   ]) {
-    ok(new RegExp('cx="' + direction.x + '" cy="' + direction.y +
-      '" r="1\\.8" fill="' + SM.PALETTE.red + '"').test(receiverMark),
-    'the rendered receiver visibly lights its ' + direction.name + ' indicator');
+    ok(JSON.parse(receiverMark).some(d => d.key === 'receiver' && d.contacts[direction.name[0]]),
+    'the receiver presentation lights its ' + direction.name + ' contact');
   }
   for (const crateCell of [{ x: 2, y: 3 }, { x: 3, y: 2 }, { x: 2, y: 1 }, { x: 1, y: 2 }]) {
     const view = SM.RULES.describeTile(g().state, crateCell.x, crateCell.y);
     const element = receiverBrowserCell(crateCell.x, crateCell.y);
     eq([view.inst.family, view.crate.id], ['terrain', 71],
       'receiver fixture keeps the walkable terrain and crate as separate layers');
-    ok(/<rect/.test(element.innerHTML),
+    ok(JSON.parse(element.dataset.mark).some(d => d.key === 'crate'),
       'the World 1 shared crate-overlay renderer visibly draws the adjacent crate');
   }
   const receiverGuide = fs.readFileSync(
@@ -547,7 +545,7 @@ function key(k, modifiers) {
   nexusButton.click();
   eq([g().state.P, g().state.W], ['wht', 'wht'],
     'the mastery level begins with the existing white carrier state');
-  eq(doc.querySelector('#player .aura').style.background, 'rgb(237, 234, 227)',
+  eq(SM.VISUALS.describe(SM.DOT_DEFINITION, g().state).colour, 'wht',
     'the mastery player aura renders with the existing neutral-white palette value');
   ok(SM.PALETTE.yellow === undefined,
     'the browser palette does not expose a yellow gameplay/display color');
@@ -610,7 +608,7 @@ function key(k, modifiers) {
   ok(/crate shields the north ray/.test(doc.querySelector('#banner').textContent),
     'inspecting the shielding crate reports its current ray effect');
   const initiallyShieldedCell = rayPlayerCell(2, 1);
-  ok(!initiallyShieldedCell.dataset.ray && /<rect/.test(initiallyShieldedCell.innerHTML),
+  ok(!initiallyShieldedCell.dataset.ray && JSON.parse(initiallyShieldedCell.dataset.mark).some(d => d.key === 'crate'),
     'crate shielding stops the rendered ray at the crate');
   key('ArrowRight');
   await waitFor(() => !g().pending);
@@ -635,13 +633,11 @@ function key(k, modifiers) {
   eq(g().state.crates[1][3].id, 70, 'failed playback preserves the committed crate position');
   eq(g().r.view.player, g().state.player, 'renderer mirror reaches the resolver final player state');
   eq(g().r.view.crates[1][3].id, 70, 'renderer mirror reaches the resolver final crate state');
-  ok(rayPlayerCell(2, 1).dataset.ray === 'north' &&
-      rayPlayerCell(2, 1).querySelector('.ray-beam'),
+  ok(rayPlayerCell(2, 1).dataset.ray === 'north' && g().r.surface.layers[2].find('.beam').length > 0,
     'unshielded ray is visibly drawn through the vacated crate cell');
-  ok(!rayPlayerCell(3, 1).dataset.ray && /<rect/.test(rayPlayerCell(3, 1).innerHTML),
+  ok(!rayPlayerCell(3, 1).dataset.ray && JSON.parse(rayPlayerCell(3, 1).dataset.mark).some(d => d.key === 'crate'),
     'the target crate visibly shields its own cell from the ray');
-  ok(doc.querySelector('#player').classList.contains('failed') &&
-     doc.querySelector('#board').dataset.outcome === 'failed', 'terminal failure remains visibly marked');
+  ok(doc.querySelector('#board').dataset.outcome === 'failed' && !g().r.surface.clock.isRunning(), 'terminal failure is marked and ambient motion stops');
   ok(doc.querySelector('#btn-undo').disabled && doc.querySelector('#btn-act').disabled,
     'failed undo and gameplay controls are disabled');
   const frozenFailure = SM.RULES.snapshot(g().state);
@@ -652,7 +648,7 @@ function key(k, modifiers) {
   ok(/declared/.test(doc.querySelector('#v-par-kind').textContent), 'unproven authored score is not labeled a proved minimum');
   key('r');
   eq([g().state.failed, g().state.strokes, g().state.turns], [false, 0, 0], 'restart reconstructs a fresh attempt');
-  ok(!doc.querySelector('#player').classList.contains('failed') && !doc.querySelector('#btn-act').disabled,
+  ok(doc.querySelector('#board').dataset.outcome === 'playing' && !doc.querySelector('#btn-act').disabled,
     'restart clears failure presentation and restores controls');
 
   const vectorPack = [
@@ -749,7 +745,8 @@ function key(k, modifiers) {
   eq([g().state.polarity, redBarrierCell.className, blueBarrierCell.className],
     ['red-open', 'cell', 'cell wall'],
   'World 3 renders red-open/blue-closed barriers from resolver state');
-  const redOpenCrystalGlyph = crystalCell.innerHTML;
+  const crystalVisual = () => JSON.stringify(JSON.parse(crystalCell.dataset.mark).filter(d => d.id !== 'dot'));
+  const redOpenCrystalGlyph = crystalVisual();
   redBarrierCell.click();
   ok(/Red polarity barrier/.test(doc.querySelector('#banner').textContent) &&
       /open under red-open/.test(doc.querySelector('#banner').textContent),
@@ -764,11 +761,11 @@ function key(k, modifiers) {
   eq([g().state.polarity, redBarrierCell.className, blueBarrierCell.className],
     ['blue-open', 'cell wall', 'cell'],
   'ACT immediately exchanges the visible red and blue barrier states');
-  ok(crystalCell.innerHTML !== redOpenCrystalGlyph && g().r.view.polarity === 'blue-open',
+  ok(crystalVisual() !== redOpenCrystalGlyph && g().r.view.polarity === 'blue-open',
     'renderer mirror and crystal glyph both reflect blue-open after ACT');
   key('z');
   eq([g().state.polarity, redBarrierCell.className, blueBarrierCell.className,
-    crystalCell.innerHTML === redOpenCrystalGlyph, g().state.strokes],
+     crystalVisual() === redOpenCrystalGlyph, g().state.strokes],
     ['red-open', 'cell', 'cell wall', true, 2],
   'undo restores the previous polarity, both gate glyphs, switch glyph, and stroke count');
 
@@ -793,10 +790,10 @@ function key(k, modifiers) {
   const closedCrateBarrier = doc.querySelector(
     '#board .cell[data-x="2"][data-y="1"]');
   eq([g().state.polarity, g().state.crates[1][2].id,
-    closedCrateBarrier.className, !!closedCrateBarrier.querySelector('svg')],
+     closedCrateBarrier.className, JSON.parse(closedCrateBarrier.dataset.mark).some(d => d.key === 'crate')],
   ['blue-open', 70, 'cell pending-close', true],
   'World 3 browser route shows crate-held closure as pending/effectively open after ACT');
-  ok(closedCrateBarrier.querySelector('.pending-indicator') &&
+  ok(closedCrateBarrier.dataset.pendingClose === 'true' &&
      /requested closed; effective open; pending close/.test(closedCrateBarrier.getAttribute('aria-label')),
     'World 3 pending barrier has an explicit glyph and accessible requested/effective distinction');
   key('z');
@@ -876,7 +873,7 @@ function key(k, modifiers) {
   eq(g().r.view.switches.find(sw => sw.inst.family === 'target').x, 2,
     'renderer mirror replays the target movement event');
   const movedTargetCell = doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
-  ok(movedTargetCell.querySelector('circle'), 'target glyph is drawn at its moved location');
+  ok(JSON.parse(movedTargetCell.dataset.mark).some(d => d.key === 'target'), 'target presentation moves with its feature');
   movedTargetCell.click();
   ok(/movable floor target/.test(doc.querySelector('#banner').textContent) &&
       /link 1/.test(doc.querySelector('#banner').textContent),
@@ -900,7 +897,7 @@ function key(k, modifiers) {
   eq(g().state.player.x, 1, 'atomic push follows the vacated cell');
   eq(g().state.crates[0][3].id, 70, 'queued conveyor carries the crate one exit step');
   eq(SM.RULES.snapshotSig(g().r.view), SM.RULES.snapshotSig(g().state), 'complete playback agrees with authoritative state');
-  ok(doc.querySelector('#board .cell[data-x="2"][data-y="0"] [data-exit="east"]'), 'belt shows its unique East exit');
+  ok(JSON.parse(doc.querySelector('#board .cell[data-x="2"][data-y="0"]').dataset.mark).some(d => d.key === 'conveyor' && d.dir === 'east'), 'belt shows its unique East exit');
   doc.querySelector('#board .cell[data-x="3"][data-y="0"]').click();
   ok(/supporting terrain floor/.test(doc.querySelector('#banner').textContent), 'inspection exposes the independent supporting layer');
   const markupBeforeRedraw = doc.querySelector('#board').innerHTML;
@@ -930,7 +927,7 @@ function key(k, modifiers) {
   eq(g().state.P, 'red', 'captured prism effect supplies the aura');
   key('ArrowRight'); await waitFor(() => !g().pending && g().state.won);
   const goalCell = () => doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
-  ok(/Red goal/.test(goalCell().getAttribute('aria-label')), 'goal appearance follows the current world color');
+  ok(/goal; red/.test(goalCell().getAttribute('aria-label')), 'goal appearance follows the current world color');
   eq(SM.RULES.snapshotSig(g().r.view), SM.RULES.snapshotSig(g().state), 'color and goal event playback agrees with the final outcome');
 
   const pendingPack = { name: 'Pending Closure', world_id: 'queued-browser-pending', num_level: 1,
@@ -945,7 +942,7 @@ function key(k, modifiers) {
   await waitFor(() => !g().pending);
   const pendingCell = () => doc.querySelector('#board .cell[data-x="2"][data-y="0"]');
   ok(pendingCell().classList.contains('pending-close') && !pendingCell().classList.contains('wall'), 'pending physical closure renders as effectively open');
-  ok(pendingCell().querySelector('.pending-indicator'), 'pending closure has a distinct glyph cue');
+  ok(pendingCell().dataset.pendingClose === 'true', 'pending closure has a distinct shared presentation cue');
   pendingCell().click();
   ok(/requested closed.*effective open.*pending close/.test(doc.querySelector('#banner').textContent), 'inspection separates requested and effective closure');
   key('z');
@@ -983,12 +980,28 @@ function key(k, modifiers) {
   }
 
   /* ---- standalone classic-script gallery ------------------------------- */
+  const navigationFixture = { name: 'Navigation', world_id: 'graphics-navigation', num_level: 2,
+    levels: { level_1: { name: 'Commit before animation', width: 2, height: 1, golf_score: 1, grid: [[1, 2]] },
+      level_2: { name: 'Replacement', width: 3, height: 1, golf_score: 2, grid: [[1, 0, 2]] } } };
+  SM.io.applyObject(navigationFixture, 'navigation.yaml');
+  g().load(0);
+  const originalAfterTurn = g().afterTurn; let stalePresentations = 0;
+  g().afterTurn = function () { stalePresentations++; return originalAfterTurn.call(this); };
+  key('ArrowRight');
+  ok(g().state.won, 'navigation fixture commits its matching goal entry before switching');
+  g().load(1);
+  eq(stalePresentations, 0, 'obsolete animation completion does not present the replacement level as a result');
+  ok(SM.STORE.entry('level_1', 'graphics-navigation').cleared, 'a committed win is persisted independently of animation');
+  eq(g().state.strokes, 0, 'replacement starts with its own counters');
+  ok(!doc.querySelector('#win').classList.contains('on'), 'replacement has no obsolete victory overlay');
+  g().afterTurn = originalAfterTurn;
+
   const galleryErrors = [], galleryConsole = new VirtualConsole();
   galleryConsole.on('jsdomError', error => galleryErrors.push(String(error.message || error)));
   galleryConsole.on('error', error => galleryErrors.push(String(error)));
   const galleryDom = new JSDOM(fs.readFileSync(path.join(ROOT, 'glyphs.html'), 'utf8'), {
     runScripts: 'dangerously', resources: 'usable', url: 'file://' + ROOT + '/glyphs.html',
-    pretendToBeVisual: true, virtualConsole: galleryConsole
+    pretendToBeVisual: true, virtualConsole: galleryConsole, beforeParse: require('./canvas-recording')
   });
   try {
     const galleryDoc = galleryDom.window.document;
@@ -997,18 +1010,18 @@ function key(k, modifiers) {
     const gallerySM = galleryDom.window.SM;
     eq(Array.from(galleryDoc.querySelectorAll('[data-tile-id]')).map(card => Number(card.dataset.tileId)),
       Object.keys(gallerySM.getActiveRegistry()).map(Number).sort((a, b) => a - b), 'gallery enumerates actual registered IDs including zero, not numeric gaps');
-    ok(galleryDoc.querySelector('[data-object-id="dot"] .preview svg circle'), 'gallery defines the dot separately from start ID 1');
+    ok(galleryDoc.querySelector('[data-object-id="dot"] .preview img'), 'gallery defines the dot separately from start ID 1');
     for (let id = 60; id <= 67; id++) {
-      const arrow = galleryDoc.querySelector('[data-tile-id="' + id + '"] .conveyor-arrow');
+      const arrow = galleryDoc.querySelector('[data-tile-id="' + id + '"] .preview');
       ok(arrow && ['north', 'east', 'south', 'west'].includes(arrow.dataset.exit), 'gallery conveyor ' + id + ' has one named exit arrow');
     }
-    const arrowBeforeTint = galleryDoc.querySelector('[data-tile-id="60"] .preview').innerHTML;
+    const arrowBeforeTint = galleryDoc.querySelector('[data-tile-id="60"] .preview img').src;
     const tint = galleryDoc.querySelector('#sample-tint'); tint.value = 'red';
     tint.dispatchEvent(new galleryDom.window.Event('change', { bubbles: true }));
-    eq(galleryDoc.querySelector('[data-tile-id="60"] .preview').innerHTML, arrowBeforeTint, 'reserved conveyor tint never changes the exit glyph');
+    eq(galleryDoc.querySelector('[data-tile-id="60"] .preview img').src, arrowBeforeTint, 'reserved conveyor tint never changes the exit glyph');
     const pending = galleryDoc.querySelector('[data-tile-id="10"] select'); pending.value = 'pending';
     pending.dispatchEvent(new galleryDom.window.Event('change', { bubbles: true }));
-    ok(galleryDoc.querySelector('[data-tile-id="10"] .pending-indicator'), 'gallery shows the pending-close presentation contract');
+    eq(galleryDoc.querySelector('[data-tile-id="10"] .preview').dataset.pendingClose, 'true', 'gallery shows the pending-close presentation contract');
     const dotSample = galleryDoc.querySelector('[data-object-id="dot"] select'); dotSample.value = 'failed';
     dotSample.dispatchEvent(new galleryDom.window.Event('change', { bubbles: true }));
     eq(galleryDoc.querySelector('[data-object-id="dot"] .preview').dataset.outcome, 'failed', 'gallery exposes a failed-attempt presentation sample');

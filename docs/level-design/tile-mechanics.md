@@ -448,6 +448,12 @@ restore/clone/restart, no persistent swept phase or renderer-owned outcome.
 
 ## Publication and verification
 
+The shared [rendering contract and guide](../rendering.md) now maps these
+definitions to original 32×32 pixel art (default) or vector geometry using the
+same Konva compositor. The play page, gallery, codex, editor and generated image
+export share that mapping; no alternate gameplay renderer or ruleset is selected.
+Static/reduced motion retains semantic colors, contacts, links and pending marks.
+
 `glyphs.html` consumes the same local classic-script registry/glyph renderer,
 enumerates all actual IDs including 0 and the separate dot, and exposes pending/
 failed/tint display samples without simulating another engine. Gallery arrows
@@ -459,7 +465,9 @@ focused work. `npm run levels:routes -- --early-review` covers all seven packs;
 `node scripts/audit-v2-assets.js` checks usage/definitions/evidence and accepted
 spec synchronization. `--preaccept` reports pending mappings without bypassing
 other failures; it is not release approval. The [archived review](../../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
-records the completed mappings and the unrelated draft still blocking the audit.
+records the completed mappings and its historical draft finding. The current
+[rendering verification](../../openspec/changes/graphiscs-engine-update-pixel-16bit/verification.md)
+records the isolated graphics branch's fresh passing audit/native checks.
 The 61-row ledger links complete route/lesson reviews, including optional elements
 and late wrong-push consequences. Unknown is not a minimum or impossibility
 proof. Final `npm test` and real Chromium `file://` checks remain distinct gates.

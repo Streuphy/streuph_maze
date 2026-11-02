@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Streuph's Maze — V2 definition gallery</title>
   <link rel="stylesheet" href="src/css/sm.css">
+  <link rel="stylesheet" href="src/css/sm-graphics.css">
   <style>
     body { height: auto; overflow: auto; padding: 1rem; }
     .gallery-header { display: block; padding: 1rem; margin-bottom: 1rem; }
@@ -37,6 +38,11 @@
   </header>
   <main id="gallery" role="list" aria-label="Registered tile and object definitions"></main>
   <script src="src/js/tiles.js"></script>
+  <script src="src/vendor/konva/konva.min.js"></script>
+  <script src="src/js/sm-visuals.js"></script>
+  <script src="src/js/sm-sprites.js"></script>
+  <script src="src/js/sm-draw.js"></script>
+  <script src="src/js/sm-surface.js"></script>
   <script src="src/js/sm-glyphs.js"></script>
   <script>
   (function () {
@@ -93,7 +99,9 @@
           var sample = definition.colourRole === 'reserved-tint' ? Object.assign({}, definition,
             { params: Object.assign({}, definition.params, { colour: controls[2].value }) }) : definition;
           var view = viewFor(select.value), params = sample.params || {}, caps = sample.capabilities || {};
-          preview.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + SM.glyph(sample, view) + '</svg>';
+          var descriptor = SM.VISUALS.describe(sample, view);
+          SM.GRAPHICS.mount(preview, [descriptor], SM.PRESENTATION.settings.theme, 64);
+          preview.dataset.exit = descriptor.dir || ''; preview.dataset.pendingClose = String(descriptor.pendingClose);
           preview.dataset.outcome = view.failed ? 'failed' : 'playing';
           preview.setAttribute('aria-label', title.textContent + '; ' + select.value + '; ' + direction(params));
           var values = { direction: direction(params), colour: SM.COLOUR_NAMES[params.colour || 'wht'],
@@ -110,6 +118,7 @@
         select.addEventListener('change', redraw); redraws.push(redraw); redraw();
       });
       controls.forEach(function (select) { select.addEventListener('change', function () { redraws.forEach(function (redraw) { redraw(); }); }); });
+      SM.PRESENTATION.subscribe(function () { redraws.forEach(function (redraw) { redraw(); }); });
       status.textContent = definitions.length + ' definitions — ' + tiles.length + ' registered tiles + dot. No numeric-gap placeholders.';
       document.documentElement.dataset.galleryReady = 'true';
     } catch (error) { status.textContent = 'Gallery error: ' + error.message; console.error(error); }

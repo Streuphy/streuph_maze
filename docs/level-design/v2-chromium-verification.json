@@ -1,9 +1,9 @@
 {
   "generatedBy": "verify-v2-chromium",
-  "generatedAt": "2026-11-02T01:47:49.924Z",
+  "generatedAt": "2026-11-02T13:48:17.789Z",
   "transport": "Actual headless Chromium / local DevTools / file:// (not jsdom)",
-  "engineFingerprint": "3d57b72331f958367c0271eaa965051e5c0e34eb8ecd9b11fa8022dda515f55e",
-  "presentationFingerprint": "44020aacaeef1094466d9aae7d205a0ad64ab02a5b5cf3b46154a249e1594e6f",
+  "engineFingerprint": "6d098b827f5c12caf34a023109cceeee5e5ed9405b9a9503ec361efe13791752",
+  "presentationFingerprint": "751da61eaf68712240c1410349ce001a797c2cf68b85b9e85f34f8868e37af04",
   "packs": [
     {
       "world": "prologue",
@@ -15,12 +15,12 @@
       "nativeMinimaVerified": true,
       "representative": "level_1",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/prologue-walking.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-walking.png",
       "authoredExportAfterPlay": true,
-      "carriersScreenshot": "/tmp/opencode/v2-chromium-EAGzEs/prologue-carriers.png",
+      "carriersScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-carriers.png",
       "customVictoryVerified": true,
-      "customVictoryScreenshot": "/tmp/opencode/v2-chromium-EAGzEs/prologue-custom-victory.png",
-      "conveyor": "/tmp/opencode/v2-chromium-EAGzEs/prologue-conveyor.png",
+      "customVictoryScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-custom-victory.png",
+      "conveyor": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-conveyor.png",
       "sharedTerminalFixture": true,
       "restart": true,
       "returnToPrologue": true
@@ -35,7 +35,7 @@
       "nativeMinimaVerified": true,
       "representative": "level_1",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-01-target.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-01-target.png",
       "authoredExportAfterPlay": true,
       "sharedTerminalFixture": true,
       "restart": true,
@@ -51,12 +51,12 @@
       "nativeMinimaVerified": true,
       "representative": "level_1",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-02-shield.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-02-shield.png",
       "authoredExportAfterPlay": true,
       "nativeTerminal": "authored shield tutorial: unshielded crossing",
-      "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-02-native-failure.png",
+      "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-02-native-failure.png",
       "sharedTerminalFixture": true,
-      "failureScreenshot": "/tmp/opencode/v2-chromium-EAGzEs/terminal-failure.png",
+      "failureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-terminal-failure.png",
       "restart": true,
       "returnToPrologue": true
     },
@@ -70,10 +70,10 @@
       "nativeMinimaVerified": true,
       "representative": "level_7",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-03-pending.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-03-pending.png",
       "authoredExportAfterPlay": true,
       "nativeTerminal": "authored polarity level: dot follows crate off pending barrier",
-      "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-03-native-closure.png",
+      "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-03-native-closure.png",
       "sharedTerminalFixture": true,
       "restart": true,
       "returnToPrologue": true
@@ -88,7 +88,7 @@
       "nativeMinimaVerified": true,
       "representative": "level_8",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-04-bumper.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-04-bumper.png",
       "authoredExportAfterPlay": true,
       "inertTintVariant": true,
       "sharedTerminalFixture": true,
@@ -105,7 +105,7 @@
       "nativeMinimaVerified": true,
       "representative": "level_3",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-05-carriers.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-05-carriers.png",
       "authoredExportAfterPlay": true,
       "sharedTerminalFixture": true,
       "restart": true,
@@ -121,7 +121,7 @@
       "nativeMinimaVerified": true,
       "representative": "level_4",
       "nonterminalUndo": true,
-      "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/world-06-cargo.png",
+      "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-06-cargo.png",
       "authoredExportAfterPlay": true,
       "sharedTerminalFixture": true,
       "restart": true,
@@ -134,10 +134,541 @@
     "directions": 4,
     "inertTint": true,
     "pendingAndFailedSamples": true,
-    "screenshot": "/tmp/opencode/v2-chromium-EAGzEs/gallery-top.png",
-    "arrowsScreenshot": "/tmp/opencode/v2-chromium-EAGzEs/gallery-arrows.png"
+    "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-gallery-top.png",
+    "arrowsScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-gallery-arrows.png"
   },
-  "screenshotsDirectory": "/tmp/opencode/v2-chromium-EAGzEs",
+  "identities": {
+    "pixel": {
+      "packs": [
+        {
+          "world": "prologue",
+          "levels": 13,
+          "sourceFingerprint": "29d8a177e2b7cc7aef2bd2a99e7073376b08032a9d5ce903ae765c3d5ccfdfc2",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_1",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-walking.png",
+          "authoredExportAfterPlay": true,
+          "carriersScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-carriers.png",
+          "customVictoryVerified": true,
+          "customVictoryScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-custom-victory.png",
+          "conveyor": "/tmp/opencode/v2-chromium-tghw1J/pixel-prologue-conveyor.png",
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-01-sokoban",
+          "levels": 8,
+          "sourceFingerprint": "519f43325762d55c6435b5c738d31687b4c6c2f39c9635b5581cbdde031ba582",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_1",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-01-target.png",
+          "authoredExportAfterPlay": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-02-lolos-castle",
+          "levels": 8,
+          "sourceFingerprint": "87a24161acc23ded2917a8e694546c6479d6046b95867ba321e32b1dde7bd099",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_1",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-02-shield.png",
+          "authoredExportAfterPlay": true,
+          "nativeTerminal": "authored shield tutorial: unshielded crossing",
+          "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-02-native-failure.png",
+          "sharedTerminalFixture": true,
+          "failureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-terminal-failure.png",
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-03-hyrule-flip-flop",
+          "levels": 8,
+          "sourceFingerprint": "5c045ea7e5d35c25811d437a0ff9d5b68fcdb23f3cc4d34f50f7658b32f8e413",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_7",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-03-pending.png",
+          "authoredExportAfterPlay": true,
+          "nativeTerminal": "authored polarity level: dot follows crate off pending barrier",
+          "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-03-native-closure.png",
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-04-pengo-vector",
+          "levels": 8,
+          "sourceFingerprint": "2b19b3848a8afbe689e01c1b38dad14b64b4e071f91dd2fa773b130a8c9050a7",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_8",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-04-bumper.png",
+          "authoredExportAfterPlay": true,
+          "inertTintVariant": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-05-chips-chromatic",
+          "levels": 8,
+          "sourceFingerprint": "185f90fef86bd5a23e8eaae1a97e567bf6f4886d6103dc248dec359240cc249c",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_3",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-05-carriers.png",
+          "authoredExportAfterPlay": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-06-goof-proximity",
+          "levels": 8,
+          "sourceFingerprint": "5bfbe9728ffb87d665a3381a805f4589e831858cdba050bcec69f60d2cce0607",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_4",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-world-06-cargo.png",
+          "authoredExportAfterPlay": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        }
+      ],
+      "gallery": {
+        "definitions": 63,
+        "arrows": 8,
+        "directions": 4,
+        "inertTint": true,
+        "pendingAndFailedSamples": true,
+        "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-gallery-top.png",
+        "arrowsScreenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-gallery-arrows.png"
+      },
+      "editor": {
+        "sharedBoard": true,
+        "sharedQuickTest": true,
+        "sharedSnapshots": true,
+        "solver": true,
+        "authoredExport": true,
+        "screenshot": "/tmp/opencode/v2-chromium-tghw1J/pixel-editor-shared.png",
+        "coordinateMatrix": [
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 96,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 96,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 96,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 96,
+            "pointerMatches": true
+          }
+        ],
+        "pointerCoordinatesDPR2": true
+      },
+      "interruptedPlayback": true,
+      "deniedStorage": true,
+      "reducedMotion": true,
+      "performance": {
+        "p95WorkMs": 0.29999999701976776,
+        "samples": 50,
+        "cells": 144,
+        "animatedGlyphs": 144,
+        "dpr": 2,
+        "viewport": [
+          1280,
+          960
+        ],
+        "rebuildCycles": 100,
+        "stageCountReturnedToBaseline": true,
+        "caches": {
+          "atlases": 67,
+          "previews": 58
+        },
+        "missingPixelFallback": true,
+        "canvasUnavailable": true
+      }
+    },
+    "vector": {
+      "packs": [
+        {
+          "world": "prologue",
+          "levels": 13,
+          "sourceFingerprint": "29d8a177e2b7cc7aef2bd2a99e7073376b08032a9d5ce903ae765c3d5ccfdfc2",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_1",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-prologue-walking.png",
+          "authoredExportAfterPlay": true,
+          "carriersScreenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-prologue-carriers.png",
+          "customVictoryVerified": true,
+          "customVictoryScreenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-prologue-custom-victory.png",
+          "conveyor": "/tmp/opencode/v2-chromium-tghw1J/vector-prologue-conveyor.png",
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-01-sokoban",
+          "levels": 8,
+          "sourceFingerprint": "519f43325762d55c6435b5c738d31687b4c6c2f39c9635b5581cbdde031ba582",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_1",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-01-target.png",
+          "authoredExportAfterPlay": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-02-lolos-castle",
+          "levels": 8,
+          "sourceFingerprint": "87a24161acc23ded2917a8e694546c6479d6046b95867ba321e32b1dde7bd099",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_1",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-02-shield.png",
+          "authoredExportAfterPlay": true,
+          "nativeTerminal": "authored shield tutorial: unshielded crossing",
+          "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-02-native-failure.png",
+          "sharedTerminalFixture": true,
+          "failureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-terminal-failure.png",
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-03-hyrule-flip-flop",
+          "levels": 8,
+          "sourceFingerprint": "5c045ea7e5d35c25811d437a0ff9d5b68fcdb23f3cc4d34f50f7658b32f8e413",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_7",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-03-pending.png",
+          "authoredExportAfterPlay": true,
+          "nativeTerminal": "authored polarity level: dot follows crate off pending barrier",
+          "nativeFailureScreenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-03-native-closure.png",
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-04-pengo-vector",
+          "levels": 8,
+          "sourceFingerprint": "2b19b3848a8afbe689e01c1b38dad14b64b4e071f91dd2fa773b130a8c9050a7",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_8",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-04-bumper.png",
+          "authoredExportAfterPlay": true,
+          "inertTintVariant": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-05-chips-chromatic",
+          "levels": 8,
+          "sourceFingerprint": "185f90fef86bd5a23e8eaae1a97e567bf6f4886d6103dc248dec359240cc249c",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_3",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-05-carriers.png",
+          "authoredExportAfterPlay": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        },
+        {
+          "world": "world-06-goof-proximity",
+          "levels": 8,
+          "sourceFingerprint": "5bfbe9728ffb87d665a3381a805f4589e831858cdba050bcec69f60d2cce0607",
+          "filePicker": true,
+          "pasteAndYamlRoundTrip": true,
+          "invalidLoadAtomic": true,
+          "nativeMinimaVerified": true,
+          "representative": "level_4",
+          "nonterminalUndo": true,
+          "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-world-06-cargo.png",
+          "authoredExportAfterPlay": true,
+          "sharedTerminalFixture": true,
+          "restart": true,
+          "returnToPrologue": true
+        }
+      ],
+      "gallery": {
+        "definitions": 63,
+        "arrows": 8,
+        "directions": 4,
+        "inertTint": true,
+        "pendingAndFailedSamples": true,
+        "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-gallery-top.png",
+        "arrowsScreenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-gallery-arrows.png"
+      },
+      "editor": {
+        "sharedBoard": true,
+        "sharedQuickTest": true,
+        "sharedSnapshots": true,
+        "solver": true,
+        "authoredExport": true,
+        "screenshot": "/tmp/opencode/v2-chromium-tghw1J/vector-editor-shared.png",
+        "coordinateMatrix": [
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1,
+            "cellPixels": 96,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 1,
+            "cssZoom": 1.25,
+            "cellPixels": 96,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1,
+            "cellPixels": 96,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 20,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 32,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 64,
+            "pointerMatches": true
+          },
+          {
+            "dpr": 2,
+            "cssZoom": 1.25,
+            "cellPixels": 96,
+            "pointerMatches": true
+          }
+        ],
+        "pointerCoordinatesDPR2": true
+      },
+      "interruptedPlayback": true,
+      "deniedStorage": true,
+      "reducedMotion": true,
+      "performance": {
+        "p95WorkMs": 1.800000011920929,
+        "samples": 50,
+        "cells": 144,
+        "animatedGlyphs": 144,
+        "dpr": 2,
+        "viewport": [
+          1280,
+          960
+        ],
+        "rebuildCycles": 100,
+        "stageCountReturnedToBaseline": true,
+        "caches": {
+          "atlases": 4,
+          "previews": 58
+        },
+        "missingPixelFallback": true,
+        "canvasUnavailable": true
+      }
+    }
+  },
+  "referenceCPU": "AMD Ryzen 7 9800X3D 8-Core Processor",
+  "screenshotsDirectory": "/tmp/opencode/v2-chromium-tghw1J",
   "passed": true,
   "browser": {
     "protocolVersion": "1.3",

@@ -39,15 +39,17 @@ or moving rule decisions into rendering.
    parses YAML; `levels.js` validates the shared document and calls
    `SM.RULES.buildLevel`.
 2. `tiles.js` registers tile IDs, defaults, capabilities, strategy hooks, and
-   state/presentation descriptors. `sm-glyphs.js` turns display keys and view
-   state into SVG. `levels.js` consults the catalogue for known IDs, parameters,
+   state/presentation descriptors. `sm-visuals.js` produces headless descriptions;
+   `sm-sprites.js` retains original art and validated frames; `sm-draw.js` and
+   `sm-glyphs.js` produce Konva nodes/shared previews. `levels.js` consults the catalogue for known IDs, parameters,
    capabilities, and validation diagnostics.
 3. `sm-rules.js` constructs the runtime board/state and resolves one action
    synchronously. It returns ordered `steps`; the solver uses this same
    resolver. The rule layer must remain DOM-, timer-, and async-free.
 4. `sm-ui.js` owns input, level lifecycle, progression, inspection, codex,
    undo orchestration, and controller state. `sm-render.js` owns the display
-   mirror and playback of resolver steps; display timing must never feed back
+   mirror and playback of resolver steps through `sm-surface.js`, shared with
+   editor authoring, quick-test, gallery thumbnails and image export. Timing never feeds back
    into the authoritative rules state.
 5. `sm-store.js` owns progress persistence. `index.html` loads local classic
    scripts in dependency order for direct `file://` use.
@@ -207,6 +209,14 @@ Declared PAR, replay-proven minimum, personal best, and partial world totals
 remain distinct and cannot borrow records from another contract.
 
 ## Existing verification coverage
+
+The [rendering guide](rendering.md) documents the pixel-default/vector alternate,
+isolated presentation preferences and original 32×32 artwork. Konva is a locally
+vendored MIT browser-global backend, not an engine dependency. `sm-visuals.js`
+and `sm-sprites.js` stay headless; rules/solver construction never needs Canvas.
+Canvas pixels sit behind a semantic DOM grid for inspection/editing. Native
+presentation fingerprints cover vendor, art, surface and editor assets; jsdom's
+recording context is only orchestration evidence, not an appearance test.
 
 `tests/verify.js` is the Node/VM harness. Its current named groups include:
 

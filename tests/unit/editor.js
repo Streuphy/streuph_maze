@@ -10,6 +10,7 @@ const vm = require('node:vm');
 const EDITOR_FILES = [
   'src/js/sm-yaml.js',
   'src/js/tiles.js',
+  'src/js/sm-visuals.js',
   'src/js/sm-glyphs.js',
   'src/js/sm-board.js',
   'src/js/sm-entities.js',
@@ -421,15 +422,21 @@ function runEditorSuite(SM) {
     ed.setSecondary(0);
     assert.ok(ed.setHeight(4), 'setHeight(4) grows from 2 to 4');
     assert.equal(ed.tileAt(0, 3), 0, 'new top row filled with secondary');
+    assert.equal(ed.tileAt(0, 1), 1, 'height growth retains the start at its A1-relative coordinate');
+    assert.ok(ed.setHeight(2));
+    assert.equal(ed.tileAt(0, 1), 1, 'height shrink removes top padding rather than shifting all authored coordinates');
   })();
 
   // --- Group 4: default start/goal placement ---
   (function defaultMarkers() {
     ed.loadPackText('name: "T"\nworld_id: t\nnum_level: 1\nlevels:\n  level_1:\n' +
       '    name: "L1"\n    goal: "go"\n    width: 4\n    height: 3\n    golf_score: 1\n' +
-      '    grid:\n      - [0, 0, 0, 0]\n      - [0, 0, 0, 0]\n      - [0, 0, 0, 0]');
+      '    grid:\n      - [1, 0, 0, 0]\n      - [0, 0, 0, 0]\n      - [0, 0, 0, 2]');
     ed.setSecondary(0);
-    // no start, no goal
+    // Invalid imported packs are rejected atomically. Create the missing-marker
+    // editing draft through supported edits rather than assume invalid loading.
+    assert.equal(ed.setTileAt(0, 2, 0), true);
+    assert.equal(ed.setTileAt(3, 0, 0), true);
     const r1 = ed.ensureDefaultMarkers();
     assert.ok(r1 && r1.confirmRequested, 'ensureDefaultMarkers requests confirm when markers missing');
     const r2 = ed.ensureDefaultMarkers({ confirmed: true });

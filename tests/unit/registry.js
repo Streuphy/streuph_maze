@@ -49,9 +49,9 @@ function runRegistrySuite(SM) {
           `tile ${tile.id} behavior ${name} has a named implementation`);
       }
     }
-    assert.equal(typeof SM.glyph(tile, {
+    assert.equal(typeof SM.VISUALS.describe(tile, {
       active: false, latched: false, locked: false, W: 'wht', lit: {}
-    }), 'string', `tile ${tile.id} resolves to a display glyph`);
+    }), 'object', `tile ${tile.id} resolves to a display description`);
   }
 
   const ice = SM.TILES[5];
@@ -68,16 +68,17 @@ function runRegistrySuite(SM) {
     const force = SM.resolveTileHook(belt, 'forcedMovement', { inst: belt });
     assert.equal(force.kind, undefined); assert.deepEqual(force.direction, belt.params.dir);
     const direction = belt.params.dir.x > 0 ? 'east' : belt.params.dir.x < 0 ? 'west' : belt.params.dir.y > 0 ? 'north' : 'south';
-    const glyph = SM.glyph(belt, { W: 'wht' });
-    assert.ok(glyph.includes('data-exit="' + direction + '"'));
-    assert.ok(glyph.includes('stroke="' + SM.PALETTE.wht + '"'), 'exit arrow has an explicit visible stroke');
-    assert.equal((glyph.match(/<path\b/g) || []).length, 1, 'exactly one unambiguous arrow path');
+    const glyph = SM.VISUALS.describe(belt, { W: 'wht' });
+    assert.equal(glyph.dir, direction);
+    const arrows = SM.SPRITES.commands(glyph, 0).filter(p => p.kind === 'line' && p.stroke === SM.PALETTE.wht);
+    assert.equal(arrows.length, 1, 'exactly one white exit arrow above its contrast backing');
+    assert.ok(arrows[0].points.length >= 6);
   }
   assert.deepEqual(SM.GAME_COLOURS, ['wht', 'red', 'gre', 'blu']);
   assert.equal(ice.layer, 'terrain', 'explicit ice is terrain, not a tint-derived floor policy');
   assert.deepEqual([ice.family, ice.name, ice.glyph, ice.solid, ice.walkable],
     ['terrain', 'ice', 'ice', false, true], 'ice retains its walkable terrain definition');
-  assert.ok(SM.glyph(ice).length > 0, 'ice retains a rendered glyph');
+  assert.ok(SM.SPRITES.commands(SM.VISUALS.describe(ice), 0).length > 0, 'ice retains a rendered glyph');
 
   for (const item of [{ id: 23, link: 1 }, { id: 24, link: 2 }, { id: 25, link: 3 }]) {
     const tile = SM.TILES[item.id];
@@ -106,7 +107,7 @@ function runRegistrySuite(SM) {
       `ray ${item.direction} exposes its visual direction`);
     assert.equal(tile.presentation.key, 'ray',
       `ray ${item.direction} uses the ray display descriptor`);
-    assert.ok(SM.glyph(tile).length > 0, `ray ${item.direction} has a glyph`);
+    assert.equal(SM.VISUALS.describe(tile).dir, item.direction, `ray ${item.direction} has a directional glyph`);
   }
   assert.equal(new Set(rays.map(item => SM.TILES[item.id].glyph)).size, 4,
     'cardinal ray emitters use distinct glyph keys');
@@ -117,7 +118,7 @@ function runRegistrySuite(SM) {
     assert.deepEqual(tile.params, { link: item.link, defaultLocked: true },
       `phase-wall ID ${item.id} retains its linked closed default`);
     assert.equal(tile.glyph, 'phaseWall', `phase-wall ID ${item.id} selects its glyph`);
-    assert.equal(SM.glyph(tile, { locked: true }), SM.glyph(SM.TILES[10], { locked: true }),
+    assert.equal(SM.VISUALS.describe(tile, { locked: true }).key, SM.VISUALS.describe(SM.TILES[10], { locked: true }).key,
       `phase-wall ID ${item.id} shares the standard phase-wall glyph`);
   }
 
@@ -194,14 +195,14 @@ function runRegistrySuite(SM) {
     'blue barrier codex names its complementary global polarity state');
   assert.match(SM.TILES[48].presentation.codex, /ACT flips/,
     'crystal switch codex distinguishes explicit activation from entry');
-  assert.notEqual(SM.glyph(SM.TILES[46], { solid: false }),
-    SM.glyph(SM.TILES[46], { solid: true }),
+  assert.notDeepEqual(SM.SPRITES.commands(SM.VISUALS.describe(SM.TILES[46], { solid: false }), 0),
+    SM.SPRITES.commands(SM.VISUALS.describe(SM.TILES[46], { solid: true }), 0),
   'red barrier glyph distinguishes open from closed state');
-  assert.notEqual(SM.glyph(SM.TILES[47], { solid: false }),
-    SM.glyph(SM.TILES[47], { solid: true }),
+  assert.notDeepEqual(SM.SPRITES.commands(SM.VISUALS.describe(SM.TILES[47], { solid: false }), 0),
+    SM.SPRITES.commands(SM.VISUALS.describe(SM.TILES[47], { solid: true }), 0),
   'blue barrier glyph distinguishes open from closed state');
-  assert.notEqual(SM.glyph(SM.TILES[48], { polarity: 'red-open' }),
-    SM.glyph(SM.TILES[48], { polarity: 'blue-open' }),
+  assert.notDeepEqual(SM.SPRITES.commands(SM.VISUALS.describe(SM.TILES[48], { polarity: 'red-open' }), 0),
+    SM.SPRITES.commands(SM.VISUALS.describe(SM.TILES[48], { polarity: 'blue-open' }), 0),
   'crystal switch glyph exposes which polarity is currently open');
 
   const duplicate = { ...SM.TILES[0], name: 'duplicate-floor' };
@@ -235,7 +236,7 @@ module.exports = runRegistrySuite;
 
 if (require.main === module) {
   const root = path.resolve(__dirname, '../..');
-  for (const file of ['src/js/tiles.js', 'src/js/sm-glyphs.js']) {
+  for (const file of ['src/js/tiles.js', 'src/js/sm-visuals.js', 'src/js/sm-sprites.js', 'src/js/sm-glyphs.js']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     vm.runInThisContext(source, { filename: path.join(root, file) });
   }

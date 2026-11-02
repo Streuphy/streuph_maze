@@ -595,23 +595,28 @@ function helpers(SM) {
   assert.equal(SM.LEVELS.worldScores(levels).par, null);
   const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
   const jobs = [];
+  let clock = 0;
+  SM.PRESENTATION = { reduced() { return false; } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../src/js/sm-render.js'), 'utf8'),
-    { SM, setTimeout(callback) { jobs.push(callback); return jobs.length; }, clearTimeout() {} });
+    { SM, performance: { now() { return clock; } } });
   const moving = state(SM, [[1, 70, 60, 0, 0, 2]]);
   const display = SM.RULES.cloneState(moving);
   const movement = SM.RULES.resolveTurn(moving, { type: 'move', dir: 'east' });
   const renderer = Object.create(SM.Renderer.prototype), overlaps = [];
   let finished = 0;
   Object.assign(renderer, { draw(view) { overlaps.push(!!view.crates[view.player.y][view.player.x]); },
-    placePlayer() {}, say() {}, timer: null, queue: null });
+    placePlayer() {}, say() {}, generation: 0, sequence: null,
+    surface: { onTick: null, settle() {}, start() { const self = this; jobs.push(() => {
+      clock += 70; if (self.onTick) self.onTick(clock); if (self.onTick) self.start();
+    }); } } });
   renderer.play(movement.steps, display, () => { finished++; });
   while (jobs.length) jobs.shift()();
   assert.equal(finished, 1); assert.ok(overlaps.every(value => !value), 'atomic event batches never draw a half-push');
   assert.deepEqual(SM.RULES.snapshot(display), SM.RULES.snapshot(moving));
   assert.equal(SM.RULES.snapshotSig(display), SM.RULES.snapshotSig(moving));
-  const pendingGlyph = SM.glyph(SM.getTile(10), { locked: true, solid: false, pendingClose: true, W: 'wht' });
-  assert.ok(pendingGlyph.includes('pending-indicator')); assert.ok(pendingGlyph.includes('fill="none"'));
-  assert.ok(SM.glyph(SM.DOT_DEFINITION, { P: 'red', W: 'gre' }).includes(SM.PALETTE.red));
+  const pendingGlyph = SM.VISUALS.describe(SM.getTile(10), { locked: true, solid: false, pendingClose: true, W: 'wht' });
+  assert.equal(pendingGlyph.pendingClose, true); assert.equal(pendingGlyph.solid, false);
+  assert.equal(SM.VISUALS.describe(SM.DOT_DEFINITION, { P: 'red', W: 'gre' }).colour, 'red');
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../src/js/sm-ui.js'), 'utf8'), { SM });
   const verifiedScore = SM.Game.scoreInfo({ par: 8, solve: { status: 'solvable', verified: true, optimal: 4 } });
   assert.equal(verifiedScore.value, 4); assert.equal(verifiedScore.proven, true);

@@ -31,6 +31,7 @@ vc.on('error', (...a) => consoleErrors.push(a.join(' ')));
 
 const html = fs.readFileSync(path.join(ROOT, 'editor.html'), 'utf8');
 const dom = new JSDOM(html, {
+  beforeParse: require('./canvas-recording'),
   runScripts: 'dangerously',
   resources: 'usable',
   url: 'file://' + ROOT + '/editor.html',
@@ -124,6 +125,7 @@ function key(k) { doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: k
 
   /* ---- quick test (tasks 8.1, 8.2, 8.3) -------------------------------- */
   const testBtn = doc.querySelector('#btn-test');
+  const progressBeforeQuickTest = SM.STORE.exportText();
   ok(!testBtn.disabled, 'quick test is enabled on a valid board');
   click(testBtn);
   await waitFor(() => ed.quickTestHasSession());
@@ -143,8 +145,8 @@ function key(k) { doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: k
   const stroked = ed.quickTestStrokes() > beforeStrokes || ed.quickTestOutcome() === 'failed';
   ok(stroked, 'a quick-test move is resolved by SM.RULES.resolveTurn (stroke or failure)');
   /* progress store must be untouched */
-  ok(SM.STORE.exportText().indexOf('level_1') === -1 || true,
-    'quick test does not publish scores or touch progress (no entry created for the edited level)');
+  eq(SM.STORE.exportText(), progressBeforeQuickTest,
+    'quick test does not publish scores or touch progress');
   /* reset returns to initial configuration */
   click(doc.querySelector('#btn-test-reset'));
   await waitFor(() => ed.quickTestStrokes() === 0);
@@ -189,4 +191,6 @@ function key(k) { doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: k
   }
   console.log('editor browser: ' + pass + ' passed, ' + fail + ' failed');
   if (fail) process.exitCode = 1;
+  window.SM.Surface.instances.forEach(surface => surface.dispose());
+  dom.window.close();
 })().catch(e => { console.error(e); process.exit(1); });

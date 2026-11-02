@@ -1,3 +1,4 @@
-node_modules/
+# Dependency directories and worktree dependency symlinks are local-only.
+node_modules
 npm-debug.log*
 .DS_Store

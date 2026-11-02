@@ -24,6 +24,9 @@ for your role; future proposals and historical notes are not playable variants.
 
 ## Engine contributors and coding agents
 
+- [Shared rendering](rendering.md) — one Konva compositor for pixel/vector play,
+  gallery and editor; original sprite sources, motion and state/event playback.
+
 The contract is **state transitions and ordered committed events**, not tile-ID
 branches or rendering. The engine owns transaction integrity, scheduling,
 invariants and rollback. Registered definitions own mechanic-specific behavior
@@ -52,8 +55,11 @@ acceptance. Report disagreements rather than choosing an undocumented rule.
 
 The ten existing [V2 migration deltas](../openspec/changes/v2-global-pack-migration/specs/)
 were integrated during the [documentation review](../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md).
-Synchronization does not itself approve a release or archive a change. The review
-records an unrelated editor-draft conflict that still blocks the whole-tree audit.
+Synchronization does not itself approve a release or archive a change. That
+archived review records its then-open editor-draft finding. The current graphics
+branch's [rendering verification](../openspec/changes/graphiscs-engine-update-pixel-16bit/verification.md)
+records fresh passing asset/native checks; unrelated drafts and editor-v2 work
+remain preserved in their separate checkout, not silently imported or discarded.
 
 ## Verification and non-shipped material
 

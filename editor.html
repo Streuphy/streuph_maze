@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Streuph's Maze — Level Editor</title>
 <link rel="stylesheet" href="src/css/sm.css">
+<link rel="stylesheet" href="src/css/sm-graphics.css">
 <link rel="stylesheet" href="src/css/sm-editor.css">
 </head>
 <body>
@@ -60,7 +61,6 @@
       </div>
       <div id="test-board-wrap" style="position:relative">
         <div id="test-board"></div>
-        <div id="test-player"></div>
       </div>
       <div id="test-banner"></div>
       <div class="ed-dpads" style="margin:.3rem auto">
@@ -126,6 +126,11 @@
 <!-- Classic scripts, in dependency order. No modules, no fetch. -->
 <script src="src/js/sm-yaml.js"></script>
 <script src="src/js/tiles.js"></script>
+<script src="src/vendor/konva/konva.min.js"></script>
+<script src="src/js/sm-visuals.js"></script>
+<script src="src/js/sm-sprites.js"></script>
+<script src="src/js/sm-draw.js"></script>
+<script src="src/js/sm-surface.js"></script>
 <script src="src/js/sm-glyphs.js"></script>
 <script src="src/js/sm-board.js"></script>
 <script src="src/js/sm-entities.js"></script>

@@ -16,6 +16,8 @@ const ROOT = path.resolve(__dirname, '..');
 const FILES = [
   'src/js/sm-yaml.js',
   'src/js/tiles.js',
+  'src/js/sm-visuals.js',
+  'src/js/sm-sprites.js',
   'src/js/sm-glyphs.js',
   'src/js/sm-board.js',
   'src/js/sm-entities.js',
@@ -71,6 +73,7 @@ function checkV2Rules() {
 }
 function checkV2Helpers() {
   require('./unit/v2').helpers(SM);
+  require('./unit/visuals')(SM);
   ok(true, 'V2 progress/helper regression suite passed');
 }
 

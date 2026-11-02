@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Streuph's Maze</title>
-<link rel="stylesheet" href="src/css/sm.css">
+  <link rel="stylesheet" href="src/css/sm.css">
+  <link rel="stylesheet" href="src/css/sm-graphics.css">
 </head>
 <body>
 
@@ -31,7 +32,6 @@
         <div id="board-col">
           <div id="ruler-x" aria-hidden="true"></div>
           <div id="board" role="grid" aria-label="maze board">
-            <div id="player" aria-hidden="true"><div class="aura"></div></div>
           </div>
         </div>
       </div>
@@ -145,6 +145,11 @@
      blocked under file://. See docs/engine-architecture.md. -->
 <script src="src/js/sm-yaml.js"></script>
 <script src="src/js/tiles.js"></script>
+<script src="src/vendor/konva/konva.min.js"></script>
+<script src="src/js/sm-visuals.js"></script>
+<script src="src/js/sm-sprites.js"></script>
+<script src="src/js/sm-draw.js"></script>
+<script src="src/js/sm-surface.js"></script>
 <script src="src/js/sm-glyphs.js"></script>
 <script src="src/js/sm-board.js"></script>
 <script src="src/js/sm-entities.js"></script>

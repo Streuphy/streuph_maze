@@ -147,8 +147,11 @@ labels are not treated as alternate engines. During review, `--preaccept` report
 any pending accepted-spec mappings as deferred; it never bypasses missing proofs,
 pending design reviews or other stale guidance. Strict mode requires all mappings
 to match. The [archived documentation review](../openspec/changes/archive/2026-11-02-doc-review-v2-ruleset/review.md)
-records completed synchronization and an unrelated protected draft that still
-blocks the whole-tree audit. Neither audit mode is human release approval.
+records completed synchronization and its historical protected-draft finding.
+The graphics branch's [rendering verification](../openspec/changes/graphiscs-engine-update-pixel-16bit/verification.md)
+records its current passing asset gate against the committed prerequisite
+baseline; unrelated drafts remain in the separate checkout. Neither audit mode
+is human release approval.
 
 The [verification record](level-design/v2-verification.md) separates actual Node/
 jsdom results from the native Chromium `file://` gate. Run the optional

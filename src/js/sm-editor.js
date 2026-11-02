@@ -52,12 +52,13 @@
   function describeTile(tile) {
     if (!tile) return null;
     var attrs = tile.params ? Object.keys(tile.params) : [];
-    var rendered = SM.glyph(tile, { W: 'wht' });
+    var visual = SM.VISUALS.describe(tile, { W: 'wht' });
     return {
       id: tile.id,
       /* The rendered SVG may be empty for blank-floor tiles; fall back to the
          stable glyph key so the guide always shows a non-empty identity. */
-      glyph: rendered || ('glyph:' + tile.glyph),
+      glyph: 'glyph:' + tile.glyph,
+      visual: visual,
       glyphKey: tile.glyph,
       name: tile.name,
       category: tile.category,
@@ -757,6 +758,7 @@
 
     api.startQuickTest = function () {
       if (!api.canQuickTest()) return false;
+      if (qt.renderer) qt.renderer.cancel();
       var lv = currentLevel(); if (!lv) return false;
       var level;
       try { level = SM.RULES.buildLevel(lv, state.currentKey || 'test'); }
@@ -768,22 +770,29 @@
     };
 
     api.quickTestAct = function (action) {
+      if (qt.renderer) qt.renderer.cancel();
       if (!qt.state) return { outcome: 'none' };
       if (qt.state.won) return { outcome: 'won' };
       if (qt.state.failed) return { outcome: 'failed', blocked: true };
       var before = SM.RULES.snapshot(qt.state);
+      var displayBefore = SM.RULES.cloneState(qt.state), session = qt.state;
       var result;
       try { result = SM.RULES.resolveTurn(qt.state, action); }
       catch (e) { return { outcome: 'error', message: e.message }; }
       if (!result.changed && !result.stroke) return { outcome: 'blocked', steps: result.steps };
       qt.history.push(before);
+      if (qt.renderer) qt.renderer.play(result.steps, displayBefore, function () {
+        if (qt.state === session) qt.renderer.draw(SM.RULES.cloneState(session));
+      });
       return { outcome: api.quickTestOutcome(), result: result, strokes: qt.state.strokes };
     };
 
     api.quickTestUndo = function () {
       if (!qt.state || !qt.history.length) return false;
       if (qt.state.failed) return false;   /* blocked until reset per the contract */
+      if (qt.renderer) qt.renderer.cancel();
       SM.RULES.restore(qt.state, qt.history.pop());
+      if (qt.renderer) qt.renderer.draw(SM.RULES.cloneState(qt.state));
       return true;
     };
 
@@ -837,10 +846,11 @@
       if (n > oldH) {
         for (var r = oldH; r < n; r++) {
           var row = []; for (var x = 0; x < w; x++) row.push(state.secondary);
-          lv.grid.push(row);
+          // YAML is top-first: add top rows so bottom-left A1 stays anchored.
+          lv.grid.unshift(row);
         }
       } else {
-        lv.grid.length = n;
+        lv.grid.splice(0, oldH - n);
       }
       lv.height = n;
       api.revalidate();
@@ -926,9 +936,8 @@
         e.className = 'palette-entry' + (unusedSet[id] ? ' unused' : '');
         e.dataset.id = id;
         e.title = id + ' · ' + tile.name;
-        var glyph = SM.glyph(tile, { W: 'wht' }) || ('[' + tile.glyph + ']');
         e.innerHTML = '<div class="glyph"></div><div class="id">' + id + '</div><div class="name"></div>';
-        e.querySelector('.glyph').innerHTML = glyph;
+        SM.GRAPHICS.mount(e.querySelector('.glyph'), [SM.VISUALS.describe(tile, { W: 'wht' })], SM.PRESENTATION.settings.theme, 32);
         e.querySelector('.name').textContent = tile.name;
         e.addEventListener('click', function () { ed.setPrimary(id); refreshPaletteSelection(root, ed); renderQuickGuide(root, ed); });
         e.addEventListener('contextmenu', function (ev) { ev.preventDefault(); ed.setSecondary(id); refreshPaletteSelection(root, ed); renderQuickGuide(root, ed); });
@@ -958,7 +967,7 @@
       var box = document.createElement('div'); box.className = 'slot';
       box.innerHTML = '<h3>' + slotKey + '</h3><div class="glyph"></div>' +
         '<div class="name"></div><div class="meta"></div><div class="behavior"></div>';
-      box.querySelector('.glyph').innerHTML = slot.glyph || '';
+      SM.GRAPHICS.mount(box.querySelector('.glyph'), [slot.visual], SM.PRESENTATION.settings.theme, 48);
       box.querySelector('.name').textContent = slot.id + ' · ' + slot.name;
       box.querySelector('.meta').textContent = slot.category + ' / ' + slot.layer;
       box.querySelector('.behavior').textContent = slot.behavior || '';
@@ -968,47 +977,36 @@
 
   function renderGrid(root, ed) {
     var host = el(root, '#grid'); if (!host) return;
-    clear(host);
     if (!ed.hasPack()) { host.textContent = 'Load a pack to begin editing.'; return; }
     var snap = ed.levelSnapshot();
-    var grid = (snap && Array.isArray(snap.grid)) ? snap.grid : [];
-    var h = grid.length || 0;
-    var w = (h && Array.isArray(grid[0])) ? grid[0].length : 0;
-    if (!w || !h) { host.textContent = 'Empty level.'; return; }
-    host.style.gridTemplateColumns = 'repeat(' + w + ', 34px)';
-    host.style.gridTemplateRows = 'repeat(' + h + ', 34px)';
     var cur = ed.cursorPos();
-    for (var y = h - 1; y >= 0; y--) {
-      for (var x = 0; x < w; x++) {
-        var c = document.createElement('div');
-        c.className = 'ed-cell';
-        c.dataset.x = x; c.dataset.y = y;
-        if (cur.x === x && cur.y === y) c.classList.add('cursor');
-        var id = ed.tileAt(x, y);
-        if (id >= 0) {
-          var tile = SM.getTile(id);
-          if (tile) c.innerHTML = SM.glyph(tile, { W: 'wht' }) || '';
-        }
-        c.addEventListener('click', function (ev) {
-          var cx = Number(ev.currentTarget.dataset.x), cy = Number(ev.currentTarget.dataset.y);
-          ed.setCursor(cx, cy);
-          var r = ed.paintAt(cx, cy);
-          if (r && r.confirmRequested) {
-            if (confirm('Relocate the single-instance marker to this cell?')) ed.confirmMarkerReplace();
-            else ed.cancelMarkerReplace();
+    if (!host._graphicsSurface) {
+      host._graphicsSurface = new SM.Surface(host, { cellSize: 34, static: true,
+        onCursor: function (x, y, event) {
+          ed.setCursor(x, y);
+          var result = event.shiftKey ? ed.paintAt(x, y) : null;
+          if (result && result.confirmRequested) {
+            if (confirm('Relocate the single-instance marker to this cell?')) ed.confirmMarkerReplace(); else ed.cancelMarkerReplace();
           }
           renderGrid(root, ed); renderDiagnostics(root, ed); refreshBlockState(root, ed);
-        });
-        c.addEventListener('contextmenu', function (ev) {
-          ev.preventDefault();
-          var cx = Number(ev.currentTarget.dataset.x), cy = Number(ev.currentTarget.dataset.y);
-          var prev = ed.secondaryTileId(); ed.setPrimary(ed.secondaryTileId());
-          ed.paintAt(cx, cy); ed.setPrimary(prev);
-          renderGrid(root, ed);
-        });
-        host.appendChild(c);
-      }
+        }, onCell: function (x, y, event) {
+        ed.setCursor(x, y);
+        var previous = ed.primaryTileId();
+        if (event.type === 'contextmenu') ed.setPrimary(ed.secondaryTileId());
+        var result = ed.paintAt(x, y);
+        if (event.type === 'contextmenu') ed.setPrimary(previous);
+        if (result && result.confirmRequested) {
+          if (confirm('Relocate the single-instance marker to this cell?')) ed.confirmMarkerReplace(); else ed.cancelMarkerReplace();
+        }
+        renderGrid(root, ed); renderDiagnostics(root, ed); refreshBlockState(root, ed);
+      } });
     }
+    host._graphicsSurface.options.cursor = cur;
+    var picture;
+    try { picture = SM.VISUALS.board(SM.RULES.newState(SM.RULES.buildLevel(snap, 'editor-preview'))); }
+    catch (ignore) { picture = SM.VISUALS.authored(snap); }
+    host._graphicsSurface.update(picture);
+    Array.from(host._graphicsSurface.grid.children).forEach(function (c) { c.classList.add('ed-cell'); c.classList.toggle('cursor', +c.dataset.x === cur.x && +c.dataset.y === cur.y); });
   }
 
   function renderDiagnostics(root, ed) {
@@ -1038,6 +1036,7 @@
   /* Bind the editor API to a DOM root. Returns the editor instance. */
   SM.EDITOR.bind = function (root, ed) {
     ed = ed || SM.EDITOR.create();
+    SM.PRESENTATION.subscribe(function () { renderPalette(root, ed); renderQuickGuide(root, ed); if (ed.hasPack()) renderGrid(root, ed); });
 
     renderPalette(root, ed);
     refreshPaletteSelection(root, ed);
@@ -1094,7 +1093,8 @@
       var help = el(root, '#tile-help'); if (!help) return;
       var h = ed.tileHelp(id); if (!h) return;
       clear(help);
-      help.innerHTML = '<div class="name"></div><div class="meta"></div><div class="behavior"></div><div class="attrs"></div>';
+      help.innerHTML = '<div class="glyph"></div><div class="name"></div><div class="meta"></div><div class="behavior"></div><div class="attrs"></div>';
+      SM.GRAPHICS.mount(help.querySelector('.glyph'), [h.visual], SM.PRESENTATION.settings.theme, 48);
       help.querySelector('.name').textContent = h.id + ' · ' + h.name;
       help.querySelector('.meta').textContent = h.category + ' / ' + h.layer + (h.colourRole ? ' · ' + h.colourRole : '');
       help.querySelector('.behavior').textContent = h.behavior || '';
@@ -1136,6 +1136,8 @@
       if (!editor.canQuickTest()) return;
       var region = el(r, '#test-region'); if (region) region.hidden = false;
       var renderer = qtRenderer(r);
+      if (r._quickTestRenderer) r._quickTestRenderer.dispose();
+      r._quickTestRenderer = renderer;
       editor.attachTestRenderer(renderer);
       editor.startQuickTest();
       updateTestHud(r, editor);
@@ -1143,8 +1145,8 @@
 
     function qtRenderer(r) {
       var region = el(r, '#test-region'); if (!region) return null;
-      var board = el(r, '#test-board'), player = el(r, '#test-player'), banner = el(r, '#test-banner');
-      if (!board || !player) return null;
+      var board = el(r, '#test-board');
+      if (!board) return null;
       return new SM.Renderer(region);
     }
 
@@ -1187,6 +1189,14 @@
       var aSig = el(r, '#snap-a-sig'), bSig = el(r, '#snap-b-sig');
       if (aSig) aSig.textContent = editor.snapshotSig('A') || '(not captured)';
       if (bSig) bSig.textContent = editor.snapshotSig('B') || '(not captured)';
+      [['A', aSig], ['B', bSig]].forEach(function (pair) {
+        var arrangement = editor.snapshotArrangement(pair[0]), label = pair[1];
+        if (!arrangement || !label) return;
+        var host = label.parentElement.querySelector('.snapshot-preview');
+        if (!host) { host = document.createElement('div'); host.className = 'snapshot-preview'; label.parentElement.appendChild(host); }
+        if (!host._graphicsSurface) host._graphicsSurface = new SM.Surface(host, { cellSize: 20, static: true });
+        host._graphicsSurface.update(SM.VISUALS.authored(arrangement));
+      });
     }
 
     /* Quick-test input buttons live inside #test-region */

@@ -1,0 +1,11 @@
+{
+  "name": "konva",
+  "version": "10.9.1",
+  "license": "MIT",
+  "source": "https://registry.npmjs.org/konva/-/konva-10.9.1.tgz",
+  "tarballSha256": "e701d567c8e6dbf5802cb8b08610b18a40fc1d43e4f3fe13dc0003be80b525ae",
+  "files": {
+    "konva.min.js": "acc5719ed72c2cab2858e200a61051e6930c635a29825c2ebe1852bad103d2cc",
+    "LICENSE": "7190132c82df30243dc2ba512c9509ea3b629329b4266e9f2c3b5dbd04029613"
+  }
+}

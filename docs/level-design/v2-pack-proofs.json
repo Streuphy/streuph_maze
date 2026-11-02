@@ -1,10 +1,10 @@
 {
   "generatedBy": "levels:routes",
   "contract": "v2-queued",
-  "generatedAt": "2026-11-02T01:47:51.805Z",
+  "generatedAt": "2026-11-02T12:29:10.171Z",
   "proofComplete": true,
   "manualReview": "Required separately in v2-pack-certification.md; this is mathematical evidence only.",
-  "engineFingerprint": "3d57b72331f958367c0271eaa965051e5c0e34eb8ecd9b11fa8022dda515f55e",
+  "engineFingerprint": "6d098b827f5c12caf34a023109cceeee5e5ed9405b9a9503ec361efe13791752",
   "expectedLevels": 61,
   "issues": [],
   "worlds": [
