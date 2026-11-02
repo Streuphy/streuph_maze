@@ -24,6 +24,14 @@ The system SHALL keep progress distinct across worlds, level keys, and rulesets.
 - **WHEN** two different packs each contain `level_1`
 - **THEN** completion, best score, last selection, and seen-tile progress for one pack do not overwrite the other pack's progress
 
+#### Scenario: Existing obsolete-rule data is present
+- **WHEN** V2 starts with prior serialized records still present in browser storage
+- **THEN** the current namespace is empty unless it already has current-format records, and the prior bytes are neither consumed nor deleted
+
+#### Scenario: Progress import has an incompatible contract
+- **WHEN** an imported progress file does not identify the supported current contract/schema
+- **THEN** import rejects it without changing current records
+
 #### Scenario: Same world and level use different rulesets
 - **WHEN** a legacy and V2 pack use the same world ID and level key
 - **THEN** their progress remains independent and clearing the legacy level cannot satisfy a V2 prerequisite

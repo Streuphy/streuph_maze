@@ -63,6 +63,10 @@ The system SHALL resolve direct actions, forced movement, ray interactions, resp
 - **WHEN** a resolved action transports one or more ray-compatible objects and leaves the player on an exposed ray cell
 - **THEN** the player is caught and respawned before the final goal test, with no extra stroke for transport or respawn
 
+#### Scenario: Winning entry precedes ray exposure
+- **WHEN** a matching goal entry passes its signal/closure checkpoint
+- **THEN** victory cancels remaining work and no later ray sample can replace it
+
 #### Scenario: Goal is reached with unequal colors
 - **WHEN** the player rests on the goal with `P` different from `W`
 - **THEN** the level remains uncleared; it clears once both colors match while the player is on the goal
