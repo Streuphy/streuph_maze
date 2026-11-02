@@ -7,7 +7,7 @@ const { isDeepStrictEqual } = require('node:util');
 const ROOT = path.resolve(__dirname, '..');
 const RUNTIME_FILES = [
   'sm-yaml', 'tiles', 'sm-glyphs', 'sm-board', 'sm-entities',
-  'levels.default', 'levels', 'sm-rules'
+  'levels.default', 'sm-solver', 'levels', 'sm-rules'
 ];
 
 function loadRuntime(root = ROOT) {

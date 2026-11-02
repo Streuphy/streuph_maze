@@ -20,9 +20,11 @@ const FILES = [
   'src/js/sm-board.js',
   'src/js/sm-entities.js',
   'src/js/levels.default.js',
+  'src/js/sm-solver.js',
   'src/js/levels.js',
   'src/js/sm-rules.js',
-  'src/js/sm-store.js'
+  'src/js/sm-store.js',
+  'src/js/sm-editor.js'
 ];
 
 for (const f of FILES) {
@@ -2962,6 +2964,8 @@ function checkStore() {
 
 const unitSuites = {
   registry: [checkTileRegistry],
+  editor: [function () { require('./unit/editor')(globalThis.SM); }],
+  solver: [function () { require('./unit/solver')(globalThis.SM); }],
   rules: [checkV2Rules, checkStateContract, checkTileHookDispatch, checkRules, checkRayQueries,
     checkPolarityBarriers, checkPolaritySwitch, checkPolaritySolver,
     checkFailureTransitions, checkRayTransportTransitions, checkFailureSolver, checkChromaticContracts,

@@ -606,142 +606,21 @@
     return { counts: counts, score: score };
   }
 
+  /* The solvability solver now lives in `src/js/sm-solver.js` (SM.SOLVER.solve),
+     a standalone, budget-bound BFS over the real resolver that accepts an
+     arbitrary start state and an arbitrary goal predicate. `SM.LEVELS.solve`
+     is a thin wrapper: it builds the level's initial state and asks the classic
+     `won` question, so all existing callers (validation, route reporting, tests)
+     are unchanged. */
   function solve(level, opts) {
     opts = opts || {};
-    var maxStates = opts.maxStates === undefined ? MAX_STATES : opts.maxStates;
-    var maxDepth = opts.maxDepth === undefined ? MAX_DEPTH : opts.maxDepth;
-    var maxRouteLabels = opts.maxRouteLabels === undefined ? maxStates : opts.maxRouteLabels;
-    if ([maxStates, maxDepth, maxRouteLabels].some(function (budget) { return !isInt(budget) || budget < 0; })) {
-      return { status: 'unknown', reason: 'invalid-budget', optimal: null, explored: 0, path: null,
-        routeBalance: { counts: null, score: null, complete: false } };
-    }
-    var actions = actionsFor(level);
-
-    var start = SM.RULES.newState(level);
-    var startSig = SM.RULES.snapshotSig(start);
-    var stateDepth = {};
-    var labels = {};
-    stateDepth[startSig] = 0;
-    labels[startSig + '|0,0,0,0'] = true;
-
-    var queue = [{ st: start, depth: 0, path: [], counts: [0, 0, 0, 0] }];
-    var head = 0, explored = 0, routeLabels = 1;
-    var goalDepth = null, best = null, budgetHit = false;
-    var depthLimited = false, transitionFailed = false, reason = null;
-
-    function isGoal(st) {
-      return st.won;
-    }
-
-    function countDirection(counts, action) {
-      var next = counts.slice();
-      if (action.type !== 'move' && action.type !== 'pull') return next;
-      var index = action.dir === 'north' ? 0 : action.dir === 'south' ? 1 :
-        action.dir === 'west' ? 2 : 3;
-      next[index]++;
-      return next;
-    }
-
-    function balanceScore(counts) {
-      var total = counts[0] + counts[1] + counts[2] + counts[3];
-      var mean = total / 4;
-      var score = 0;
-      for (var i = 0; i < 4; i++) score += Math.pow(counts[i] - mean, 2);
-      return score;
-    }
-
-    function resultForBest(complete) {
-      var metrics = routeMetrics(best.path);
-      {
-        var replay = SM.RULES.newState(level);
-        try {
-          best.path.forEach(function (action) { SM.RULES.resolveTurn(replay, action); });
-          if (!replay.won || replay.strokes !== best.depth) throw new Error('replay disagrees');
-        } catch (e) {
-          return { status: 'unknown', optimal: null, explored: explored, path: null,
-            reason: 'replay', routeBalance: { counts: null, score: null, complete: false } };
-        }
-      }
-      return {
-        status: 'solvable', optimal: best.depth, explored: explored,
-        verified: true,
-        routeLabels: routeLabels, path: best.path,
-        routeBalance: {
-          counts: metrics.counts,
-          score: metrics.score,
-          complete: complete
-        }
-      };
-    }
-
-    if (isGoal(start)) {
-      best = { depth: 0, path: [], counts: [0, 0, 0, 0], score: 0 };
-      return resultForBest(true);
-    }
-
-    while (head < queue.length) {
-      var node = queue[head];
-      /* BFS has expanded every possible predecessor at the winning depth once
-         the next queued label is itself at that depth. */
-      if (goalDepth !== null && node.depth >= goalDepth) break;
-      if (explored >= maxStates) { budgetHit = true; reason = 'states'; break; }
-      node = queue[head++];
-      explored++;
-      if (node.depth >= maxDepth) { depthLimited = true; continue; }
-
-      for (var a = 0; a < actions.length; a++) {
-        var action = actions[a];
-        var next = SM.RULES.cloneState(node.st);
-        var r;
-        try {
-          r = SM.RULES.resolveTurn(next, action);
-        } catch (e) {
-          transitionFailed = true; budgetHit = true; reason = 'transition';
-          break;                    // a skipped transition cannot support a proof
-        }
-        if (r.aborted && r.steps[0].reason !== 'cycle' && r.steps[0].reason !== 'budget') {
-          transitionFailed = true; budgetHit = true; reason = 'effect-' + r.steps[0].reason;
-          break;
-        }
-        if (!r.stroke) continue;
-        if (next.failed) continue;    // failure is not a recoverable search node
-
-        var nextDepth = node.depth + 1;
-        var nextCounts = countDirection(node.counts, action);
-        var path = node.path.concat([action]);
-        if (isGoal(next)) {
-          var score = balanceScore(nextCounts);
-          if (goalDepth === null) goalDepth = nextDepth;
-          if (nextDepth === goalDepth && (!best || score < best.score)) {
-            best = { depth: next.strokes, path: path, counts: nextCounts, score: score };
-          }
-          continue;
-        }
-
-        /* Once an optimum exists, only its predecessor layer can contain
-           another equal-length solution. */
-        if (goalDepth !== null && nextDepth >= goalDepth) continue;
-        var k = SM.RULES.snapshotSig(next);
-        if (stateDepth[k] !== undefined && stateDepth[k] < nextDepth) continue;
-        if (stateDepth[k] === undefined) stateDepth[k] = nextDepth;
-        var labelKey = k + '|' + nextCounts.join(',');
-        if (labels[labelKey]) continue;
-        if (routeLabels >= maxRouteLabels) { budgetHit = true; reason = 'route-labels'; break; }
-        labels[labelKey] = true;
-        routeLabels++;
-        queue.push({ st: next, depth: nextDepth, path: path, counts: nextCounts });
-      }
-      if (budgetHit) break;
-    }
-
-    if (best && !transitionFailed) return resultForBest(!budgetHit && !depthLimited);
-    if (budgetHit || depthLimited) {
-      return { status: 'unknown', optimal: null, explored: explored,
-        reason: reason || 'depth',
-        routeLabels: routeLabels, path: null,
-        routeBalance: { counts: null, score: null, complete: false } };
-    }
-    return { status: 'unsolvable', optimal: null, explored: explored, path: null };
+    return SM.SOLVER.solve({
+      startState: SM.RULES.newState(level),
+      isGoal: function (s) { return s.won; },
+      maxStates: opts.maxStates,
+      maxDepth: opts.maxDepth,
+      maxRouteLabels: opts.maxRouteLabels
+    });
   }
 
   /* ---------------------------------------------------------------------- */

@@ -1,9 +1,13 @@
 # Future level editor proposal — YAML and current registry
 
-**Status:** Exploration only; no editor application is implemented or shipped.
-`editor.html` is a proposed entry point, not an available product page. A future
-OpenSpec change must separately authorize/design/test it. This migration only
-reconciles its authoring assumptions with the actual game contract.
+**Status:** Implemented by the `level-editor-v1` OpenSpec change as `editor.html`; see
+[docs/level-editor.md](level-editor.md) for the workflow. The editor consumes the shared
+`SM.LEVELS.load`/`validate` path, the real `SM.RULES.resolveTurn` resolver, and the live
+tile catalogue. Accepted-contract reconciliations versus this original proposal are
+recorded there: authored packs are YAML (not `.json`), grid bounds are the runtime bounds
+(width 2–16, height 1–9), and the palette is registry-driven (all 62 registered tile IDs).
+The standalone A→B solver is provided by the separate `standalone-state-solver`
+prerequisite change.
 
 ## Goal and local-first boundary
 

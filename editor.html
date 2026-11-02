@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streuph's Maze — Level Editor</title>
+<link rel="stylesheet" href="src/css/sm.css">
+<link rel="stylesheet" href="src/css/sm-editor.css">
+</head>
+<body>
+
+<header class="ed">
+  <h1>Streuph<span class="apos">'</span>s Maze — Level Editor</h1>
+  <span class="spacer"></span>
+  <input type="file" id="file" accept=".yaml,.yml,text/plain">
+  <button id="btn-apply" type="button">Load pasted YAML</button>
+  <button id="btn-save" type="button" disabled>Save pack</button>
+  <button id="btn-export" type="button" disabled>Show YAML</button>
+  <button id="btn-undo" type="button">Undo</button>
+  <button id="btn-redo" type="button">Redo</button>
+  <button id="btn-reset-saved" type="button">Reset to saved</button>
+  <button id="btn-test" type="button" disabled>Quick test</button>
+</header>
+
+<main class="ed">
+
+  <section id="palette-col">
+    <h2>Palette</h2>
+    <p style="font-size:.72rem;color:var(--mute);margin:0 0 .4rem">
+      Left-click an entry to set the <b>Primary</b> brush; right-click to set the
+      <b>Secondary</b> base-floor slot (used for clearing and area fill).
+    </p>
+    <div id="palette"></div>
+  </section>
+
+  <section id="grid-col">
+    <h2>Board</h2>
+    <div class="grid-wrap">
+      <div class="toolbar grid-toolbar">
+        <button type="button" id="btn-fill-rect" title="Fill the cursor selection rectangle with the Secondary slot">Fill rect</button>
+        <button type="button" id="btn-flood" title="Flood-fill connected same-tile region from the cursor with the Secondary slot">Flood fill</button>
+      </div>
+      <div id="grid" class="ed-grid" tabindex="0"></div>
+      <p style="font-size:.72rem;color:var(--mute);margin:.3rem 0 0">
+        Arrows move the cursor; Shift+arrows paint a region; Space paints the current cell.
+        Mouse: left-click paints Primary; right-click places the Secondary tile.
+      </p>
+    </div>
+
+    <h2>YAML</h2>
+    <textarea id="yaml" class="io" spellcheck="false" style="width:100%;min-height:120px"
+      placeholder="paste a world pack here, or load a .yaml file"></textarea>
+    <div id="diag" class="diag"></div>
+
+    <h2>Quick test</h2>
+    <div id="test-region" class="test-region" hidden>
+      <div class="test-hud">
+        <span class="stat"><b id="test-strokes">0</b><span>strokes</span></span>
+        <span class="stat"><b id="test-outcome">playing</b><span>state</span></span>
+      </div>
+      <div id="test-board-wrap" style="position:relative">
+        <div id="test-board"></div>
+        <div id="test-player"></div>
+      </div>
+      <div id="test-banner"></div>
+      <div class="ed-dpads" style="margin:.3rem auto">
+        <span></span><button data-test-act="north">▲</button><span></span>
+        <button data-test-act="west">◀</button><button data-test-act="act">●</button><button data-test-act="east">▶</button>
+        <span></span><button data-test-act="south">▼</button><span></span>
+      </div>
+      <div class="toolbar">
+        <button id="btn-test-undo" type="button">Undo</button>
+        <button id="btn-test-reset" type="button">Reset</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="inspector-col">
+    <h2>Quick guide (selected tiles)</h2>
+    <div id="quick-guide" class="quick-guide"></div>
+
+    <h2>Inspector</h2>
+    <div class="inspector">
+      <div class="field">
+        <label for="ins-color">Player/world color (White/Red/Green/Blue)</label>
+        <select id="ins-color" disabled>
+          <option value="wht">White</option><option value="red">Red</option>
+          <option value="gre">Green</option><option value="blu">Blue</option>
+        </select>
+        <div class="scope">Goal color follows the world color and is not separately editable.</div>
+      </div>
+      <p style="font-size:.72rem;color:var(--mute)">Select a tile or region on the board to inspect its authorable attributes. ID-wide parameter edits route to <code>overrides</code>; entity capability edits route to coordinate-specific <code>object_overrides</code>.</p>
+    </div>
+
+    <h2>Tile help</h2>
+    <div id="tile-help" class="tile-help">
+      <p style="font-size:.72rem;color:var(--mute);margin:0">Click a palette entry to see identity, authorable attributes, and behavior.</p>
+    </div>
+
+    <h2>Snapshots A / B (solver)</h2>
+    <div class="snapshots">
+      <div class="snapshot-slot">
+        <h3>A (start)</h3>
+        <div class="sig" id="snap-a-sig">(not captured)</div>
+        <button id="btn-snap-a" type="button">Use current board as A</button>
+      </div>
+      <div class="snapshot-slot">
+        <h3>B (goal)</h3>
+        <div class="sig" id="snap-b-sig">(not captured)</div>
+        <button id="btn-snap-b" type="button">Use current board as B</button>
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:.4rem">
+      <button id="btn-solve" type="button">Solve A→B</button>
+    </div>
+    <div id="solve-result" class="solve-result"></div>
+    <p style="font-size:.7rem;color:var(--mute);margin-top:.3rem">
+      The solver finds an optimal path between A and B by exact full-state match, bound by
+      budgets. <code>unknown</code> (budget) is reported distinctly from <code>unsolvable</code>.
+      Requires the standalone-state-solver prerequisite.
+    </p>
+  </section>
+
+</main>
+
+<!-- Classic scripts, in dependency order. No modules, no fetch. -->
+<script src="src/js/sm-yaml.js"></script>
+<script src="src/js/tiles.js"></script>
+<script src="src/js/sm-glyphs.js"></script>
+<script src="src/js/sm-board.js"></script>
+<script src="src/js/sm-entities.js"></script>
+<script src="src/js/levels.default.js"></script>
+<script src="src/js/sm-solver.js"></script>
+<script src="src/js/levels.js"></script>
+<script src="src/js/sm-rules.js"></script>
+<script src="src/js/sm-store.js"></script>
+<script src="src/js/sm-render.js"></script>
+<script src="src/js/sm-editor.js"></script>
+<script>
+/* Boot the editor. jsdom loads classic <script src> resources asynchronously,
+   so SM.EDITOR may not be ready when this inline script first runs. Wait for it. */
+(function boot() {
+  'use strict';
+  function start() {
+    var SM = globalThis.SM;
+    if (!SM || !SM.EDITOR) {
+      document.body.innerHTML = '<pre style="color:#E23D28;padding:1.5rem">Editor failed to load: SM.EDITOR is not defined.</pre>';
+      return;
+    }
+    var ed = SM.EDITOR.create();
+    SM.EDITOR.bind(document, ed);
+    SM.editor = ed;
+    var grid = document.getElementById('grid');
+    if (grid && !grid.hasChildNodes()) grid.textContent = 'Load a pack to begin editing.';
+  }
+  if (globalThis.SM && globalThis.SM.EDITOR) { start(); return; }
+  var tries = 0;
+  (function poll() {
+    if (globalThis.SM && globalThis.SM.EDITOR) { start(); return; }
+    if (++tries > 500) { start(); return; }   /* fail loudly after a wait */
+    setTimeout(poll, 10);
+  })();
+})();
+</script>
+</body>
+</html>

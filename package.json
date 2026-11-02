@@ -6,10 +6,12 @@
   "author": "Julien Fistre <julien.fistre@gmail.com> (https://github.com/Streuphy)",
   "homepage": "https://github.com/Streuphy",
   "scripts": {
-    "test": "node tests/verify.js && node tests/browser-test.js",
+    "test": "node tests/verify.js && node tests/browser-test.js && node tests/browser-editor-test.js",
     "test:rules": "node tests/verify.js",
     "test:browser": "node tests/browser-test.js",
     "test:unit:registry": "node tests/unit/registry.js",
+    "test:unit:editor": "node tests/unit/editor.js",
+    "test:unit:solver": "node tests/unit/solver.js",
     "test:unit:rules": "node tests/verify.js --suite=rules",
     "test:unit:levels": "node tests/verify.js --suite=levels",
     "test:unit:helpers": "node tests/verify.js --suite=helpers",
